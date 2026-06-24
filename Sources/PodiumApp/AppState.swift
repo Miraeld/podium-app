@@ -287,6 +287,10 @@ final class AppState {
             lastError = error.localizedDescription
         }
     }
+
+    func exportSession(_ id: String) async throws -> Data {
+        try await api.exportSession(id)
+    }
 }
 
 // MARK: - WS message envelopes

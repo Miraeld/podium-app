@@ -15,6 +15,15 @@ extension PodiumAPI {
         return try await searchGet(url: comps.url!)
     }
 
+    func exportSession(_ id: String) async throws -> Data {
+        let url = baseURL.appending(path: "/api/export/session/\(id)")
+        let (data, response) = try await URLSession.shared.data(from: url)
+        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+            throw APIError.badStatus((response as? HTTPURLResponse)?.statusCode ?? 0)
+        }
+        return data
+    }
+
     // Private helper — mirrors the private get(url:) but defined here so this
     // extension compiles without touching the actor's private interface.
     private func searchGet<T: Decodable>(url: URL) async throws -> T {
