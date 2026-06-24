@@ -6,7 +6,11 @@ import UserNotifications
 class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApplication.shared.activate(ignoringOtherApps: true)
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
+        // UNUserNotificationCenter requires a bundle identifier — skip when running
+        // as a raw Xcode DerivedData executable (bundleIdentifier is nil there).
+        if Bundle.main.bundleIdentifier != nil {
+            UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
+        }
         // Defer until SwiftUI has finished building the window hierarchy.
         DispatchQueue.main.async {
             for window in NSApplication.shared.windows {

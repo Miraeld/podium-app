@@ -251,6 +251,7 @@ final class AppState {
     // MARK: Notifications
 
     func sendLocalNotification(title: String, body: String) {
+        guard Bundle.main.bundleIdentifier != nil else { return }
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body
