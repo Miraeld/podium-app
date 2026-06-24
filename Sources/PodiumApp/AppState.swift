@@ -291,6 +291,28 @@ final class AppState {
     func exportSession(_ id: String) async throws -> Data {
         try await api.exportSession(id)
     }
+
+    func cleanupSessions(abandonIdleHours: Int, purgeOlderDays: Int) async throws {
+        try await api.cleanupSessions(abandonIdleHours: abandonIdleHours, purgeOlderDays: purgeOlderDays)
+    }
+
+    func downloadExport() async throws -> Data {
+        try await api.downloadExport()
+    }
+
+    func hooksStatus() async throws -> [String: Bool] {
+        try await api.hooksStatus()
+    }
+
+    func reinstallHooks() async throws {
+        try await api.reinstallHooks()
+    }
+
+    // MARK: Workflow
+
+    func loadWorkflow(_ id: String) async throws -> WorkflowSessionRaw {
+        try await api.workflowSession(id)
+    }
 }
 
 // MARK: - WS message envelopes

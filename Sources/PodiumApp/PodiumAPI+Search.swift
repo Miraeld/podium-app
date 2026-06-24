@@ -33,4 +33,46 @@ extension PodiumAPI {
         }
         return try JSONDecoder.podium.decode(T.self, from: data)
     }
+
+    func cleanupSessions(abandonIdleHours: Int, purgeOlderDays: Int) async throws {
+        let body = try JSONEncoder().encode([
+            "abandon_idle_hours": abandonIdleHours,
+            "purge_older_days": purgeOlderDays
+        ])
+        var req = URLRequest(url: baseURL.appending(path: "/api/settings/cleanup"))
+        req.httpMethod = "POST"
+        req.httpBody = body
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let (_, response) = try await URLSession.shared.data(for: req)
+        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+            throw APIError.badStatus((response as? HTTPURLResponse)?.statusCode ?? 0)
+        }
+    }
+
+    func downloadExport() async throws -> Data {
+        let url = baseURL.appending(path: "/api/settings/export")
+        let (data, response) = try await URLSession.shared.data(from: url)
+        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+            throw APIError.badStatus((response as? HTTPURLResponse)?.statusCode ?? 0)
+        }
+        return data
+    }
+
+    func hooksStatus() async throws -> [String: Bool] {
+        let url = baseURL.appending(path: "/api/settings/hooks")
+        let (data, response) = try await URLSession.shared.data(from: url)
+        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+            throw APIError.badStatus((response as? HTTPURLResponse)?.statusCode ?? 0)
+        }
+        return (try? JSONDecoder().decode([String: Bool].self, from: data)) ?? [:]
+    }
+
+    func reinstallHooks() async throws {
+        var req = URLRequest(url: baseURL.appending(path: "/api/settings/hooks/reinstall"))
+        req.httpMethod = "POST"
+        let (_, response) = try await URLSession.shared.data(for: req)
+        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+            throw APIError.badStatus((response as? HTTPURLResponse)?.statusCode ?? 0)
+        }
+    }
 }
