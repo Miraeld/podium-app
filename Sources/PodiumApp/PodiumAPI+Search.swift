@@ -75,4 +75,20 @@ extension PodiumAPI {
             throw APIError.badStatus((response as? HTTPURLResponse)?.statusCode ?? 0)
         }
     }
+
+    func importSession(data: Data) async throws -> String {
+        var req = URLRequest(url: baseURL.appending(path: "/api/import/session"))
+        req.httpMethod = "POST"
+        req.httpBody = data
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let (respData, response) = try await URLSession.shared.data(for: req)
+        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+            throw APIError.badStatus((response as? HTTPURLResponse)?.statusCode ?? 0)
+        }
+        if let json = try? JSONDecoder().decode([String: String].self, from: respData),
+           let id = json["session_id"] ?? json["id"] {
+            return id
+        }
+        return ""
+    }
 }

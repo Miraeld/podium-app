@@ -313,6 +313,14 @@ final class AppState {
     func loadWorkflow(_ id: String) async throws -> WorkflowSessionRaw {
         try await api.workflowSession(id)
     }
+
+    // MARK: Import
+
+    func importSession(data: Data) async throws -> String {
+        let id = try await api.importSession(data: data)
+        await refresh()
+        return id
+    }
 }
 
 // MARK: - WS message envelopes
