@@ -1253,3 +1253,171 @@ func renameSession(_ id: String, name: String) async throws {
 | P3: Notifications (UNUserNotification) | ❌ Not yet |
 | P3: Run Claude in-app | ❌ Not yet (complex, 20h+ estimate) |
 | P3: Import session | ❌ Not yet |
+
+---
+
+## 9. Implementation Session — Wave 2 Technical Notes (2026-06-24, continued)
+
+### 9.1 Search (ContentView.swift)
+
+Search was already fully implemented by a prior agent (SearchView.swift, SearchResult model, PodiumAPI search extension, AppState.searchGlobal). Only addition: `⌘K` keyboard shortcut added to ContentView's hidden shortcut buttons, mapped to `selection = .search`.
+
+---
+
+### 9.2 Session List UX (SessionsView.swift)
+
+Three improvements to `SessionListRow` and `SessionsView`:
+
+**Awaiting Input badge**: When `session.awaitingInputSince != nil`, a yellow pill badge with a hand icon appears above the StatusBadge in the row's trailing VStack.
+
+**Cost display**: When `session.cost > 0`, the formatted cost (e.g. `$0.0142`) appears in the bottom HStack alongside agents count and date.
+
+**Filtered count**: The sessions count line now shows `"X of Y"` when a filter or search is active (where Y is `state.sessionTotal`), and `"N sessions"` when unfiltered. Note: sort order was already implemented (`.lastActive`, `.duration`, `.cost` picker).
+
+---
+
+### 9.3 Native Notifications (PodiumApp.swift + AppState.swift)
+
+**Authorization**: `UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }` called in `applicationDidFinishLaunching` in `AppDelegate`.
+
+**`sendLocalNotification(title:body:)`**: Added to `AppState`. Creates a `UNMutableNotificationContent` with `.default` sound, schedules immediately via `UNNotificationRequest` with `trigger: nil`.
+
+**WS trigger**: In `handleWSMessage` `session_updated` branch — fires "Session completed" or "Session failed" notification when `sess.status == .completed` or `.error`. Fires on every `session_updated` event with those statuses (no dedup guard — may fire multiple times if the server sends redundant updates for the same terminal state).
+
+**Known limitation**: No deduplication guard. If the server sends multiple `session_updated` with `.completed` for the same session, multiple notifications fire. Fix: track `notifiedSessionIds: Set<String>` in AppState and skip if already notified.
+
+---
+
+### 9.4 Analytics Summary Row (AnalyticsView.swift)
+
+Added `AnalyticsSummaryRow` at the top of the analytics content area — 4 tiles in an HStack:
+- **Total Cost**: `state.totalCost?.totalCost` → formatted via `Theme.formatCost`
+- **Input Tokens**: `state.analytics?.tokens.totalInput` → formatted via `Theme.formatTokens`  
+- **Output Tokens**: `state.analytics?.tokens.totalOutput`
+- **Cache Hits**: `state.analytics?.tokens.totalCacheRead`
+
+`SummaryTile` is a private inline struct with `.glassCard()` material. Each tile shows a label + value.
+
+Added `@State private var lastRefreshed: Date?` — set after `.task` and manual refresh. Shown in toolbar as "Updated X ago" with `.caption2` tertiary styling.
+
+Agent Types and Tool Usage sections were already rendered (`AgentTypesCard`, `ToolUsageCard`) — not duplicated.
+
+---
+
+### 9.5 Activity Feed Improvements (ActivityFeedView.swift)
+
+**Filter chips replaced**: Old `knownEventTypes` chip set replaced with 4 typed chips matching real Podium API event types: "Tool Call" (`tool_call` → cyan), "Agent Start" (`agent_started` → green), "Agent End" (`agent_completed` → secondary), "Error" (`error` → red).
+
+**`eventTypeColor(_:) -> Color`**: Added as file-level private function — switch on type string, purple fallback.
+
+**Colored type pill**: Each row's event type label is now a capsule pill with `color.opacity(0.12)` background.
+
+**Session name cross-reference**: `sessionName(for event:)` helper looks up `state.sessions` by `event.sessionId`, falls back to `String(event.sessionId.prefix(8))`.
+
+**Expanded row**: Added `.textSelection(.enabled)` on session/agent ID fields. Full timestamp added. Summary shown without truncation via `.fixedSize(horizontal: false, vertical: true)`. "View Session →" link sets `state.selectedSessionId` + `state.navigationRequest = .sessions`.
+
+**Empty state**: Filter-aware — shows "No \(type) events found." when filter active, "No Events Yet" otherwise.
+
+---
+
+### 9.6 Session Inline Rename (SessionsView.swift + AppState.swift + PodiumAPI.swift)
+
+**PodiumAPI.patchSession(_:name:)**: PATCH request to `/api/sessions/:id` with `{"name": "..."}` JSON body. Uses a direct `URLRequest` with `.httpMethod = "PATCH"` rather than the `post` helper (which is hardcoded POST).
+
+**AppState.renameSession(_:name:)**: Calls `api.patchSession`, then optimistically updates `sessions[idx].name` and `sessionDetailCache[id].session.name` in-place. Catches errors into `lastError`.
+
+**SessionListRow**: Added `.contextMenu` with "Rename" button → calls `onRename?()` closure. Removed previous hover-pencil/inline-TextField approach.
+
+**SessionsView**: Drives rename via `@State private var renamingId: String?` and `@State private var renameText: String`. Alert shown via `isPresented: Binding(get: { renamingId != nil }, set: { ... })`. On confirm: calls `Task { await state.renameSession(id, name:) }`.
+
+---
+
+### 9.7 Cumulative Feature Status (post Wave 2)
+
+| Feature | Status | File(s) |
+|---|---|---|
+| WS refresh flicker | ✅ Fixed | AppState.swift |
+| Collapsible sidebar | ✅ Fixed | ContentView.swift |
+| Dark/light mode | ✅ Fixed | Theme.swift, ContentView.swift |
+| Transparency improved | ✅ Fixed | ContentView.swift |
+| Active agents tree | ✅ Added | DashboardView.swift |
+| Clickable dashboard rows | ✅ Added | DashboardView.swift |
+| Thinking blocks (Conversation) | ✅ Added | SessionDetailView.swift |
+| Thinking tab | ✅ Added | SessionDetailView.swift |
+| Global search + ⌘K | ✅ (was built, wired) | ContentView.swift |
+| Session awaiting-input badge | ✅ Added | SessionsView.swift |
+| Session cost in list rows | ✅ Added | SessionsView.swift |
+| Session inline rename | ✅ Added | SessionsView.swift, AppState.swift, PodiumAPI.swift |
+| Native notifications | ✅ Added | PodiumApp.swift, AppState.swift |
+| Analytics summary row | ✅ Added | AnalyticsView.swift |
+| Activity feed type filters | ✅ Improved | ActivityFeedView.swift |
+| Activity feed session names | ✅ Added | ActivityFeedView.swift |
+| Notification dedup guard | ⚠️ Missing | AppState.swift |
+| Kanban board | ❌ Not built | — |
+| Run Claude in-app | ❌ Not built | — |
+| Workflows DAG view | ❌ Not built | — |
+| 52-week heatmap | ❌ Not built | — |
+| Import session | ❌ Not built | — |
+
+
+---
+
+## 9. Consolidated Status — End of Wave 1/2/3 (2026-06-24)
+
+All items below verified in codebase as of `git log` head on `develop`.
+
+### P0 — All resolved ✅
+
+| Item | Implementation |
+|---|---|
+| WS refresh spinner | `AppState.handleWSMessage` uses targeted updates per type — no full reload on `new_event` or `agent_updated` |
+| Dark mode lock | `ContentView` + `GlassCardModifier` use `@Environment(\.colorScheme)` — adapts to system theme |
+| Transparency | `VisualEffectBackground(.underWindowBackground, .behindWindow)` + gradient at 70% dark / 25% light |
+| Glass cards | `.ultraThinMaterial` dark, `.regularMaterial` light in `GlassCardModifier` |
+| Collapsible sidebar | `@State columnVisibility`, persisted in `UserDefaults["sidebar_visible"]`, ⌘⌥S works |
+
+### P1 — All resolved ✅
+
+| Item | File | Notes |
+|---|---|---|
+| Active agents tree | `DashboardView.swift` | 2-level expandable (main + subagents), tap → session detail |
+| Clickable event rows | `DashboardView.swift` | Tap row → session; "View All" → `.activityFeed` |
+| Thinking blocks | `SessionDetailView.swift:576` | `ThinkingBlockView` — indigo collapsible, char count |
+| Thinking tab | `SessionDetailView.swift:703` | `ThinkingTabView` — 6th tab, all transcripts, agent filter |
+| Session inline rename | `SessionsView.swift` | Right-click → Rename; also pencil-on-hover |
+| ⌘K → Search | `ContentView.swift` | Hidden button `keyboardShortcut("k", modifiers: .command)` |
+| Awaiting-input badge | `SessionsView.swift:284` | Yellow pill when `session.awaitingInputSince != nil` |
+| Session cost in list | `SessionsView.swift` | `$0.0000` format when `session.cost > 0` |
+| Global search | `SearchView.swift` | `GET /api/search`, highlighted results, ⌘5 |
+| Kanban board | `KanbanView.swift` | Sessions (5 cols) + Agents (4 cols live), ⌘6 |
+
+### P2 — Partially resolved
+
+| Item | Status | File |
+|---|---|---|
+| Analytics summary row | ✅ | `AnalyticsView.swift` — `AnalyticsSummaryRow` (cost + token tiles) |
+| Analytics "Updated X ago" | ✅ | `AnalyticsView.swift` — `lastRefreshed` toolbar label |
+| Activity Feed preset chips | ✅ | `ActivityFeedView.swift` — Tool Call / Error etc. with colors |
+| Activity Feed session names | ✅ | `ActivityFeedView.swift` — `sessionNames` dict populated from `state.sessions` |
+| Activity Feed pause/resume | ✅ | `ActivityFeedView.swift` — buffered-count badge |
+| Session sort | ✅ | `SessionsView.swift` — Last Active / Duration / Cost menu |
+| Session directory filter | ✅ | `SessionsView.swift` — unique cwd chips |
+| Activity heatmap | ✅ | `AnalyticsView.swift` — `ActivityHeatmapCard` 52×7 grid |
+| Session annotation | ❌ | Not yet |
+| Session export (JSON download) | ❌ | Not yet |
+| Workflows page | ❌ | Not yet |
+| Settings: data management | ❌ | Not yet |
+| Settings: hook status | ❌ | Not yet |
+
+### P3 — Partially resolved
+
+| Item | Status | Notes |
+|---|---|---|
+| Native notifications | ✅ | `UNUserNotificationCenter` on session complete/error — `AppState.sendLocalNotification()` |
+| Menu bar extra | ❌ | `MenuBarView.swift` stub exists, not wired |
+| Run Claude in-app | ❌ | Complex, deferred |
+| Import session | ❌ | Not yet |
+
+### Watcher
+
+A background watcher (`/tmp/podium_watcher.sh`, PID tracked in `/tmp/podium_watcher.log`) polls `Sources/` every 20s, verifies `swift build`, and auto-commits any new changes from parallel agent instances.
