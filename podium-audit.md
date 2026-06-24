@@ -1137,3 +1137,119 @@ The `refreshStats()` private method is retained — it still fires on `session_c
 | Import session (drag .json) | P3 | 3–4 hours |
 | Advanced metrics feature flag | P2 | 1–2 hours |
 
+
+---
+
+## 8. Wave 3 Implementation Notes (2026-06-24)
+
+Technical ground truth for what was shipped in the parallel agent run. Reference if bugs surface or features need extension.
+
+### Git setup
+
+```
+git init && initial commit on branch `develop`
+.gitignore excludes .build/, PodiumApp.app/, *.o *.d *.swp
+```
+
+### New files
+
+#### `Sources/PodiumApp/SearchView.swift`
+- **Entry point**: `SearchView` — full NavigationSplitView detail panel, no own toolbar
+- **Focus**: `@FocusState private var fieldFocused` + `DispatchQueue.main.asyncAfter(0.1)` on appear
+- **Debounce**: `Task.sleep(nanoseconds: 300_000_000)` with cancel on each keystroke
+- **Below 2 chars**: shows `Array(state.sessions.prefix(5))` as "Recent Sessions"
+- **Navigation**: sets `state.selectedSessionId` + `state.navigationRequest = .sessions`
+- **Highlight component**: `HighlightedText` — parses `<mark>…</mark>` into `AttributedString` segments (`.cyan.opacity(0.9)` + `.bold`). Strips stray HTML tags with regex fallback.
+- **Calls**: `state.searchGlobal(q:)` → `api.search(q:limit:)` (in PodiumAPI+Search.swift)
+
+#### `Sources/PodiumApp/KanbanView.swift`
+- **Mode picker**: `KanbanMode` enum (sessions / agents), `@State private var mode`
+- **Sessions board**: 5 columns (active / waiting / completed / error / abandoned). Data from `state.sessions` filtered by `status.rawValue`. Max 20/column.
+- **Agents board**: 4 columns. working/waiting live from `state.activeAgents`. completed/error show "Not tracked live" placeholder + info banner explaining why (live WS only tracks active agents).
+- **Column width**: `GeometryReader` → `(containerWidth - gaps) / columnCount`, clamped to min 200pt
+- **Pulsing headers**: StatusDot with `active: true` on working/active/waiting columns
+- **Navigation**: `state.selectedSessionId = id; state.navigationRequest = .sessions`
+
+#### `Sources/PodiumApp/PodiumAPI+Search.swift`
+- Actor extension — cannot access `private get(url:)` from outside, so implements HTTP directly via `URLSession.shared` + `JSONDecoder.podium`
+- `search(q:limit:)` → `GET /api/search?q=&limit=`
+- `patchSession(_:name:)` → `PATCH /api/sessions/:id` with `{ "name": "…" }` JSON body
+- Both throw `APIError.badStatus` on non-2xx
+
+#### `Sources/PodiumApp/Components.swift` addition
+- `FilterChip` was referenced across multiple views but missing its definition; Agent E added it here (it was logically always part of Components).
+
+### Modified files
+
+#### `Sources/PodiumApp/Models.swift` — appended
+```swift
+struct SearchResult: Decodable { let sessions: [SessionHit]; let events: [EventHit] }
+struct SessionHit: Decodable, Identifiable { id, name, status, cwd, highlight }
+struct EventHit: Decodable, Identifiable { id (Int), sessionId, sessionName, eventType, toolName, highlight }
+```
+Also added `Equatable` conformance to `DashboardEvent` (required by ActivityFeedView duplicate detection).
+
+#### `Sources/PodiumApp/AppState.swift` — appended (2 methods before closing brace)
+```swift
+func searchGlobal(q: String) async throws -> SearchResult { try await api.search(q: q) }
+func renameSession(_ id: String, name: String) async throws {
+    try await api.patchSession(id, name: name)
+    if let idx = sessions.firstIndex(where: { $0.id == id }) { sessions[idx].name = name }
+}
+```
+
+#### `Sources/PodiumApp/ContentView.swift`
+- Added `.search` and `.kanban` to `NavDestination`
+- Added "Discover" sidebar section with Search + Kanban rows (⌘5 / ⌘6)
+- Wired `SearchView()` and `KanbanView()` into the detail switch
+
+#### `Sources/PodiumApp/ActivityFeedView.swift` — complete rewrite
+- **Pause/resume**: `isPaused: Bool` + `bufferedEvents: [DashboardEvent]`. Toggle button in filter bar right side. When paused → badge shows `"\(bufferedEvents.count)"`. On resume → flush buffer to top of list + `isPaused = false`.
+- **Live WS**: `.onChange(of: state.recentEvents)` — if newest event not already in list by id → prepend (live) or buffer (paused). Matches current `filterType` (nil = any, or type must equal).
+- **Session nav**: expanded row shows "View Session →" button → `state.selectedSessionId = event.sessionId; state.navigationRequest = .sessions`
+- **Preset chips**: "Errors" (red, filterType = "error") + "Tool Calls" (purple, filterType = "tool_use") at front of chip bar
+
+#### `Sources/PodiumApp/SessionsView.swift` — substantial rewrite
+- **Sort**: `enum SortOrder: String, CaseIterable { case lastActive, duration, cost }`. Applied in `displayedSessions` computed property. `Menu` button next to session count.
+  - `.duration`: `(session.endedAt ?? Date()).timeIntervalSince(session.startedAt)`, desc
+  - `.cost`: `session.cost ?? 0`, desc
+- **Directory filter**: `@State private var directoryFilter: String? = nil`. Unique cwds extracted from `state.sessions`. Shown as a second FilterChip row if 2+ unique directories. Labels via `Theme.projectName(from:)`.
+- **Inline rename**: `SessionListRow` takes `onRename: (String) async -> Void`. On hover → pencil icon appears. Tap pencil → `isRenaming = true`, name field shows. On submit/escape → call `renameSession()` in parent (routes to `state.renameSession()` first, falls back to direct PATCH if that throws).
+
+#### `Sources/PodiumApp/AnalyticsView.swift` — additive only
+- Added `ActivityHeatmapCard` view (at end of file) + inserted as first card in `LazyVStack`
+- **Grid**: 52 columns × 7 rows (Mon–Sun). Uses `Calendar.current` to walk back 364 days, grouped by ISO week.
+- **Color scale**: `0 → .primary.opacity(0.08)` | `1-2 → .cyan.opacity(0.4)` | `3-5 → indigo 0.7` | `6-9 → purple` | `10+ → bright purple`
+- **Month labels**: HStack of `Text` month abbreviations above the grid at week boundaries where month changes
+- **Tooltips**: `.help("yyyy-MM-dd: N session(s)")` on each cell
+- **Legend**: "Less [5 color swatches] More" strip below grid
+
+### Known integration notes for other agents
+
+- **Agent B (ContentView)**: The "Discover" sidebar section was added between the existing Observe section and the footer. If Agent B's changes also modify `Sidebar.body`, a merge conflict is expected — resolution is trivial (keep both sections, combine the toolbar additions).
+- **Agent A (AppState)**: `searchGlobal()` and `renameSession()` were appended to the class body. If Agent A's changes also append methods, there may be a minor merge conflict at the end of the file — resolution is trivial.
+- **Agents C/D (Dashboard/SessionDetail)**: No conflict possible — those files were not touched.
+
+### Gap analysis status update
+
+| Gap | Status after Wave 3 |
+|---|---|
+| P0: WS refresh flicker | ✅ Agent A |
+| P0: Collapsible sidebar | ✅ Agent B / pre-existing |
+| P1: Global search | ✅ Wave 3 (SearchView) |
+| P1: Active agents tree | ✅ Agent C |
+| P1: Kanban board | ✅ Wave 3 (KanbanView) |
+| P1: Thinking tab | ✅ Agent D |
+| P1: Event filters (Activity) | ✅ Wave 3 (ActivityFeedView) |
+| P2: Session sort + dir filter | ✅ Wave 3 (SessionsView) |
+| P2: Session inline rename | ✅ Wave 3 (SessionsView) |
+| P2: Analytics heatmap | ✅ Wave 3 (AnalyticsView) |
+| P2: Session annotation | ❌ Not yet |
+| P2: Session export (download JSON) | ❌ Not yet |
+| P2: Workflows page | ❌ Not yet |
+| P2: Settings: data management | ❌ Not yet |
+| P2: Settings: hook status | ❌ Not yet |
+| P3: Menu bar extra | ❌ Not yet (MenuBarView.swift stub exists) |
+| P3: Notifications (UNUserNotification) | ❌ Not yet |
+| P3: Run Claude in-app | ❌ Not yet (complex, 20h+ estimate) |
+| P3: Import session | ❌ Not yet |
