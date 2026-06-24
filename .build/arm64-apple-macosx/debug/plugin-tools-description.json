@@ -48,6 +48,10 @@
         },
         {
           "kind" : "file",
+          "name" : "/Users/gaelrobin/Desktop/PodiumSwiftApp/Sources/PodiumApp/KanbanView.swift"
+        },
+        {
+          "kind" : "file",
           "name" : "/Users/gaelrobin/Desktop/PodiumSwiftApp/Sources/PodiumApp/MenuBarView.swift"
         },
         {
@@ -56,11 +60,19 @@
         },
         {
           "kind" : "file",
+          "name" : "/Users/gaelrobin/Desktop/PodiumSwiftApp/Sources/PodiumApp/PodiumAPI+Search.swift"
+        },
+        {
+          "kind" : "file",
           "name" : "/Users/gaelrobin/Desktop/PodiumSwiftApp/Sources/PodiumApp/PodiumAPI.swift"
         },
         {
           "kind" : "file",
           "name" : "/Users/gaelrobin/Desktop/PodiumSwiftApp/Sources/PodiumApp/PodiumApp.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/gaelrobin/Desktop/PodiumSwiftApp/Sources/PodiumApp/SearchView.swift"
         },
         {
           "kind" : "file",
@@ -105,10 +117,13 @@
         "/Users/gaelrobin/Desktop/PodiumSwiftApp/.build/arm64-apple-macosx/debug/PodiumApp.build/Components.swift.o",
         "/Users/gaelrobin/Desktop/PodiumSwiftApp/.build/arm64-apple-macosx/debug/PodiumApp.build/ContentView.swift.o",
         "/Users/gaelrobin/Desktop/PodiumSwiftApp/.build/arm64-apple-macosx/debug/PodiumApp.build/DashboardView.swift.o",
+        "/Users/gaelrobin/Desktop/PodiumSwiftApp/.build/arm64-apple-macosx/debug/PodiumApp.build/KanbanView.swift.o",
         "/Users/gaelrobin/Desktop/PodiumSwiftApp/.build/arm64-apple-macosx/debug/PodiumApp.build/MenuBarView.swift.o",
         "/Users/gaelrobin/Desktop/PodiumSwiftApp/.build/arm64-apple-macosx/debug/PodiumApp.build/Models.swift.o",
+        "/Users/gaelrobin/Desktop/PodiumSwiftApp/.build/arm64-apple-macosx/debug/PodiumApp.build/PodiumAPI+Search.swift.o",
         "/Users/gaelrobin/Desktop/PodiumSwiftApp/.build/arm64-apple-macosx/debug/PodiumApp.build/PodiumAPI.swift.o",
         "/Users/gaelrobin/Desktop/PodiumSwiftApp/.build/arm64-apple-macosx/debug/PodiumApp.build/PodiumApp.swift.o",
+        "/Users/gaelrobin/Desktop/PodiumSwiftApp/.build/arm64-apple-macosx/debug/PodiumApp.build/SearchView.swift.o",
         "/Users/gaelrobin/Desktop/PodiumSwiftApp/.build/arm64-apple-macosx/debug/PodiumApp.build/SessionDetailView.swift.o",
         "/Users/gaelrobin/Desktop/PodiumSwiftApp/.build/arm64-apple-macosx/debug/PodiumApp.build/SessionsView.swift.o",
         "/Users/gaelrobin/Desktop/PodiumSwiftApp/.build/arm64-apple-macosx/debug/PodiumApp.build/SettingsView.swift.o",
@@ -193,6 +208,10 @@
         },
         {
           "kind" : "file",
+          "name" : "/Users/gaelrobin/Desktop/PodiumSwiftApp/.build/arm64-apple-macosx/debug/PodiumApp.build/KanbanView.swift.o"
+        },
+        {
+          "kind" : "file",
           "name" : "/Users/gaelrobin/Desktop/PodiumSwiftApp/.build/arm64-apple-macosx/debug/PodiumApp.build/MenuBarView.swift.o"
         },
         {
@@ -201,11 +220,19 @@
         },
         {
           "kind" : "file",
+          "name" : "/Users/gaelrobin/Desktop/PodiumSwiftApp/.build/arm64-apple-macosx/debug/PodiumApp.build/PodiumAPI+Search.swift.o"
+        },
+        {
+          "kind" : "file",
           "name" : "/Users/gaelrobin/Desktop/PodiumSwiftApp/.build/arm64-apple-macosx/debug/PodiumApp.build/PodiumAPI.swift.o"
         },
         {
           "kind" : "file",
           "name" : "/Users/gaelrobin/Desktop/PodiumSwiftApp/.build/arm64-apple-macosx/debug/PodiumApp.build/PodiumApp.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/gaelrobin/Desktop/PodiumSwiftApp/.build/arm64-apple-macosx/debug/PodiumApp.build/SearchView.swift.o"
         },
         {
           "kind" : "file",
@@ -244,10 +271,13 @@
         "/Users/gaelrobin/Desktop/PodiumSwiftApp/Sources/PodiumApp/Components.swift",
         "/Users/gaelrobin/Desktop/PodiumSwiftApp/Sources/PodiumApp/ContentView.swift",
         "/Users/gaelrobin/Desktop/PodiumSwiftApp/Sources/PodiumApp/DashboardView.swift",
+        "/Users/gaelrobin/Desktop/PodiumSwiftApp/Sources/PodiumApp/KanbanView.swift",
         "/Users/gaelrobin/Desktop/PodiumSwiftApp/Sources/PodiumApp/MenuBarView.swift",
         "/Users/gaelrobin/Desktop/PodiumSwiftApp/Sources/PodiumApp/Models.swift",
+        "/Users/gaelrobin/Desktop/PodiumSwiftApp/Sources/PodiumApp/PodiumAPI+Search.swift",
         "/Users/gaelrobin/Desktop/PodiumSwiftApp/Sources/PodiumApp/PodiumAPI.swift",
         "/Users/gaelrobin/Desktop/PodiumSwiftApp/Sources/PodiumApp/PodiumApp.swift",
+        "/Users/gaelrobin/Desktop/PodiumSwiftApp/Sources/PodiumApp/SearchView.swift",
         "/Users/gaelrobin/Desktop/PodiumSwiftApp/Sources/PodiumApp/SessionDetailView.swift",
         "/Users/gaelrobin/Desktop/PodiumSwiftApp/Sources/PodiumApp/SessionsView.swift",
         "/Users/gaelrobin/Desktop/PodiumSwiftApp/Sources/PodiumApp/SettingsView.swift",
@@ -276,10 +306,13 @@
       "/Users/gaelrobin/Desktop/PodiumSwiftApp/Sources/PodiumApp/Components.swift",
       "/Users/gaelrobin/Desktop/PodiumSwiftApp/Sources/PodiumApp/ContentView.swift",
       "/Users/gaelrobin/Desktop/PodiumSwiftApp/Sources/PodiumApp/DashboardView.swift",
+      "/Users/gaelrobin/Desktop/PodiumSwiftApp/Sources/PodiumApp/KanbanView.swift",
       "/Users/gaelrobin/Desktop/PodiumSwiftApp/Sources/PodiumApp/MenuBarView.swift",
       "/Users/gaelrobin/Desktop/PodiumSwiftApp/Sources/PodiumApp/Models.swift",
+      "/Users/gaelrobin/Desktop/PodiumSwiftApp/Sources/PodiumApp/PodiumAPI+Search.swift",
       "/Users/gaelrobin/Desktop/PodiumSwiftApp/Sources/PodiumApp/PodiumAPI.swift",
       "/Users/gaelrobin/Desktop/PodiumSwiftApp/Sources/PodiumApp/PodiumApp.swift",
+      "/Users/gaelrobin/Desktop/PodiumSwiftApp/Sources/PodiumApp/SearchView.swift",
       "/Users/gaelrobin/Desktop/PodiumSwiftApp/Sources/PodiumApp/SessionDetailView.swift",
       "/Users/gaelrobin/Desktop/PodiumSwiftApp/Sources/PodiumApp/SessionsView.swift",
       "/Users/gaelrobin/Desktop/PodiumSwiftApp/Sources/PodiumApp/SettingsView.swift",
@@ -403,6 +436,10 @@
         },
         {
           "kind" : "file",
+          "name" : "/Users/gaelrobin/Desktop/PodiumSwiftApp/Sources/PodiumApp/KanbanView.swift"
+        },
+        {
+          "kind" : "file",
           "name" : "/Users/gaelrobin/Desktop/PodiumSwiftApp/Sources/PodiumApp/MenuBarView.swift"
         },
         {
@@ -411,11 +448,19 @@
         },
         {
           "kind" : "file",
+          "name" : "/Users/gaelrobin/Desktop/PodiumSwiftApp/Sources/PodiumApp/PodiumAPI+Search.swift"
+        },
+        {
+          "kind" : "file",
           "name" : "/Users/gaelrobin/Desktop/PodiumSwiftApp/Sources/PodiumApp/PodiumAPI.swift"
         },
         {
           "kind" : "file",
           "name" : "/Users/gaelrobin/Desktop/PodiumSwiftApp/Sources/PodiumApp/PodiumApp.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/gaelrobin/Desktop/PodiumSwiftApp/Sources/PodiumApp/SearchView.swift"
         },
         {
           "kind" : "file",
@@ -477,6 +522,10 @@
         },
         {
           "kind" : "file",
+          "name" : "/Users/gaelrobin/Desktop/PodiumSwiftApp/.build/arm64-apple-macosx/debug/PodiumApp.build/KanbanView.swift.o"
+        },
+        {
+          "kind" : "file",
           "name" : "/Users/gaelrobin/Desktop/PodiumSwiftApp/.build/arm64-apple-macosx/debug/PodiumApp.build/MenuBarView.swift.o"
         },
         {
@@ -485,11 +534,19 @@
         },
         {
           "kind" : "file",
+          "name" : "/Users/gaelrobin/Desktop/PodiumSwiftApp/.build/arm64-apple-macosx/debug/PodiumApp.build/PodiumAPI+Search.swift.o"
+        },
+        {
+          "kind" : "file",
           "name" : "/Users/gaelrobin/Desktop/PodiumSwiftApp/.build/arm64-apple-macosx/debug/PodiumApp.build/PodiumAPI.swift.o"
         },
         {
           "kind" : "file",
           "name" : "/Users/gaelrobin/Desktop/PodiumSwiftApp/.build/arm64-apple-macosx/debug/PodiumApp.build/PodiumApp.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/gaelrobin/Desktop/PodiumSwiftApp/.build/arm64-apple-macosx/debug/PodiumApp.build/SearchView.swift.o"
         },
         {
           "kind" : "file",

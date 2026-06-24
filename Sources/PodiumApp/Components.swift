@@ -236,6 +236,34 @@ func agentIcon(_ type: Agent.AgentType, subtype: String?) -> String {
     return "person.crop.circle"
 }
 
+// MARK: - Filter Chip
+
+struct FilterChip: View {
+    let label: String
+    var color: Color = .secondary
+    let active: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text(label)
+                .font(.caption.weight(.semibold))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(active ? color.opacity(0.22) : Color.primary.opacity(0.06))
+                .foregroundStyle(active ? color : .secondary)
+                .clipShape(Capsule())
+                .overlay(
+                    Capsule().strokeBorder(
+                        active ? color.opacity(0.4) : Color.primary.opacity(0.10),
+                        lineWidth: 1
+                    )
+                )
+        }
+        .buttonStyle(.plain)
+    }
+}
+
 // MARK: - Mini Bar Chart (Charts-free fallback for tool usage)
 
 struct MiniBarChart: View {

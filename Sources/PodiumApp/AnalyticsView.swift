@@ -9,6 +9,9 @@ struct AnalyticsView: View {
         ScrollView {
             if let analytics = state.analytics {
                 LazyVStack(spacing: 20) {
+                    // Activity heatmap
+                    ActivityHeatmapCard(dailySessions: analytics.dailySessions)
+
                     // Token overview
                     TokenOverviewCard(tokens: analytics.tokens)
 
@@ -288,5 +291,125 @@ struct AgentTypesCard: View {
         }
         .padding(Theme.cardPadding)
         .glassCard()
+    }
+}
+
+// MARK: - Activity Heatmap Card
+
+struct ActivityHeatmapCard: View {
+    let dailySessions: [Analytics.DailyCount]
+
+    private var countByDate: [String: Int] {
+        Dictionary(dailySessions.map { ($0.date, $0.count) }, uniquingKeysWith: { $1 })
+    }
+
+    private var totalSessions: Int {
+        dailySessions.map(\.count).reduce(0, +)
+    }
+
+    private var weeks: [[Date]] {
+        let cal = Calendar.current
+        let today = Date()
+        let startDate = cal.date(byAdding: .day, value: -363, to: today)!
+        var comps = cal.dateComponents([.yearForWeekOfYear, .weekOfYear], from: startDate)
+        comps.weekday = 2 // Monday
+        let firstMonday = cal.date(from: comps) ?? startDate
+
+        var result: [[Date]] = []
+        var weekStart = firstMonday
+        for _ in 0..<52 {
+            var week: [Date] = []
+            for d in 0..<7 {
+                if let day = cal.date(byAdding: .day, value: d, to: weekStart) {
+                    week.append(day)
+                }
+            }
+            result.append(week)
+            weekStart = cal.date(byAdding: .day, value: 7, to: weekStart)!
+        }
+        return result
+    }
+
+    private var monthLabels: [(index: Int, label: String)] {
+        var labels: [(index: Int, label: String)] = []
+        let fmt = DateFormatter()
+        fmt.dateFormat = "MMM"
+        var lastMonth = -1
+        for (wIdx, week) in weeks.enumerated() {
+            guard let firstDay = week.first else { continue }
+            let month = Calendar.current.component(.month, from: firstDay)
+            if month != lastMonth {
+                labels.append((index: wIdx, label: fmt.string(from: firstDay)))
+                lastMonth = month
+            }
+        }
+        return labels
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            SectionHeader(title: "Activity", trailing: "\(totalSessions) sessions")
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 4) {
+                    // Month labels row
+                    HStack(alignment: .top, spacing: 3) {
+                        ForEach(0..<weeks.count, id: \.self) { wIdx in
+                            let label = monthLabels.first(where: { $0.index == wIdx })?.label
+                            Text(label ?? " ")
+                                .font(.system(size: 9))
+                                .foregroundStyle(label != nil ? Color.secondary : Color.clear)
+                                .frame(width: 12, alignment: .leading)
+                        }
+                    }
+
+                    // Day cells grid
+                    HStack(alignment: .top, spacing: 3) {
+                        ForEach(weeks.indices, id: \.self) { wIdx in
+                            VStack(spacing: 3) {
+                                ForEach(0..<7, id: \.self) { dIdx in
+                                    let date = weeks[wIdx][dIdx]
+                                    let key = dateKey(date)
+                                    let count = countByDate[key] ?? 0
+                                    RoundedRectangle(cornerRadius: 3)
+                                        .fill(heatColor(count))
+                                        .frame(width: 12, height: 12)
+                                        .help("\(key): \(count) session\(count == 1 ? "" : "s")")
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Legend
+            HStack(spacing: 6) {
+                Text("Less").font(.caption2).foregroundStyle(.tertiary)
+                ForEach([0, 1, 3, 6, 10], id: \.self) { n in
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(heatColor(n))
+                        .frame(width: 12, height: 12)
+                }
+                Text("More").font(.caption2).foregroundStyle(.tertiary)
+            }
+        }
+        .padding(Theme.cardPadding)
+        .glassCard()
+    }
+
+    private func heatColor(_ count: Int) -> Color {
+        switch count {
+        case 0:        return Color.primary.opacity(0.08)
+        case 1...2:    return Color.cyan.opacity(0.4)
+        case 3...5:    return Color(red: 0.3, green: 0.5, blue: 1).opacity(0.7)
+        case 6...9:    return Color(red: 0.5, green: 0.3, blue: 1)
+        default:       return Color(red: 0.7, green: 0.2, blue: 1)
+        }
+    }
+
+    private func dateKey(_ date: Date) -> String {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        return f.string(from: date)
     }
 }

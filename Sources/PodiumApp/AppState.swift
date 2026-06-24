@@ -233,6 +233,21 @@ final class AppState {
     func fetchTranscript(_ sessionId: String, before: Int? = nil) async throws -> TranscriptResponse {
         try await api.transcript(sessionId, before: before)
     }
+
+    // MARK: Search
+
+    func searchGlobal(q: String) async throws -> SearchResult {
+        try await api.search(q: q)
+    }
+
+    // MARK: Rename session
+
+    func renameSession(_ id: String, name: String) async throws {
+        try await api.patchSession(id, name: name)
+        if let idx = sessions.firstIndex(where: { $0.id == id }) {
+            sessions[idx].name = name
+        }
+    }
 }
 
 // MARK: - WS message envelopes

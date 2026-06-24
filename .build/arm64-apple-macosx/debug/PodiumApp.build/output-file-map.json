@@ -44,6 +44,13 @@
     "swift-dependencies": "/Users/gaelrobin/Desktop/PodiumSwiftApp/.build/arm64-apple-macosx/debug/PodiumApp.build/DashboardView.swiftdeps",
     "diagnostics": "/Users/gaelrobin/Desktop/PodiumSwiftApp/.build/arm64-apple-macosx/debug/PodiumApp.build/DashboardView.dia"
   },
+  "/Users/gaelrobin/Desktop/PodiumSwiftApp/Sources/PodiumApp/KanbanView.swift": {
+    "dependencies": "/Users/gaelrobin/Desktop/PodiumSwiftApp/.build/arm64-apple-macosx/debug/PodiumApp.build/KanbanView.d",
+    "object": "/Users/gaelrobin/Desktop/PodiumSwiftApp/.build/arm64-apple-macosx/debug/PodiumApp.build/KanbanView.swift.o",
+    "swiftmodule": "/Users/gaelrobin/Desktop/PodiumSwiftApp/.build/arm64-apple-macosx/debug/PodiumApp.build/KanbanView~partial.swiftmodule",
+    "swift-dependencies": "/Users/gaelrobin/Desktop/PodiumSwiftApp/.build/arm64-apple-macosx/debug/PodiumApp.build/KanbanView.swiftdeps",
+    "diagnostics": "/Users/gaelrobin/Desktop/PodiumSwiftApp/.build/arm64-apple-macosx/debug/PodiumApp.build/KanbanView.dia"
+  },
   "/Users/gaelrobin/Desktop/PodiumSwiftApp/Sources/PodiumApp/MenuBarView.swift": {
     "dependencies": "/Users/gaelrobin/Desktop/PodiumSwiftApp/.build/arm64-apple-macosx/debug/PodiumApp.build/MenuBarView.d",
     "object": "/Users/gaelrobin/Desktop/PodiumSwiftApp/.build/arm64-apple-macosx/debug/PodiumApp.build/MenuBarView.swift.o",
@@ -58,6 +65,13 @@
     "swift-dependencies": "/Users/gaelrobin/Desktop/PodiumSwiftApp/.build/arm64-apple-macosx/debug/PodiumApp.build/Models.swiftdeps",
     "diagnostics": "/Users/gaelrobin/Desktop/PodiumSwiftApp/.build/arm64-apple-macosx/debug/PodiumApp.build/Models.dia"
   },
+  "/Users/gaelrobin/Desktop/PodiumSwiftApp/Sources/PodiumApp/PodiumAPI+Search.swift": {
+    "dependencies": "/Users/gaelrobin/Desktop/PodiumSwiftApp/.build/arm64-apple-macosx/debug/PodiumApp.build/PodiumAPI+Search.d",
+    "object": "/Users/gaelrobin/Desktop/PodiumSwiftApp/.build/arm64-apple-macosx/debug/PodiumApp.build/PodiumAPI+Search.swift.o",
+    "swiftmodule": "/Users/gaelrobin/Desktop/PodiumSwiftApp/.build/arm64-apple-macosx/debug/PodiumApp.build/PodiumAPI+Search~partial.swiftmodule",
+    "swift-dependencies": "/Users/gaelrobin/Desktop/PodiumSwiftApp/.build/arm64-apple-macosx/debug/PodiumApp.build/PodiumAPI+Search.swiftdeps",
+    "diagnostics": "/Users/gaelrobin/Desktop/PodiumSwiftApp/.build/arm64-apple-macosx/debug/PodiumApp.build/PodiumAPI+Search.dia"
+  },
   "/Users/gaelrobin/Desktop/PodiumSwiftApp/Sources/PodiumApp/PodiumAPI.swift": {
     "dependencies": "/Users/gaelrobin/Desktop/PodiumSwiftApp/.build/arm64-apple-macosx/debug/PodiumApp.build/PodiumAPI.d",
     "object": "/Users/gaelrobin/Desktop/PodiumSwiftApp/.build/arm64-apple-macosx/debug/PodiumApp.build/PodiumAPI.swift.o",
@@ -71,6 +85,13 @@
     "swiftmodule": "/Users/gaelrobin/Desktop/PodiumSwiftApp/.build/arm64-apple-macosx/debug/PodiumApp.build/PodiumApp~partial.swiftmodule",
     "swift-dependencies": "/Users/gaelrobin/Desktop/PodiumSwiftApp/.build/arm64-apple-macosx/debug/PodiumApp.build/PodiumApp.swiftdeps",
     "diagnostics": "/Users/gaelrobin/Desktop/PodiumSwiftApp/.build/arm64-apple-macosx/debug/PodiumApp.build/PodiumApp.dia"
+  },
+  "/Users/gaelrobin/Desktop/PodiumSwiftApp/Sources/PodiumApp/SearchView.swift": {
+    "dependencies": "/Users/gaelrobin/Desktop/PodiumSwiftApp/.build/arm64-apple-macosx/debug/PodiumApp.build/SearchView.d",
+    "object": "/Users/gaelrobin/Desktop/PodiumSwiftApp/.build/arm64-apple-macosx/debug/PodiumApp.build/SearchView.swift.o",
+    "swiftmodule": "/Users/gaelrobin/Desktop/PodiumSwiftApp/.build/arm64-apple-macosx/debug/PodiumApp.build/SearchView~partial.swiftmodule",
+    "swift-dependencies": "/Users/gaelrobin/Desktop/PodiumSwiftApp/.build/arm64-apple-macosx/debug/PodiumApp.build/SearchView.swiftdeps",
+    "diagnostics": "/Users/gaelrobin/Desktop/PodiumSwiftApp/.build/arm64-apple-macosx/debug/PodiumApp.build/SearchView.dia"
   },
   "/Users/gaelrobin/Desktop/PodiumSwiftApp/Sources/PodiumApp/SessionDetailView.swift": {
     "dependencies": "/Users/gaelrobin/Desktop/PodiumSwiftApp/.build/arm64-apple-macosx/debug/PodiumApp.build/SessionDetailView.d",

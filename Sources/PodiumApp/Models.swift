@@ -80,7 +80,7 @@ struct AgentTreeNode: Codable, Identifiable {
 
 // MARK: - Event
 
-struct DashboardEvent: Codable, Identifiable {
+struct DashboardEvent: Codable, Identifiable, Equatable {
     let id: Int?
     let sessionId: String
     let agentId: String?
@@ -278,4 +278,28 @@ struct TranscriptResponse: Decodable {
     let firstLine: Int?     // use as `before` cursor to load earlier messages
     let lastLine: Int?
     let total: Int?
+}
+
+// MARK: - Search
+
+struct SearchResult: Decodable {
+    let sessions: [SessionHit]
+    let events: [EventHit]
+}
+
+struct SessionHit: Decodable, Identifiable {
+    let id: String
+    let name: String?
+    let status: String
+    let cwd: String?
+    let highlight: String?  // server sends <mark>...</mark> tags
+}
+
+struct EventHit: Decodable, Identifiable {
+    let id: Int
+    let sessionId: String
+    let sessionName: String?
+    let eventType: String
+    let toolName: String?
+    let highlight: String?  // server sends <mark>...</mark> tags
 }

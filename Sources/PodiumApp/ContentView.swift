@@ -7,6 +7,8 @@ enum NavDestination: Hashable {
     case sessions
     case analytics
     case activityFeed
+    case search
+    case kanban
 }
 
 // MARK: - Content View
@@ -30,6 +32,8 @@ struct ContentView: View {
                 case .sessions:     SessionsView()
                 case .analytics:    AnalyticsView()
                 case .activityFeed: ActivityFeedView()
+                case .search:       SearchView()
+                case .kanban:       KanbanView()
                 }
             }
         }
@@ -90,6 +94,8 @@ struct ContentView: View {
             Button("") { selection = .sessions }.keyboardShortcut("2", modifiers: .command)
             Button("") { selection = .analytics }.keyboardShortcut("3", modifiers: .command)
             Button("") { selection = .activityFeed }.keyboardShortcut("4", modifiers: .command)
+            Button("") { selection = .search }.keyboardShortcut("5", modifiers: .command)
+            Button("") { selection = .kanban }.keyboardShortcut("6", modifiers: .command)
         })
     }
 }
@@ -123,6 +129,14 @@ struct Sidebar: View {
                 SidebarRow(icon: "waveform", label: "Activity", value: .activityFeed)
             } header: {
                 Text("Observe")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+            Section {
+                SidebarRow(icon: "magnifyingglass", label: "Search", value: .search)
+                SidebarRow(icon: "rectangle.split.3x1.fill", label: "Kanban", value: .kanban)
+            } header: {
+                Text("Discover")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
             }

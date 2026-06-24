@@ -1,5 +1,15 @@
 import SwiftUI
 
+// MARK: - Sort Order
+
+enum SortOrder: String, CaseIterable {
+    case lastActive = "Last Active"
+    case duration   = "Duration"
+    case cost       = "Cost"
+}
+
+// MARK: - Sessions View
+
 struct SessionsView: View {
     @Environment(AppState.self) var state
     @State private var searchText = ""
@@ -7,13 +17,43 @@ struct SessionsView: View {
     @State private var selectedId: String? = nil
     @State private var searchResults: [Session]? = nil
     @State private var searchTask: Task<Void, Never>? = nil
+    @State private var sortOrder: SortOrder = .lastActive
+    @State private var directoryFilter: String? = nil
+
+    private var uniqueDirectories: [String] {
+        let cwds = state.sessions.compactMap(\.cwd)
+        return Array(Set(cwds)).sorted()
+    }
 
     private var displayedSessions: [Session] {
-        if let results = searchResults { return results }
-        if let filter = statusFilter {
-            return state.sessions.filter { $0.status == filter }
+        var list: [Session]
+        if let results = searchResults {
+            list = results
+        } else if let filter = statusFilter {
+            list = state.sessions.filter { $0.status == filter }
+        } else {
+            list = state.sessions
         }
-        return state.sessions
+
+        if let dir = directoryFilter {
+            list = list.filter { $0.cwd == dir }
+        }
+
+        let now = Date()
+        switch sortOrder {
+        case .lastActive:
+            list.sort { $0.updatedAt > $1.updatedAt }
+        case .duration:
+            list.sort {
+                let d0 = ($0.endedAt ?? now).timeIntervalSince($0.startedAt)
+                let d1 = ($1.endedAt ?? now).timeIntervalSince($1.startedAt)
+                return d0 > d1
+            }
+        case .cost:
+            list.sort { ($0.cost ?? 0) > ($1.cost ?? 0) }
+        }
+
+        return list
     }
 
     var body: some View {
@@ -53,6 +93,24 @@ struct SessionsView: View {
                             }
                         }
                     }
+
+                    if uniqueDirectories.count >= 2 {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 8) {
+                                FilterChip(label: "All Projects", active: directoryFilter == nil) {
+                                    directoryFilter = nil
+                                }
+                                ForEach(uniqueDirectories, id: \.self) { dir in
+                                    FilterChip(
+                                        label: Theme.projectName(from: dir),
+                                        active: directoryFilter == dir
+                                    ) {
+                                        directoryFilter = directoryFilter == dir ? nil : dir
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
                 .padding(16)
 
@@ -63,16 +121,35 @@ struct SessionsView: View {
                         .font(.caption).foregroundStyle(.secondary)
                     Spacer()
                     if state.isLoading { ProgressView().scaleEffect(0.7).tint(.cyan) }
+                    Menu {
+                        Picker("Sort", selection: $sortOrder) {
+                            ForEach(SortOrder.allCases, id: \.self) { order in
+                                Text(order.rawValue).tag(order)
+                            }
+                        }
+                    } label: {
+                        Label("Sort", systemImage: "arrow.up.arrow.down")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .menuStyle(.borderlessButton)
+                    .fixedSize()
                 }
                 .padding(.horizontal, 16).padding(.vertical, 8)
 
                 List(selection: $selectedId) {
                     ForEach(displayedSessions) { session in
-                        SessionListRow(session: session, isSelected: selectedId == session.id)
-                            .tag(session.id)
-                            .listRowInsets(EdgeInsets(top: 4, leading: 12, bottom: 4, trailing: 12))
-                            .listRowBackground(Color.clear)
-                            .listRowSeparator(.hidden)
+                        SessionListRow(
+                            session: session,
+                            isSelected: selectedId == session.id,
+                            onRename: { newName in
+                                await renameSession(session.id, name: newName)
+                            }
+                        )
+                        .tag(session.id)
+                        .listRowInsets(EdgeInsets(top: 4, leading: 12, bottom: 4, trailing: 12))
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
                     }
                     if displayedSessions.count < state.sessionTotal && searchResults == nil {
                         Button {
@@ -122,6 +199,20 @@ struct SessionsView: View {
             if !Task.isCancelled { searchResults = results }
         }
     }
+
+    private func renameSession(_ id: String, name: String) async {
+        do {
+            try await state.renameSession(id, name: name)
+        } catch {
+            // Fallback: inline PATCH
+            guard let url = URL(string: "http://\(state.host):\(state.port)/api/sessions/\(id)") else { return }
+            var req = URLRequest(url: url)
+            req.httpMethod = "PATCH"
+            req.httpBody = try? JSONEncoder().encode(["name": name])
+            req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            _ = try? await URLSession.shared.data(for: req)
+        }
+    }
 }
 
 // MARK: - Session List Row
@@ -129,11 +220,17 @@ struct SessionsView: View {
 struct SessionListRow: View {
     let session: Session
     let isSelected: Bool
-    private let color: Color
+    let onRename: (String) async -> Void
 
-    init(session: Session, isSelected: Bool) {
+    private let color: Color
+    @State private var isHovering = false
+    @State private var isRenaming = false
+    @State private var editName = ""
+
+    init(session: Session, isSelected: Bool, onRename: @escaping (String) async -> Void) {
         self.session = session
         self.isSelected = isSelected
+        self.onRename = onRename
         self.color = Theme.color(session: session.status)
     }
 
@@ -141,22 +238,56 @@ struct SessionListRow: View {
         HStack(spacing: 12) {
             StatusDot(color: color, active: session.status == .active)
             VStack(alignment: .leading, spacing: 4) {
-                Text(session.name ?? Theme.projectName(from: session.cwd))
-                    .font(.callout.weight(.medium)).lineLimit(1)
+                HStack(spacing: 6) {
+                    if isRenaming {
+                        TextField("Session name", text: $editName)
+                            .textFieldStyle(.plain)
+                            .font(.callout.weight(.medium))
+                            .onSubmit { commitRename() }
+                            .onExitCommand { isRenaming = false }
+                    } else {
+                        Text(session.name ?? Theme.projectName(from: session.cwd))
+                            .font(.callout.weight(.medium)).lineLimit(1)
+                    }
+                    if isHovering && !isRenaming {
+                        Button {
+                            editName = session.name ?? Theme.projectName(from: session.cwd)
+                            isRenaming = true
+                        } label: {
+                            Image(systemName: "pencil")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
                 if let cwd = session.cwd {
                     Text(cwd).font(.caption).foregroundStyle(.tertiary).lineLimit(1)
                 }
             }
             Spacer()
-            VStack(alignment: .trailing, spacing: 4) {
-                StatusBadge(label: session.status.label, color: color)
-                HStack(spacing: 6) {
-                    if let agents = session.agentCount, agents > 0 {
-                        Label("\(agents)", systemImage: "person.2")
-                            .font(.caption2).foregroundStyle(.secondary)
+            if isRenaming {
+                HStack(spacing: 8) {
+                    Button("Cancel") { isRenaming = false }
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .buttonStyle(.plain)
+                    Button("Save") { commitRename() }
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.cyan)
+                        .buttonStyle(.plain)
+                }
+            } else {
+                VStack(alignment: .trailing, spacing: 4) {
+                    StatusBadge(label: session.status.label, color: color)
+                    HStack(spacing: 6) {
+                        if let agents = session.agentCount, agents > 0 {
+                            Label("\(agents)", systemImage: "person.2")
+                                .font(.caption2).foregroundStyle(.secondary)
+                        }
+                        Text(Theme.shortDate(session.updatedAt))
+                            .font(.caption2).foregroundStyle(.tertiary)
                     }
-                    Text(Theme.shortDate(session.updatedAt))
-                        .font(.caption2).foregroundStyle(.tertiary)
                 }
             }
         }
@@ -170,27 +301,15 @@ struct SessionListRow: View {
         }
         .contentShape(Rectangle())
         .animation(.easeInOut(duration: 0.15), value: isSelected)
+        .onHover { isHovering = $0 }
+    }
+
+    private func commitRename() {
+        let trimmed = editName.trimmingCharacters(in: .whitespaces)
+        isRenaming = false
+        guard !trimmed.isEmpty else { return }
+        Task { await onRename(trimmed) }
     }
 }
 
-// MARK: - Filter Chip
-
-struct FilterChip: View {
-    let label: String
-    var color: Color = .white
-    let active: Bool
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Text(label)
-                .font(.caption.weight(.medium))
-                .padding(.horizontal, 12).padding(.vertical, 5)
-                .background(active ? color.opacity(0.2) : Color.primary.opacity(0.06))
-                .foregroundStyle(active ? color : .secondary)
-                .clipShape(Capsule())
-                .overlay(Capsule().strokeBorder(active ? color.opacity(0.4) : Color.primary.opacity(0.1), lineWidth: 1))
-        }
-        .buttonStyle(.plain)
-    }
-}
+// MARK: - Filter Chip (local override removed — use Components.swift version)
