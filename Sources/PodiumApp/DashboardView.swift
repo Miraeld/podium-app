@@ -259,34 +259,42 @@ struct StatsRow: View {
     var cost: Double?
 
     var body: some View {
-        LazyVGrid(columns: [.init(.flexible()), .init(.flexible()), .init(.flexible()), .init(.flexible())], spacing: 16) {
-            StatCard(
-                title: "Active Sessions",
-                value: "\(stats.activeSessions)",
-                icon: "clock.fill",
-                color: .cyan,
-                subtitle: "\(stats.totalSessions) total"
-            )
-            StatCard(
-                title: "Active Agents",
-                value: "\(stats.activeAgents)",
-                icon: "person.fill.badge.clock",
-                color: Color(red: 0.6, green: 0.4, blue: 1),
-                subtitle: "\(stats.totalAgents) total"
-            )
-            StatCard(
-                title: "Events Today",
-                value: Theme.formatTokens(stats.eventsToday),
-                icon: "bolt.fill",
-                color: .yellow,
-                subtitle: "\(Theme.formatTokens(stats.totalEvents)) total"
-            )
-            StatCard(
-                title: "Total Cost",
-                value: cost.map { Theme.formatCost($0) } ?? "—",
-                icon: "dollarsign.circle.fill",
-                color: Color(red: 0.2, green: 0.9, blue: 0.55)
-            )
+        VStack(alignment: .trailing, spacing: 6) {
+            LazyVGrid(columns: [.init(.flexible()), .init(.flexible()), .init(.flexible()), .init(.flexible())], spacing: 16) {
+                StatCard(
+                    title: "Active Sessions",
+                    value: "\(stats.activeSessions)",
+                    icon: "clock.fill",
+                    color: .cyan,
+                    subtitle: "\(stats.totalSessions) total"
+                )
+                StatCard(
+                    title: "Active Agents",
+                    value: "\(stats.activeAgents)",
+                    icon: "person.fill.badge.clock",
+                    color: Color(red: 0.6, green: 0.4, blue: 1),
+                    subtitle: "\(stats.totalAgents) total"
+                )
+                StatCard(
+                    title: "Events Today",
+                    value: Theme.formatTokens(stats.eventsToday),
+                    icon: "bolt.fill",
+                    color: .yellow,
+                    subtitle: "\(Theme.formatTokens(stats.totalEvents)) total"
+                )
+                StatCard(
+                    title: "Listeners",
+                    value: "\(stats.wsConnections)",
+                    icon: "dot.radiowaves.left.and.right",
+                    color: Color(red: 0.2, green: 0.9, blue: 0.55),
+                    subtitle: "live WS"
+                )
+            }
+            if let cost = cost {
+                Text("Total cost \(Theme.formatCost(cost)) all-time")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
         }
     }
 }
@@ -346,6 +354,7 @@ struct SessionRow: View {
         .contentShape(Rectangle())
         .onTapGesture {
             state.selectedSessionId = session.id
+            state.navigationRequest = .sessions
         }
     }
 }

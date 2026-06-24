@@ -28,6 +28,7 @@ final class AppState {
     var sessionDetailCache: [String: SessionDetailResponse] = [:]
     var sessionStatsCache: [String: SessionStats] = [:]
     var sessionCostCache: [String: CostResult] = [:]
+    var gitContextCache: [String: GitInfo] = [:]
     var isLoading = false
     var lastError: String?
 
@@ -290,6 +291,15 @@ final class AppState {
 
     func exportSession(_ id: String) async throws -> Data {
         try await api.exportSession(id)
+    }
+
+    /// Load git context for a session's working directory off the main thread.
+    /// No-op if the session has no cwd or context is already cached.
+    func loadGitContext(for session: Session) async {
+        guard let cwd = session.cwd, gitContextCache[session.id] == nil else { return }
+        if let info = await GitContextReader.load(cwd: cwd) {
+            gitContextCache[session.id] = info
+        }
     }
 
     func cleanupSessions(abandonIdleHours: Int, purgeOlderDays: Int) async throws {

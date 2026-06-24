@@ -239,6 +239,36 @@ struct TranscriptMessage: Decodable {
     let timestamp: Date?
     let content: [TranscriptContent]
     let model: String?      // only present on assistant messages
+    let usage: TranscriptUsage?  // per-message token usage (assistant messages)
+}
+
+/// Per-message token usage as recorded in the transcript JSONL.
+/// The per-session `/stats` endpoint currently reports 0 for token totals,
+/// so the Overview tab aggregates these instead.
+struct TranscriptUsage: Decodable {
+    let inputTokens: Int
+    let outputTokens: Int
+    let cacheReadTokens: Int
+    let cacheWriteTokens: Int
+
+    // NOTE: the shared decoder uses `.convertFromSnakeCase`, which transforms
+    // incoming keys (`cache_read_input_tokens` → `cacheReadInputTokens`) BEFORE
+    // matching against these raw values. So the raw values must be the
+    // already-camelCased forms, not the original snake_case.
+    enum CodingKeys: String, CodingKey {
+        case inputTokens = "inputTokens"
+        case outputTokens = "outputTokens"
+        case cacheReadTokens = "cacheReadInputTokens"
+        case cacheWriteTokens = "cacheCreationInputTokens"
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        inputTokens      = (try? c.decodeIfPresent(Int.self, forKey: .inputTokens)) .flatMap { $0 } ?? 0
+        outputTokens     = (try? c.decodeIfPresent(Int.self, forKey: .outputTokens)).flatMap { $0 } ?? 0
+        cacheReadTokens  = (try? c.decodeIfPresent(Int.self, forKey: .cacheReadTokens)).flatMap { $0 } ?? 0
+        cacheWriteTokens = (try? c.decodeIfPresent(Int.self, forKey: .cacheWriteTokens)).flatMap { $0 } ?? 0
+    }
 }
 
 struct TranscriptContent: Decodable {
