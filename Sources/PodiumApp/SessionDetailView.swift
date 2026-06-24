@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 enum SessionTab: String, CaseIterable {
     case overview      = "Overview"
@@ -13,6 +14,7 @@ struct SessionDetailView: View {
     let sessionId: String
     @Environment(AppState.self) var state
     @State private var tab: SessionTab = .overview
+    @State private var isExporting = false
 
     private var detail: SessionDetailResponse? { state.sessionDetailCache[sessionId] }
     private var session: Session? { detail?.session ?? state.sessions.first(where: { $0.id == sessionId }) }
@@ -24,10 +26,19 @@ struct SessionDetailView: View {
             if let session {
                 VStack(spacing: 0) {
                     // Header
-                    SessionDetailHeader(session: session)
+                    SessionDetailHeader(
+                        session: session,
+                        errorCount: state.sessionStatsCache[session.id]?.errorCount,
+                        onErrorChipTap: { tab = .events }
+                    )
+                    .padding(.horizontal, 24)
+                    .padding(.top, 20)
+                    .padding(.bottom, 12)
+
+                    // Annotation card
+                    SessionAnnotationView(sessionId: sessionId)
                         .padding(.horizontal, 24)
-                        .padding(.top, 20)
-                        .padding(.bottom, 12)
+                        .padding(.bottom, 4)
 
                     // Tab picker
                     HStack(spacing: 0) {
@@ -60,6 +71,32 @@ struct SessionDetailView: View {
                 LoadingView()
             }
         }
+        .toolbar {
+            ToolbarItem {
+                Button {
+                    Task { @MainActor in
+                        isExporting = true
+                        defer { isExporting = false }
+                        guard let data = try? await state.exportSession(sessionId) else { return }
+                        let panel = NSSavePanel()
+                        panel.nameFieldStringValue = "podium-session-\(sessionId.prefix(8)).json"
+                        panel.allowedContentTypes = [.json]
+                        panel.canCreateDirectories = true
+                        if panel.runModal() == .OK, let url = panel.url {
+                            try? data.write(to: url)
+                        }
+                    }
+                } label: {
+                    if isExporting {
+                        ProgressView().scaleEffect(0.6)
+                    } else {
+                        Image(systemName: "square.and.arrow.up")
+                    }
+                }
+                .help("Export session as JSON")
+                .disabled(isExporting)
+            }
+        }
         .task(id: sessionId) {
             await state.loadSessionDetail(sessionId)
             await state.loadSessionStats(sessionId)
@@ -72,10 +109,14 @@ struct SessionDetailView: View {
 
 struct SessionDetailHeader: View {
     let session: Session
+    var errorCount: Int? = nil
+    var onErrorChipTap: (() -> Void)? = nil
     private let color: Color
 
-    init(session: Session) {
+    init(session: Session, errorCount: Int? = nil, onErrorChipTap: (() -> Void)? = nil) {
         self.session = session
+        self.errorCount = errorCount
+        self.onErrorChipTap = onErrorChipTap
         self.color = Theme.color(session: session.status)
     }
 
@@ -89,6 +130,19 @@ struct SessionDetailHeader: View {
                     StatusBadge(label: session.status.label, color: color)
                     if session.awaitingInputSince != nil {
                         StatusBadge(label: "Awaiting Input", color: .yellow)
+                    }
+                    if let count = errorCount, count > 0 {
+                        Button {
+                            onErrorChipTap?()
+                        } label: {
+                            Label("\(count) error\(count == 1 ? "" : "s")", systemImage: "exclamationmark.triangle.fill")
+                                .font(.caption2.weight(.semibold))
+                                .padding(.horizontal, 8).padding(.vertical, 3)
+                                .background(Color.red.opacity(0.18))
+                                .foregroundStyle(.red)
+                                .clipShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
                 if let cwd = session.cwd {
@@ -121,6 +175,61 @@ struct SessionDetailHeader: View {
         if h > 0 { return "\(h)h \(m)m" }
         if m > 0 { return "\(m)m \(sec)s" }
         return "\(sec)s"
+    }
+}
+
+// MARK: - Annotation
+
+struct SessionAnnotationView: View {
+    let sessionId: String
+    @State private var isExpanded = false
+    @State private var text: String
+
+    init(sessionId: String) {
+        self.sessionId = sessionId
+        let saved = UserDefaults.standard.string(forKey: "annotation-\(sessionId)") ?? ""
+        _text = State(initialValue: saved)
+    }
+
+    private func save() {
+        UserDefaults.standard.set(text, forKey: "annotation-\(sessionId)")
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) { isExpanded.toggle() }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "note.text")
+                        .font(.caption)
+                        .foregroundStyle(.yellow)
+                    Text(isExpanded ? "Note" : (text.isEmpty ? "Add a note…" : text))
+                        .font(.caption)
+                        .foregroundStyle(text.isEmpty && !isExpanded ? .tertiary : .primary)
+                        .lineLimit(1)
+                    Spacer()
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .buttonStyle(.plain)
+
+            if isExpanded {
+                TextEditor(text: $text)
+                    .font(.caption)
+                    .scrollContentBackground(.hidden)
+                    .frame(minHeight: 80)
+                    .onChange(of: text) { _, _ in save() }
+            }
+        }
+        .padding(10)
+        .glassCard(radius: 10)
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(Color.yellow.opacity(0.25), lineWidth: 1)
+        )
     }
 }
 
