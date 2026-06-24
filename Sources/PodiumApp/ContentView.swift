@@ -11,6 +11,7 @@ enum NavDestination: Hashable {
     case kanban
     case workflows
     case importSession
+    case run
 }
 
 // MARK: - Content View
@@ -38,6 +39,7 @@ struct ContentView: View {
                 case .kanban:       KanbanView()
                 case .workflows:    WorkflowsView()
                 case .importSession: ImportSessionView()
+                case .run:          RunView()
                 }
             }
         }
@@ -102,6 +104,7 @@ struct ContentView: View {
             Button("") { selection = .kanban }.keyboardShortcut("6", modifiers: .command)
             Button("") { selection = .workflows }.keyboardShortcut("7", modifiers: .command)
             Button("") { selection = .importSession }.keyboardShortcut("8", modifiers: .command)
+            Button("") { selection = .run }.keyboardShortcut("9", modifiers: .command)
             Button("") { selection = .search }.keyboardShortcut("k", modifiers: .command)
         })
     }
@@ -144,6 +147,7 @@ struct Sidebar: View {
                 SidebarRow(icon: "rectangle.split.3x1.fill", label: "Kanban", value: .kanban)
                 SidebarRow(icon: "arrow.triangle.branch", label: "Workflows", value: .workflows)
                 SidebarRow(icon: "square.and.arrow.down", label: "Import", value: .importSession)
+                SidebarRow(icon: "terminal", label: "Run", value: .run)
             } header: {
                 Text("Discover")
                     .font(.caption.weight(.semibold))

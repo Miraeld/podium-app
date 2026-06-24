@@ -1,6 +1,7 @@
 import SwiftUI
 import AppKit
 import UserNotifications
+import CoreSpotlight
 
 // Required: SPM executables run with .prohibited activation policy by default.
 class AppDelegate: NSObject, NSApplicationDelegate {
@@ -38,6 +39,24 @@ struct PodiumApp: App {
             ContentView()
                 .environment(appState)
                 .task { await appState.start() }
+                .task { PodiumShortcuts.updateAppShortcutParameters() }
+                .onOpenURL { url in
+                    guard url.scheme == "podium" else { return }
+                    if url.host == "session" {
+                        if let id = url.pathComponents.last, !id.isEmpty, id != "/" {
+                            appState.selectedSessionId = id
+                            appState.navigationRequest = .sessions
+                        }
+                    } else if url.host == "dashboard" {
+                        appState.navigationRequest = .dashboard
+                    }
+                }
+                .onContinueUserActivity(SpotlightIndexer.activityType) { activity in
+                    if let sessionId = activity.userInfo?["sessionId"] as? String {
+                        appState.selectedSessionId = sessionId
+                        appState.navigationRequest = .sessions
+                    }
+                }
         }
         .defaultSize(width: 1360, height: 860)
         .windowResizability(.contentMinSize)

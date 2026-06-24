@@ -34,6 +34,20 @@ cat > "$INFO_PLIST" << 'PLIST'
   <key>LSMinimumSystemVersion</key>   <string>14.0</string>
   <key>NSHighResolutionCapable</key>  <true/>
   <key>NSPrincipalClass</key>         <string>NSApplication</string>
+  <key>CFBundleURLTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleURLName</key>   <string>com.gaelrobin.PodiumApp.url</string>
+      <key>CFBundleURLSchemes</key>
+      <array>
+        <string>podium</string>
+      </array>
+    </dict>
+  </array>
+  <key>NSUserActivityTypes</key>
+  <array>
+    <string>com.gaelrobin.PodiumApp.viewSession</string>
+  </array>
 </dict>
 </plist>
 PLIST

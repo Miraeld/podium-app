@@ -129,6 +129,70 @@ actor PodiumAPI {
         try await get("/api/workflows/session/\(id)")
     }
 
+    // MARK: Run
+
+    func runs() async throws -> RunListResponse {
+        try await get("/api/run")
+    }
+
+    func runHistory(limit: Int = 50) async throws -> RunListResponse {
+        var comps = URLComponents(url: baseURL.appending(path: "/api/run/history"), resolvingAgainstBaseURL: false)!
+        comps.queryItems = [.init(name: "limit", value: "\(limit)")]
+        return try await get(url: comps.url!)
+    }
+
+    func run(_ id: String) async throws -> RunHandle {
+        var comps = URLComponents(url: baseURL.appending(path: "/api/run/\(id)"), resolvingAgainstBaseURL: false)!
+        comps.queryItems = [.init(name: "envelopes", value: "1")]
+        return try await get(url: comps.url!)
+    }
+
+    func createRun(prompt: String, mode: String, cwd: String, model: String?, permissionMode: String) async throws -> RunHandle {
+        var dict: [String: String] = [
+            "prompt": prompt,
+            "mode": mode,
+            "cwd": cwd,
+            "permissionMode": permissionMode
+        ]
+        if let m = model { dict["model"] = m }
+        let body = try JSONEncoder().encode(dict)
+        return try await postDecodable("/api/run", body: body)
+    }
+
+    func sendRunMessage(_ id: String, text: String) async throws {
+        let body = try JSONEncoder().encode(["text": text])
+        _ = try await post("/api/run/\(id)/message", body: body)
+    }
+
+    func killRun(_ id: String) async throws {
+        try await delete("/api/run/\(id)")
+    }
+
+    // MARK: Generic POST returning Decodable
+
+    private func postDecodable<T: Decodable>(_ path: String, body: Data) async throws -> T {
+        var req = URLRequest(url: baseURL.appending(path: path))
+        req.httpMethod = "POST"
+        req.httpBody = body
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let (data, response) = try await session.data(for: req)
+        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+            throw APIError.badStatus((response as? HTTPURLResponse)?.statusCode ?? 0)
+        }
+        return try JSONDecoder.podium.decode(T.self, from: data)
+    }
+
+    // MARK: Generic DELETE
+
+    private func delete(_ path: String) async throws {
+        var req = URLRequest(url: baseURL.appending(path: path))
+        req.httpMethod = "DELETE"
+        let (_, response) = try await session.data(for: req)
+        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+            throw APIError.badStatus((response as? HTTPURLResponse)?.statusCode ?? 0)
+        }
+    }
+
     // MARK: Transcript
 
     func transcript(_ sessionId: String, before: Int? = nil, limit: Int = 50) async throws -> TranscriptResponse {

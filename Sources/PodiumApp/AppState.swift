@@ -39,6 +39,7 @@ final class AppState {
 
     private let ws = WebSocketClient()
     private var api: PodiumAPI = PodiumAPI()
+    private let spotlight = SpotlightIndexer()
 
     // MARK: Init
 
@@ -79,6 +80,11 @@ final class AppState {
             sessionTotal = sessResp.total
             totalCost = try? await cost
             lastError = nil
+            // Index sessions into Spotlight (background — never blocks UI)
+            let toIndex = sessions
+            Task.detached(priority: .background) { await self.spotlight.index(toIndex) }
+            // Update widget snapshot
+            updateWidgetSnapshot()
         } catch {
             isServerReachable = false
             lastError = error.localizedDescription
@@ -185,6 +191,7 @@ final class AppState {
         case "stats_update":
             if let s = try? JSONDecoder.podium.decode(WSStatsMsg.self, from: data).data {
                 stats = s
+                updateWidgetSnapshot()
             }
 
         default: break
@@ -197,6 +204,9 @@ final class AppState {
         } else {
             sessions.insert(session, at: 0)
         }
+        // Index this session into Spotlight (background)
+        let s = session
+        Task.detached(priority: .background) { await self.spotlight.indexOne(s) }
     }
 
     private func updateAgentInCache(_ agent: Agent) {
@@ -246,6 +256,29 @@ final class AppState {
 
     func fetchTranscript(_ sessionId: String, before: Int? = nil) async throws -> TranscriptResponse {
         try await api.transcript(sessionId, before: before)
+    }
+
+    // MARK: Widget
+
+    private func updateWidgetSnapshot() {
+        let widgetSessions = sessions.prefix(5).map { s -> WidgetSnapshot.WidgetSession in
+            let name: String
+            if let n = s.name, !n.isEmpty {
+                name = n
+            } else if let cwd = s.cwd {
+                name = URL(fileURLWithPath: cwd).lastPathComponent
+            } else {
+                name = s.id
+            }
+            return WidgetSnapshot.WidgetSession(id: s.id, name: name, status: s.status.rawValue)
+        }
+        let snapshot = WidgetSnapshot(
+            activeSessions: stats?.activeSessions ?? 0,
+            activeAgents: stats?.activeAgents ?? activeAgents.count,
+            recentSessions: Array(widgetSessions),
+            updatedAt: Date()
+        )
+        WidgetStore.save(snapshot)
     }
 
     // MARK: Notifications
