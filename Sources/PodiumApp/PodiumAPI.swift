@@ -66,6 +66,18 @@ actor PodiumAPI {
         try await get("/api/sessions/\(id)")
     }
 
+    func patchSession(_ id: String, name: String) async throws {
+        let body = try JSONEncoder().encode(["name": name])
+        var req = URLRequest(url: baseURL.appending(path: "/api/sessions/\(id)"))
+        req.httpMethod = "PATCH"
+        req.httpBody = body
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let (_, response) = try await session.data(for: req)
+        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+            throw APIError.badStatus((response as? HTTPURLResponse)?.statusCode ?? 0)
+        }
+    }
+
     func sessionStats(_ id: String) async throws -> SessionStats {
         try await get("/api/sessions/\(id)/stats")
     }
@@ -152,6 +164,7 @@ actor PodiumAPI {
         return try JSONDecoder.podium.decode(T.self, from: data)
     }
 
+    @discardableResult
     private func post(_ path: String, body: Data) async throws -> Data {
         var req = URLRequest(url: baseURL.appending(path: path))
         req.httpMethod = "POST"

@@ -11,8 +11,6 @@ struct ActivityFeedView: View {
     @State private var bufferedEvents: [DashboardEvent] = []
     @State private var sessionNames: [String: String] = [:]
 
-    private let knownEventTypes = ["agent_start", "agent_stop", "session_start", "session_stop"]
-
     var body: some View {
         VStack(spacing: 0) {
             filterBar
@@ -20,7 +18,7 @@ struct ActivityFeedView: View {
             if isLoading && events.isEmpty {
                 LoadingView()
             } else if events.isEmpty {
-                EmptyStateView(icon: "waveform", title: "No Events", message: "Events appear here as sessions run.")
+                emptyState
             } else {
                 eventList
             }
@@ -46,21 +44,26 @@ struct ActivityFeedView: View {
         }
     }
 
+    // MARK: - Filter Bar
+
     private var filterBar: some View {
         HStack(spacing: 0) {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    FilterChip(label: "All", active: filterType == nil) { filterType = nil }
-                    FilterChip(label: "Errors", color: .red, active: filterType == "error") {
+                    FilterChip(label: "All", active: filterType == nil) {
+                        filterType = nil
+                    }
+                    FilterChip(label: "Tool Call", color: .cyan, active: filterType == "tool_call") {
+                        filterType = filterType == "tool_call" ? nil : "tool_call"
+                    }
+                    FilterChip(label: "Agent Start", color: .green, active: filterType == "agent_started") {
+                        filterType = filterType == "agent_started" ? nil : "agent_started"
+                    }
+                    FilterChip(label: "Agent End", color: .secondary, active: filterType == "agent_completed") {
+                        filterType = filterType == "agent_completed" ? nil : "agent_completed"
+                    }
+                    FilterChip(label: "Error", color: .red, active: filterType == "error") {
                         filterType = filterType == "error" ? nil : "error"
-                    }
-                    FilterChip(label: "Tool Calls", color: Color(red: 0.6, green: 0.4, blue: 1), active: filterType == "tool_use") {
-                        filterType = filterType == "tool_use" ? nil : "tool_use"
-                    }
-                    ForEach(knownEventTypes, id: \.self) { t in
-                        FilterChip(label: t, active: filterType == t) {
-                            filterType = filterType == t ? nil : t
-                        }
                     }
                 }
                 .padding(.horizontal, 16)
@@ -71,6 +74,8 @@ struct ActivityFeedView: View {
                 .padding(.trailing, 12)
         }
     }
+
+    // MARK: - Pause Button
 
     private var pauseButton: some View {
         Button {
@@ -108,6 +113,27 @@ struct ActivityFeedView: View {
         .help(isPaused ? "Resume live feed" : "Pause live feed")
     }
 
+    // MARK: - Empty State
+
+    @ViewBuilder
+    private var emptyState: some View {
+        if let active = filterType {
+            EmptyStateView(
+                icon: "bolt.slash",
+                title: "No Results",
+                message: "No \(active) events found."
+            )
+        } else {
+            EmptyStateView(
+                icon: "bolt.slash",
+                title: "No Events Yet",
+                message: "Events appear here as sessions run."
+            )
+        }
+    }
+
+    // MARK: - Event List
+
     private var eventList: some View {
         ScrollView {
             LazyVStack(spacing: 0) {
@@ -115,7 +141,7 @@ struct ActivityFeedView: View {
                     ActivityEventRow(
                         event: event,
                         isExpanded: expandedIdx == idx,
-                        sessionName: sessionNames[event.sessionId],
+                        sessionName: sessionName(for: event),
                         onTap: {
                             withAnimation(.easeInOut(duration: 0.15)) {
                                 expandedIdx = expandedIdx == idx ? nil : idx
@@ -143,6 +169,17 @@ struct ActivityFeedView: View {
             }
         }
     }
+
+    // MARK: - Session Name Helper
+
+    private func sessionName(for event: DashboardEvent) -> String {
+        if let sess = state.sessions.first(where: { $0.id == event.sessionId }) {
+            return sess.name ?? Theme.projectName(from: sess.cwd)
+        }
+        return String(event.sessionId.prefix(8))
+    }
+
+    // MARK: - Data Loading
 
     private func loadEvents(reset: Bool) async {
         isLoading = true
@@ -184,52 +221,72 @@ struct ActivityFeedView: View {
     }
 }
 
+// MARK: - Event Type Color
+
+private func eventTypeColor(_ type: String) -> Color {
+    switch type {
+    case "tool_call": return .cyan
+    case "error": return .red
+    case "agent_started": return .green
+    case "agent_completed": return .secondary
+    default: return .purple
+    }
+}
+
 // MARK: - Activity Event Row
 
 struct ActivityEventRow: View {
     let event: DashboardEvent
     let isExpanded: Bool
-    let sessionName: String?
+    let sessionName: String
     let onTap: () -> Void
     let onViewSession: () -> Void
-
-    private var color: Color {
-        let t = event.eventType.lowercased()
-        if t.contains("error") || t.contains("fail") { return .red }
-        if t.contains("stop") { return .orange }
-        if t.contains("start") { return .cyan }
-        if t.contains("tool") { return Color(red: 0.6, green: 0.4, blue: 1) }
-        return .secondary
-    }
 
     var body: some View {
         Button(action: onTap) {
             VStack(alignment: .leading, spacing: 0) {
+                // Collapsed row
                 HStack(spacing: 10) {
-                    RoundedRectangle(cornerRadius: 2).fill(color).frame(width: 3, height: 40)
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(eventTypeColor(event.eventType))
+                        .frame(width: 3, height: 40)
+
                     VStack(alignment: .leading, spacing: 3) {
-                        HStack {
+                        HStack(spacing: 6) {
+                            // Colored event type pill
+                            let color = eventTypeColor(event.eventType)
                             Text(event.eventType)
-                                .font(.caption.weight(.semibold))
+                                .font(.caption2.weight(.semibold))
                                 .foregroundStyle(color)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(color.opacity(0.12), in: Capsule())
+
                             if let tool = event.toolName {
-                                Text("· \(tool)").font(.caption).foregroundStyle(.secondary)
+                                Text("· \(tool)")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
                             }
                             Spacer()
                             Text(Theme.shortDate(event.createdAt))
-                                .font(.caption2).foregroundStyle(.tertiary)
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
                         }
+
                         HStack {
-                            if let name = sessionName {
-                                Text(name)
+                            Text(sessionName)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+
+                            if let summary = event.summary, !summary.isEmpty {
+                                Text("·")
                                     .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                            } else if let summary = event.summary, !summary.isEmpty {
+                                    .foregroundStyle(.tertiary)
                                 Text(summary)
                                     .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(isExpanded ? nil : 2)
+                                    .foregroundStyle(.tertiary)
+                                    .lineLimit(isExpanded ? nil : 1)
                             }
                             Spacer()
                             Text(String(event.sessionId.prefix(8)))
@@ -241,25 +298,48 @@ struct ActivityEventRow: View {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)
 
+                // Expanded detail
                 if isExpanded {
                     VStack(alignment: .leading, spacing: 8) {
                         VStack(alignment: .leading, spacing: 4) {
-                            if let id = event.id {
-                                Text("ID: \(id)").font(.caption.monospaced()).foregroundStyle(.tertiary)
-                            }
-                            Text("Session: \(event.sessionId)").font(.caption.monospaced()).foregroundStyle(.tertiary)
+                            // Full timestamp
+                            Text(Theme.shortDate(event.createdAt))
+                                .font(.caption.monospaced())
+                                .foregroundStyle(.tertiary)
+
+                            // Session ID — copyable
+                            Text("Session: \(event.sessionId)")
+                                .font(.caption.monospaced())
+                                .foregroundStyle(.tertiary)
+                                .textSelection(.enabled)
+
+                            // Agent ID — copyable if present
                             if let agentId = event.agentId {
-                                Text("Agent: \(agentId)").font(.caption.monospaced()).foregroundStyle(.tertiary)
+                                Text("Agent: \(agentId)")
+                                    .font(.caption.monospaced())
+                                    .foregroundStyle(.tertiary)
+                                    .textSelection(.enabled)
                             }
-                            if let summary = event.summary, !summary.isEmpty, sessionName != nil {
+
+                            // Event ID
+                            if let id = event.id {
+                                Text("ID: \(id)")
+                                    .font(.caption.monospaced())
+                                    .foregroundStyle(.tertiary)
+                            }
+
+                            // Full summary (not truncated)
+                            if let summary = event.summary, !summary.isEmpty {
                                 Text(summary)
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
                             }
                         }
 
+                        // View Session link
                         Button(action: onViewSession) {
-                            Label("View Session", systemImage: "arrow.right.circle")
+                            Label("View Session →", systemImage: "arrow.right.circle")
                                 .font(.caption.weight(.medium))
                                 .foregroundStyle(.cyan)
                         }

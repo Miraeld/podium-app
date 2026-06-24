@@ -271,10 +271,19 @@ final class AppState {
 
     // MARK: Rename session
 
-    func renameSession(_ id: String, name: String) async throws {
-        try await api.patchSession(id, name: name)
-        if let idx = sessions.firstIndex(where: { $0.id == id }) {
-            sessions[idx].name = name
+    func renameSession(_ id: String, name: String) async {
+        do {
+            try await api.patchSession(id, name: name)
+            // Update in local cache immediately (optimistic)
+            if let idx = sessions.firstIndex(where: { $0.id == id }) {
+                sessions[idx].name = name
+            }
+            if var detail = sessionDetailCache[id] {
+                detail.session.name = name
+                sessionDetailCache[id] = detail
+            }
+        } catch {
+            lastError = error.localizedDescription
         }
     }
 }

@@ -15,19 +15,6 @@ extension PodiumAPI {
         return try await searchGet(url: comps.url!)
     }
 
-    @discardableResult
-    func patchSession(_ id: String, name: String) async throws -> Data {
-        var req = URLRequest(url: baseURL.appending(path: "/api/sessions/\(id)"))
-        req.httpMethod = "PATCH"
-        req.httpBody = try JSONEncoder().encode(["name": name])
-        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let (data, response) = try await URLSession.shared.data(for: req)
-        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
-            throw APIError.badStatus((response as? HTTPURLResponse)?.statusCode ?? 0)
-        }
-        return data
-    }
-
     // Private helper — mirrors the private get(url:) but defined here so this
     // extension compiles without touching the actor's private interface.
     private func searchGet<T: Decodable>(url: URL) async throws -> T {

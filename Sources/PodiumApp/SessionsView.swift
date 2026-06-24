@@ -19,6 +19,8 @@ struct SessionsView: View {
     @State private var searchTask: Task<Void, Never>? = nil
     @State private var sortOrder: SortOrder = .lastActive
     @State private var directoryFilter: String? = nil
+    @State private var renamingId: String? = nil
+    @State private var renameText: String = ""
 
     private var uniqueDirectories: [String] {
         let cwds = state.sessions.compactMap(\.cwd)
@@ -147,8 +149,9 @@ struct SessionsView: View {
                         SessionListRow(
                             session: session,
                             isSelected: selectedId == session.id,
-                            onRename: { newName in
-                                await renameSession(session.id, name: newName)
+                            onRename: {
+                                renamingId = session.id
+                                renameText = session.name ?? Theme.projectName(from: session.cwd)
                             }
                         )
                         .tag(session.id)
@@ -169,6 +172,21 @@ struct SessionsView: View {
                 }
                 .listStyle(.plain)
                 .scrollContentBackground(.hidden)
+                .alert("Rename Session", isPresented: Binding(
+                    get: { renamingId != nil },
+                    set: { if !$0 { renamingId = nil } }
+                )) {
+                    TextField("Session name", text: $renameText)
+                    Button("Rename") {
+                        if let id = renamingId, !renameText.trimmingCharacters(in: .whitespaces).isEmpty {
+                            Task { await state.renameSession(id, name: renameText.trimmingCharacters(in: .whitespaces)) }
+                        }
+                        renamingId = nil
+                    }
+                    Button("Cancel", role: .cancel) { renamingId = nil }
+                } message: {
+                    Text("Enter a new name for this session.")
+                }
             }
             .frame(minWidth: 340, idealWidth: 380)
             .onChange(of: selectedId) { _, id in
@@ -205,19 +223,6 @@ struct SessionsView: View {
         }
     }
 
-    private func renameSession(_ id: String, name: String) async {
-        do {
-            try await state.renameSession(id, name: name)
-        } catch {
-            // Fallback: inline PATCH
-            guard let url = URL(string: "http://\(state.host):\(state.port)/api/sessions/\(id)") else { return }
-            var req = URLRequest(url: url)
-            req.httpMethod = "PATCH"
-            req.httpBody = try? JSONEncoder().encode(["name": name])
-            req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            _ = try? await URLSession.shared.data(for: req)
-        }
-    }
 }
 
 // MARK: - Session List Row
@@ -225,14 +230,11 @@ struct SessionsView: View {
 struct SessionListRow: View {
     let session: Session
     let isSelected: Bool
-    let onRename: (String) async -> Void
+    var onRename: (() -> Void)? = nil
 
     private let color: Color
-    @State private var isHovering = false
-    @State private var isRenaming = false
-    @State private var editName = ""
 
-    init(session: Session, isSelected: Bool, onRename: @escaping (String) async -> Void) {
+    init(session: Session, isSelected: Bool, onRename: (() -> Void)? = nil) {
         self.session = session
         self.isSelected = isSelected
         self.onRename = onRename
@@ -243,71 +245,37 @@ struct SessionListRow: View {
         HStack(spacing: 12) {
             StatusDot(color: color, active: session.status == .active)
             VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 6) {
-                    if isRenaming {
-                        TextField("Session name", text: $editName)
-                            .textFieldStyle(.plain)
-                            .font(.callout.weight(.medium))
-                            .onSubmit { commitRename() }
-                            .onExitCommand { isRenaming = false }
-                    } else {
-                        Text(session.name ?? Theme.projectName(from: session.cwd))
-                            .font(.callout.weight(.medium)).lineLimit(1)
-                    }
-                    if isHovering && !isRenaming {
-                        Button {
-                            editName = session.name ?? Theme.projectName(from: session.cwd)
-                            isRenaming = true
-                        } label: {
-                            Image(systemName: "pencil")
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
+                Text(session.name ?? Theme.projectName(from: session.cwd))
+                    .font(.callout.weight(.medium)).lineLimit(1)
                 if let cwd = session.cwd {
                     Text(cwd).font(.caption).foregroundStyle(.tertiary).lineLimit(1)
                 }
             }
             Spacer()
-            if isRenaming {
-                HStack(spacing: 8) {
-                    Button("Cancel") { isRenaming = false }
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .buttonStyle(.plain)
-                    Button("Save") { commitRename() }
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.cyan)
-                        .buttonStyle(.plain)
+            VStack(alignment: .trailing, spacing: 4) {
+                if session.awaitingInputSince != nil {
+                    HStack(spacing: 3) {
+                        Image(systemName: "hand.raised.fill")
+                            .font(.caption2)
+                        Text("Awaiting input")
+                            .font(.caption2.weight(.medium))
+                    }
+                    .foregroundStyle(.yellow)
+                    .padding(.horizontal, 6).padding(.vertical, 2)
+                    .background(Color.yellow.opacity(0.15), in: Capsule())
                 }
-            } else {
-                VStack(alignment: .trailing, spacing: 4) {
-                    if session.awaitingInputSince != nil {
-                        HStack(spacing: 3) {
-                            Image(systemName: "hand.raised.fill")
-                                .font(.caption2)
-                            Text("Awaiting input")
-                                .font(.caption2.weight(.medium))
-                        }
-                        .foregroundStyle(.yellow)
-                        .padding(.horizontal, 6).padding(.vertical, 2)
-                        .background(Color.yellow.opacity(0.15), in: Capsule())
+                StatusBadge(label: session.status.label, color: color)
+                HStack(spacing: 6) {
+                    if let agents = session.agentCount, agents > 0 {
+                        Label("\(agents)", systemImage: "person.2")
+                            .font(.caption2).foregroundStyle(.secondary)
                     }
-                    StatusBadge(label: session.status.label, color: color)
-                    HStack(spacing: 6) {
-                        if let agents = session.agentCount, agents > 0 {
-                            Label("\(agents)", systemImage: "person.2")
-                                .font(.caption2).foregroundStyle(.secondary)
-                        }
-                        if let cost = session.cost, cost > 0 {
-                            Text(String(format: "$%.4f", cost))
-                                .font(.caption2).foregroundStyle(.secondary)
-                        }
-                        Text(Theme.shortDate(session.updatedAt))
-                            .font(.caption2).foregroundStyle(.tertiary)
+                    if let cost = session.cost, cost > 0 {
+                        Text(String(format: "$%.4f", cost))
+                            .font(.caption2).foregroundStyle(.secondary)
                     }
+                    Text(Theme.shortDate(session.updatedAt))
+                        .font(.caption2).foregroundStyle(.tertiary)
                 }
             }
         }
@@ -321,14 +289,13 @@ struct SessionListRow: View {
         }
         .contentShape(Rectangle())
         .animation(.easeInOut(duration: 0.15), value: isSelected)
-        .onHover { isHovering = $0 }
-    }
-
-    private func commitRename() {
-        let trimmed = editName.trimmingCharacters(in: .whitespaces)
-        isRenaming = false
-        guard !trimmed.isEmpty else { return }
-        Task { await onRename(trimmed) }
+        .contextMenu {
+            Button {
+                onRename?()
+            } label: {
+                Label("Rename", systemImage: "pencil")
+            }
+        }
     }
 }
 
