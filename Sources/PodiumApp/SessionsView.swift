@@ -117,8 +117,13 @@ struct SessionsView: View {
                 Divider().opacity(0.3)
 
                 HStack {
-                    Text("\(displayedSessions.count) sessions")
-                        .font(.caption).foregroundStyle(.secondary)
+                    if statusFilter != nil || !searchText.isEmpty {
+                        Text("\(displayedSessions.count) of \(state.sessionTotal)")
+                            .font(.caption).foregroundStyle(.secondary)
+                    } else {
+                        Text("\(state.sessionTotal) sessions")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
                     Spacer()
                     if state.isLoading { ProgressView().scaleEffect(0.7).tint(.cyan) }
                     Menu {
@@ -279,10 +284,25 @@ struct SessionListRow: View {
                 }
             } else {
                 VStack(alignment: .trailing, spacing: 4) {
+                    if session.awaitingInputSince != nil {
+                        HStack(spacing: 3) {
+                            Image(systemName: "hand.raised.fill")
+                                .font(.caption2)
+                            Text("Awaiting input")
+                                .font(.caption2.weight(.medium))
+                        }
+                        .foregroundStyle(.yellow)
+                        .padding(.horizontal, 6).padding(.vertical, 2)
+                        .background(Color.yellow.opacity(0.15), in: Capsule())
+                    }
                     StatusBadge(label: session.status.label, color: color)
                     HStack(spacing: 6) {
                         if let agents = session.agentCount, agents > 0 {
                             Label("\(agents)", systemImage: "person.2")
+                                .font(.caption2).foregroundStyle(.secondary)
+                        }
+                        if let cost = session.cost, cost > 0 {
+                            Text(String(format: "$%.4f", cost))
                                 .font(.caption2).foregroundStyle(.secondary)
                         }
                         Text(Theme.shortDate(session.updatedAt))

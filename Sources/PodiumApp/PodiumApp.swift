@@ -1,10 +1,12 @@
 import SwiftUI
 import AppKit
+import UserNotifications
 
 // Required: SPM executables run with .prohibited activation policy by default.
 class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApplication.shared.activate(ignoringOtherApps: true)
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
         // Defer until SwiftUI has finished building the window hierarchy.
         DispatchQueue.main.async {
             for window in NSApplication.shared.windows {

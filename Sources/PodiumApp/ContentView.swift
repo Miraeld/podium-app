@@ -96,6 +96,7 @@ struct ContentView: View {
             Button("") { selection = .activityFeed }.keyboardShortcut("4", modifiers: .command)
             Button("") { selection = .search }.keyboardShortcut("5", modifiers: .command)
             Button("") { selection = .kanban }.keyboardShortcut("6", modifiers: .command)
+            Button("") { selection = .search }.keyboardShortcut("k", modifiers: .command)
         })
     }
 }

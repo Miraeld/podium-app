@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import UserNotifications
 
 // MARK: - App State
 
@@ -152,6 +153,19 @@ final class AppState {
         case "session_updated":
             if let sess = try? JSONDecoder.podium.decode(WSSessionMsg.self, from: data).data {
                 upsertSession(sess)
+                if sess.status == .completed {
+                    let name = sess.name ?? "Session"
+                    sendLocalNotification(
+                        title: "Session completed",
+                        body: "\(name) finished successfully."
+                    )
+                } else if sess.status == .error {
+                    let name = sess.name ?? "Session"
+                    sendLocalNotification(
+                        title: "Session failed",
+                        body: "\(name) encountered an error."
+                    )
+                }
             }
 
         case "agent_created", "agent_updated":
@@ -232,6 +246,21 @@ final class AppState {
 
     func fetchTranscript(_ sessionId: String, before: Int? = nil) async throws -> TranscriptResponse {
         try await api.transcript(sessionId, before: before)
+    }
+
+    // MARK: Notifications
+
+    func sendLocalNotification(title: String, body: String) {
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.sound = .default
+        let req = UNNotificationRequest(
+            identifier: UUID().uuidString,
+            content: content,
+            trigger: nil
+        )
+        UNUserNotificationCenter.current().add(req)
     }
 
     // MARK: Search

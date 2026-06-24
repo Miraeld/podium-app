@@ -4,11 +4,15 @@ import Charts
 struct AnalyticsView: View {
     @Environment(AppState.self) var state
     @State private var loaded = false
+    @State private var lastRefreshed: Date? = nil
 
     var body: some View {
         ScrollView {
             if let analytics = state.analytics {
                 LazyVStack(spacing: 20) {
+                    // Summary row
+                    AnalyticsSummaryRow(analytics: analytics, totalCost: state.totalCost)
+
                     // Activity heatmap
                     ActivityHeatmapCard(dailySessions: analytics.dailySessions)
 
@@ -67,19 +71,92 @@ struct AnalyticsView: View {
             guard !loaded else { return }
             loaded = true
             await state.loadAnalytics()
+            lastRefreshed = Date()
         }
         .toolbar {
+            ToolbarItem(placement: .automatic) {
+                if let ts = lastRefreshed {
+                    Text("Updated \(Theme.shortDate(ts))")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+            }
             ToolbarItem {
                 Button {
                     loaded = false
                     Task {
                         loaded = true
                         await state.loadAnalytics()
+                        lastRefreshed = Date()
                     }
                 } label: {
                     Label("Refresh", systemImage: "arrow.clockwise")
                 }
             }
+        }
+    }
+}
+
+// MARK: - Analytics Summary Row
+
+struct AnalyticsSummaryRow: View {
+    let analytics: Analytics
+    let totalCost: CostResult?
+
+    var body: some View {
+        HStack(spacing: 16) {
+            // Total Cost
+            SummaryTile(
+                label: "Total Cost",
+                value: totalCost.map { String(format: "$%.2f", $0.totalCost) } ?? "—",
+                color: Color(red: 0.3, green: 0.9, blue: 0.5)
+            )
+
+            // Total Input Tokens
+            SummaryTile(
+                label: "Input Tokens",
+                value: Theme.formatTokens(analytics.tokens.totalInput),
+                color: .cyan
+            )
+
+            // Total Output Tokens
+            SummaryTile(
+                label: "Output Tokens",
+                value: Theme.formatTokens(analytics.tokens.totalOutput),
+                color: Color(red: 0.6, green: 0.4, blue: 1)
+            )
+
+            // Cache Hits
+            SummaryTile(
+                label: "Cache Hits",
+                value: Theme.formatTokens(analytics.tokens.totalCacheRead),
+                color: .green
+            )
+        }
+    }
+}
+
+struct SummaryTile: View {
+    let label: String
+    let value: String
+    let color: Color
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(value)
+                .font(.system(size: 22, weight: .bold, design: .rounded))
+                .foregroundStyle(color)
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .background {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(.ultraThinMaterial)
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.14), lineWidth: 0.75)
         }
     }
 }
