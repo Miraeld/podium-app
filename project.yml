@@ -1,0 +1,118 @@
+name: Podium
+options:
+  bundleIdPrefix: com.gaelrobin
+  deploymentTarget:
+    macOS: "14.0"
+  xcodeVersion: "16"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+    ENABLE_HARDENED_RUNTIME: YES
+
+targets:
+
+  # ── Main application ─────────────────────────────────────────────────────────
+  Podium:
+    type: application
+    platform: macOS
+    bundleIdPrefix: com.gaelrobin
+    bundleId: com.gaelrobin.PodiumApp
+    deploymentTarget: "14.0"
+
+    sources:
+      - path: Sources/PodiumApp
+        excludes: []
+
+    entitlements:
+      path: PodiumApp.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.gaelrobin.PodiumApp
+
+    info:
+      path: Podium-Info.plist
+      properties:
+        CFBundleName: Podium
+        CFBundleDisplayName: Podium
+        CFBundleIdentifier: com.gaelrobin.PodiumApp
+        CFBundleVersion: "1"
+        CFBundleShortVersionString: "1.0"
+        CFBundlePackageType: APPL
+        LSMinimumSystemVersion: "14.0"
+        NSHighResolutionCapable: true
+        NSPrincipalClass: NSApplication
+        # podium:// URL scheme — handled by PodiumApp.swift .onOpenURL
+        CFBundleURLTypes:
+          - CFBundleURLName: com.gaelrobin.PodiumApp.url
+            CFBundleURLSchemes:
+              - podium
+        # Spotlight / NSUserActivity type for viewSession deep links
+        NSUserActivityTypes:
+          - com.gaelrobin.PodiumApp.viewSession
+
+    settings:
+      base:
+        PRODUCT_NAME: Podium
+        PRODUCT_BUNDLE_IDENTIFIER: com.gaelrobin.PodiumApp
+        INFOPLIST_FILE: Podium-Info.plist
+        CODE_SIGN_ENTITLEMENTS: PodiumApp.entitlements
+        # Set DEVELOPMENT_TEAM to your Apple Developer Team ID after generating
+        # DEVELOPMENT_TEAM: XXXXXXXXXX
+
+    dependencies:
+      - target: PodiumWidget
+        embed: true
+
+    capabilities:
+      appGroups:
+        groups:
+          - group.com.gaelrobin.PodiumApp
+
+  # ── Widget Extension ──────────────────────────────────────────────────────────
+  PodiumWidget:
+    type: app-extension
+    platform: macOS
+    bundleId: com.gaelrobin.PodiumApp.widget
+    deploymentTarget: "14.0"
+
+    sources:
+      # Widget-specific code
+      - path: PodiumWidget
+      # Shared data contract — WidgetSnapshot + WidgetStore
+      # This file is in BOTH the app target and the widget target.
+      - path: Sources/PodiumApp/WidgetData.swift
+
+    entitlements:
+      path: PodiumWidget/PodiumWidget.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.gaelrobin.PodiumApp
+
+    info:
+      path: PodiumWidget/PodiumWidget-Info.plist
+      properties:
+        CFBundleName: PodiumWidget
+        CFBundleIdentifier: com.gaelrobin.PodiumApp.widget
+        CFBundleVersion: "1"
+        CFBundleShortVersionString: "1.0"
+        CFBundlePackageType: XPC!
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+
+    settings:
+      base:
+        PRODUCT_NAME: PodiumWidget
+        PRODUCT_BUNDLE_IDENTIFIER: com.gaelrobin.PodiumApp.widget
+        INFOPLIST_FILE: PodiumWidget/PodiumWidget-Info.plist
+        CODE_SIGN_ENTITLEMENTS: PodiumWidget/PodiumWidget.entitlements
+        SKIP_INSTALL: YES
+        # Set DEVELOPMENT_TEAM to your Apple Developer Team ID after generating
+        # DEVELOPMENT_TEAM: XXXXXXXXXX
+
+    capabilities:
+      appGroups:
+        groups:
+          - group.com.gaelrobin.PodiumApp
