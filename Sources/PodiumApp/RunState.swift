@@ -22,7 +22,39 @@ final class RunState {
         return PodiumAPI(host: host, port: port)
     }()
 
-    private var pollTask: Task<Void, Never>?
+    private let ws = WebSocketClient()
+
+    // MARK: Connect WebSocket (called from RunView .task)
+
+    func connect() {
+        let host = UserDefaults.standard.string(forKey: "podium_host") ?? "localhost"
+        let rawPort = UserDefaults.standard.integer(forKey: "podium_port")
+        let port = rawPort == 0 ? 4820 : rawPort
+        guard let url = URL(string: "ws://\(host):\(port)/ws") else { return }
+
+        ws.onMessage = { [weak self] type, data in
+            Task { @MainActor [weak self] in
+                self?.handleWSMessage(type: type, data: data)
+            }
+        }
+
+        ws.onStateChange = { [weak self] connected in
+            Task { @MainActor [weak self] in
+                guard let self, connected else { return }
+                // Re-fetch on reconnect to close any gap while disconnected
+                if let id = self.selectedRunId,
+                   self.currentHandle?.isActive == true {
+                    await self.fetchRun(id)
+                }
+            }
+        }
+
+        ws.connect(url: url)
+    }
+
+    func disconnect() {
+        ws.disconnect()
+    }
 
     // MARK: Load runs (active + history merged, deduped, sorted by startedAt desc)
 
@@ -51,13 +83,9 @@ final class RunState {
         currentEnvelopes = []
         currentStatus = nil
         currentHandle = nil
-        stopPolling()
 
-        // Load once immediately, then start poll if active
+        // Catch-up: load authoritative envelope log once, then WS streams the rest
         await fetchRun(id)
-        if currentHandle?.isActive == true {
-            startPolling(id)
-        }
     }
 
     // MARK: Start a new run
@@ -78,8 +106,8 @@ final class RunState {
             currentStatus = handle.status
             currentHandle = handle
             selectedRunId = handle.id
-            stopPolling()
-            startPolling(handle.id)
+            // Catch-up fetch (may be empty now, WS will stream live output)
+            await fetchRun(handle.id)
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -92,10 +120,6 @@ final class RunState {
         errorMessage = nil
         do {
             try await api.sendRunMessage(id, text: text)
-            // After sending, poll again if not already polling
-            if pollTask == nil {
-                startPolling(id)
-            }
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -105,7 +129,6 @@ final class RunState {
 
     func stop() async {
         guard let id = selectedRunId else { return }
-        stopPolling()
         do {
             try await api.killRun(id)
             // Refresh to get updated status
@@ -117,7 +140,7 @@ final class RunState {
         await loadRuns()
     }
 
-    // MARK: Private: fetch single run with envelopes
+    // MARK: Private: fetch single run with envelopes (catch-up)
 
     private func fetchRun(_ id: String) async {
         do {
@@ -134,27 +157,37 @@ final class RunState {
         }
     }
 
-    // MARK: Private: polling
+    // MARK: Private: WebSocket message handler
 
-    private func startPolling(_ id: String) {
-        stopPolling()
-        pollTask = Task { [weak self] in
-            while !Task.isCancelled {
-                guard let self else { return }
-                await self.fetchRun(id)
-                // Stop poll when terminal
-                if let status = self.currentStatus,
-                   status == "completed" || status == "error" || status == "killed" {
-                    await self.loadRuns()
-                    break
-                }
-                try? await Task.sleep(nanoseconds: 800_000_000) // 800ms
+    private func handleWSMessage(type: String, data: Data) {
+        switch type {
+        case "run_stream":
+            guard let msg = try? JSONDecoder.podium.decode(RunStreamMessage.self, from: data) else { return }
+            let payload = msg.data
+            guard payload.id == selectedRunId else { return }
+            currentEnvelopes.append(payload.envelope)
+
+        case "run_status":
+            guard let msg = try? JSONDecoder.podium.decode(RunStatusMessage.self, from: data) else { return }
+            let payload = msg.data
+            // Update current run status if selected
+            if payload.id == selectedRunId {
+                currentStatus = payload.status
             }
-        }
-    }
+            // Update in the runs list regardless
+            if let idx = runs.firstIndex(where: { $0.id == payload.id }) {
+                // Rebuild the handle with the updated status via a local copy trick;
+                // since RunHandle is a struct with a let status, we re-fetch lazily
+                // only when selected. For the list badge we update the status display
+                // by triggering a lightweight reload at terminal state.
+                let wasActive = runs[idx].isActive
+                if wasActive && (payload.status == "completed" || payload.status == "error" || payload.status == "killed") {
+                    Task { await self.loadRuns() }
+                }
+            }
 
-    private func stopPolling() {
-        pollTask?.cancel()
-        pollTask = nil
+        default:
+            break
+        }
     }
 }

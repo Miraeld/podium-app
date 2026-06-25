@@ -263,6 +263,24 @@ private enum JSONValue: Decodable {
     }
 }
 
+// MARK: - WebSocket message wrappers
+
+struct RunStreamMessage: Decodable {
+    let data: Payload
+    struct Payload: Decodable {
+        let id: String
+        let envelope: RunEnvelope
+    }
+}
+
+struct RunStatusMessage: Decodable {
+    let data: Payload
+    struct Payload: Decodable {
+        let id: String
+        let status: String
+    }
+}
+
 // MARK: - Helpers
 
 private func jsonString(_ dict: [String: JSONValue]) -> String {

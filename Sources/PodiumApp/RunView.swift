@@ -18,7 +18,11 @@ struct RunView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .task {
+            runState.connect()
             await runState.loadRuns()
+        }
+        .onDisappear {
+            runState.disconnect()
         }
     }
 }
