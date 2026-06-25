@@ -28,6 +28,7 @@ struct ContentView: View {
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             Sidebar(selection: $selection)
+                .tint(Theme.accent)
         } detail: {
             ZStack {
                 ThemeBackground()
@@ -46,6 +47,7 @@ struct ContentView: View {
             }
         }
         .navigationSplitViewStyle(.balanced)
+        .tint(Theme.accent)
         .onChange(of: columnVisibility) { _, v in
             UserDefaults.standard.set(v != .detailOnly, forKey: "sidebar_visible")
         }
@@ -112,6 +114,23 @@ struct Sidebar: View {
 
     var body: some View {
         List(selection: $selection) {
+            Section {
+                HStack(spacing: 10) {
+                    PodiumLogo(size: 30)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("Podium")
+                            .font(.headline.weight(.bold))
+                        Text("WP-MEDIA")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .tracking(1.5)
+                    }
+                    Spacer()
+                }
+                .padding(.vertical, 4)
+                .listRowSeparator(.hidden)
+                .selectionDisabled()
+            }
             Section {
                 SidebarRow(
                     icon: "house.fill",

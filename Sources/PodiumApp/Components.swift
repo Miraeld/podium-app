@@ -138,16 +138,10 @@ struct ConnectionBanner: View {
     let isConnected: Bool
 
     var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: isConnected ? "wifi" : "wifi.slash")
-            Text(isConnected ? "Connected to Podium" : "Podium server unreachable")
-                .font(.caption.weight(.medium))
-        }
-        .foregroundStyle(isConnected ? .green : .red)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 6)
-        .background((isConnected ? Color.green : Color.red).opacity(0.12))
-        .clipShape(Capsule())
+        Image(systemName: isConnected ? "wifi" : "wifi.slash")
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundStyle(isConnected ? .green : .red)
+            .help(isConnected ? "Connected to Podium" : "Podium server unreachable")
     }
 }
 
@@ -212,7 +206,7 @@ struct LoadingView: View {
         VStack(spacing: 16) {
             ProgressView()
                 .scaleEffect(1.5)
-                .tint(.cyan)
+                .tint(Theme.accent)
             Text("Loading…")
                 .font(.callout)
                 .foregroundStyle(.secondary)

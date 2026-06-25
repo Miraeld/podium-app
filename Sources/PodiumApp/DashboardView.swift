@@ -272,7 +272,7 @@ struct StatsRow: View {
                     title: "Active Agents",
                     value: "\(stats.activeAgents)",
                     icon: "person.fill.badge.clock",
-                    color: Color(red: 0.6, green: 0.4, blue: 1),
+                    color: Theme.accent,
                     subtitle: "\(stats.totalAgents) total"
                 )
                 StatCard(
@@ -402,7 +402,7 @@ struct EventFeedRow: View {
         if t.contains("error") || t.contains("fail") { return .red }
         if t.contains("stop") { return .orange }
         if t.contains("start") { return .cyan }
-        if t.contains("tool") { return Color(red: 0.6, green: 0.4, blue: 1) }
+        if t.contains("tool") { return Theme.accent }
         return .secondary
     }
 }

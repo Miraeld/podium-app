@@ -7,11 +7,13 @@ private extension Array where Element == Session {
     func filtered(by range: TimeRange) -> [Session] {
         guard let days = range.days else { return self }
         let cal = Calendar.current
+        // Use start of today so "Last 7 days" includes all of today
         let today = cal.startOfDay(for: Date())
-        guard let cutoff = cal.date(byAdding: .day, value: -(days - 1), to: today) else { return self }
+        guard let cutoff = cal.date(byAdding: .day, value: -days, to: today) else { return self }
         return self.filter { s in
-            let reference = s.lastActivity ?? s.updatedAt
-            return reference >= cutoff || s.startedAt >= cutoff
+            // A session is in range if it started OR had activity within the window
+            let activity = s.lastActivity ?? s.updatedAt
+            return s.startedAt > cutoff || activity > cutoff
         }
     }
 }
@@ -45,10 +47,6 @@ struct WorkflowsView: View {
                     toolFlowSection(analytics.toolUsage)
                 }
 
-                if !filteredSessions.isEmpty {
-                    complexitySection
-                }
-
                 patternSection
             }
             .padding(24)
@@ -76,15 +74,6 @@ struct WorkflowsView: View {
                 }
                 .pickerStyle(.segmented)
                 .frame(width: 280)
-            }
-            ToolbarItem(placement: .automatic) {
-                Picker("Session", selection: $selectedSessionId) {
-                    Text("Overview").tag(nil as String?)
-                    ForEach(Array(state.sessions.prefix(50))) { s in
-                        Text(s.name ?? Theme.projectName(from: s.cwd)).tag(s.id as String?)
-                    }
-                }
-                .frame(width: 220)
             }
             ToolbarItem {
                 Button {
@@ -119,7 +108,7 @@ struct WorkflowsView: View {
                 title: "Total Agents",
                 value: "\(totalAgents)",
                 icon: "person.3.fill",
-                color: Color(red: 0.6, green: 0.4, blue: 1.0)
+                color: Theme.accent
             )
             StatCard(
                 title: "Avg Agents/Session",
@@ -272,13 +261,7 @@ struct WorkflowsView: View {
                         x: .value("Count", stat.count),
                         y: .value("Type", stat.subagentType ?? "orchestrator")
                     )
-                    .foregroundStyle(
-                        LinearGradient(
-                            colors: [Color(red: 0.3, green: 0.6, blue: 1), Color(red: 0.6, green: 0.3, blue: 1)],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
-                    )
+                    .foregroundStyle(Theme.chartGradient)
                     .annotation(position: .trailing) {
                         let pct = total > 0 ? Int(Double(stat.count) / Double(total) * 100) : 0
                         Text("\(stat.count) (\(pct)%)")
@@ -339,13 +322,7 @@ struct WorkflowsView: View {
                                 RoundedRectangle(cornerRadius: 4)
                                     .fill(Color.primary.opacity(0.07))
                                 RoundedRectangle(cornerRadius: 4)
-                                    .fill(
-                                        LinearGradient(
-                                            colors: [.cyan, Color(red: 0.2, green: 0.5, blue: 0.9)],
-                                            startPoint: .leading,
-                                            endPoint: .trailing
-                                        )
-                                    )
+                                    .fill(Theme.chartGradient)
                                     .frame(width: geo.size.width * (Double(stat.count) / Double(maxCount)))
                             }
                         }
@@ -359,28 +336,6 @@ struct WorkflowsView: View {
             }
             .padding(20)
             .glassCard()
-        }
-    }
-
-    // MARK: - Session Complexity
-
-    @ViewBuilder
-    var complexitySection: some View {
-        let sessions = filteredSessions
-        let maxAgents = sessions.compactMap(\.agentCount).max() ?? 1
-        let columns = Array(repeating: GridItem(.flexible(), spacing: 12), count: 4)
-
-        VStack(alignment: .leading, spacing: 12) {
-            SectionHeader(
-                title: "Session Complexity (by agent count)",
-                trailing: "\(sessions.count) sessions"
-            )
-
-            LazyVGrid(columns: columns, spacing: 12) {
-                ForEach(sessions.prefix(40)) { session in
-                    SessionComplexityTile(session: session, maxAgents: maxAgents)
-                }
-            }
         }
     }
 
@@ -417,7 +372,7 @@ struct WorkflowsView: View {
                 title: "Deep Orchestration",
                 metric: "\(deepOrchestration) (\(deepPct)%)",
                 description: "Sessions spawning more than 5 agents, indicating complex multi-agent workflows.",
-                color: Color(red: 0.4, green: 0.6, blue: 1.0)
+                color: Theme.accent
             ),
             (
                 icon: "exclamationmark.octagon",
@@ -588,40 +543,6 @@ struct PlainDisclosureGroupStyle: DisclosureGroupStyle {
                 configuration.content
             }
         }
-    }
-}
-
-// MARK: - Session Complexity Tile
-
-struct SessionComplexityTile: View {
-    let session: Session
-    let maxAgents: Int
-
-    var body: some View {
-        let color = Theme.color(session: session.status)
-        VStack(alignment: .leading, spacing: 4) {
-            Text(session.name ?? Theme.projectName(from: session.cwd))
-                .font(.caption2.weight(.medium))
-                .lineLimit(2)
-                .foregroundStyle(.primary)
-            HStack(spacing: 4) {
-                StatusDot(
-                    color: color,
-                    active: session.status == .active
-                )
-                Text("\(session.agentCount ?? 0) agent\(session.agentCount == 1 ? "" : "s")")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .padding(10)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .frame(minHeight: CGFloat(30 + (session.agentCount ?? 0) * 8))
-        .glassCard(radius: 10)
-        .overlay(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .strokeBorder(color.opacity(0.3), lineWidth: 1)
-        )
     }
 }
 
