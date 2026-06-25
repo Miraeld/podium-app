@@ -22,13 +22,13 @@ import SwiftUI
 // MARK: - Local Decodable models (self-contained — no app module import)
 
 /// Response from GET /api/stats
-private struct WidgetStats: Decodable {
+struct WidgetStats: Decodable {
     let activeSessions: Int
     let activeAgents: Int
 }
 
 /// One session item from GET /api/sessions?limit=6
-private struct WidgetSessionDTO: Decodable, Identifiable {
+struct WidgetSessionDTO: Decodable, Identifiable {
     let id: String
     let name: String
     let status: String
@@ -36,7 +36,7 @@ private struct WidgetSessionDTO: Decodable, Identifiable {
 }
 
 /// Wrapper for GET /api/sessions response
-private struct WidgetSessionsResponse: Decodable {
+struct WidgetSessionsResponse: Decodable {
     let sessions: [WidgetSessionDTO]
     let total: Int
 }

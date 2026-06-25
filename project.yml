@@ -2,14 +2,14 @@ name: Podium
 options:
   bundleIdPrefix: com.gaelrobin
   deploymentTarget:
-    macOS: "14.0"
+    macOS: "26.0"
   xcodeVersion: "16"
   createIntermediateGroups: true
 
 settings:
   base:
     SWIFT_VERSION: "5.9"
-    MACOSX_DEPLOYMENT_TARGET: "14.0"
+    MACOSX_DEPLOYMENT_TARGET: "26.0"
     ENABLE_HARDENED_RUNTIME: YES
 
 targets:
@@ -20,7 +20,7 @@ targets:
     platform: macOS
     bundleIdPrefix: com.gaelrobin
     bundleId: com.gaelrobin.PodiumApp
-    deploymentTarget: "14.0"
+    deploymentTarget: "26.0"
 
     sources:
       - path: Sources/PodiumApp
@@ -40,7 +40,7 @@ targets:
         CFBundleVersion: "1"
         CFBundleShortVersionString: "1.0"
         CFBundlePackageType: APPL
-        LSMinimumSystemVersion: "14.0"
+        LSMinimumSystemVersion: "26.0"
         NSHighResolutionCapable: true
         NSPrincipalClass: NSApplication
         # podium:// URL scheme — handled by PodiumApp.swift .onOpenURL
@@ -73,7 +73,7 @@ targets:
     type: app-extension
     platform: macOS
     bundleId: com.gaelrobin.PodiumApp.widget
-    deploymentTarget: "14.0"
+    deploymentTarget: "26.0"
 
     sources:
       # Widget-only code — fully standalone, no shared files with the app target.
