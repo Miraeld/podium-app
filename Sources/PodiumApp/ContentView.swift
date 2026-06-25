@@ -12,6 +12,7 @@ enum NavDestination: Hashable {
     case workflows
     case importSession
     case run
+    case configExplorer
 }
 
 // MARK: - Content View
@@ -40,6 +41,7 @@ struct ContentView: View {
                 case .workflows:    WorkflowsView()
                 case .importSession: ImportSessionView()
                 case .run:          RunView()
+                case .configExplorer: ConfigExplorerView()
                 }
             }
         }
@@ -59,12 +61,12 @@ struct ContentView: View {
             // 2. Adaptive tint gradient — dark navy-purple in dark mode, soft lavender in light mode
             ZStack {
                 WindowTranslucencyAccessor()
-                VisualEffectBackground(material: .underWindowBackground, blendingMode: .behindWindow)
+                VisualEffectBackground(material: .hudWindow, blendingMode: .behindWindow)
                 Group {
                     if colorScheme == .dark {
-                        Theme.darkBackgroundGradient.opacity(0.70)
+                        Theme.darkBackgroundGradient.opacity(0.38)
                     } else {
-                        Theme.lightBackgroundGradient.opacity(0.25)
+                        Theme.lightBackgroundGradient.opacity(0.18)
                     }
                 }
                 .ignoresSafeArea()
@@ -72,15 +74,6 @@ struct ContentView: View {
             .ignoresSafeArea()
         )
         .toolbar {
-            ToolbarItem(placement: .navigation) {
-                HStack(spacing: 8) {
-                    Image(systemName: "gauge.with.dots.needle.67percent")
-                        .foregroundStyle(Theme.accentGradient)
-                    Text("Podium")
-                        .font(.headline.weight(.bold))
-                }
-                .padding(.leading, 8)
-            }
             ToolbarItem(placement: .automatic) {
                 HStack(spacing: 10) {
                     ConnectionBanner(isConnected: state.isServerReachable)
@@ -105,6 +98,7 @@ struct ContentView: View {
             Button("") { selection = .workflows }.keyboardShortcut("7", modifiers: .command)
             Button("") { selection = .importSession }.keyboardShortcut("8", modifiers: .command)
             Button("") { selection = .run }.keyboardShortcut("9", modifiers: .command)
+            Button("") { selection = .configExplorer }.keyboardShortcut("0", modifiers: .command)
             Button("") { selection = .search }.keyboardShortcut("k", modifiers: .command)
         })
     }
@@ -148,6 +142,7 @@ struct Sidebar: View {
                 SidebarRow(icon: "arrow.triangle.branch", label: "Workflows", value: .workflows)
                 SidebarRow(icon: "square.and.arrow.down", label: "Import", value: .importSession)
                 SidebarRow(icon: "terminal", label: "Run", value: .run)
+                SidebarRow(icon: "folder.badge.gearshape", label: "CC Config", value: .configExplorer)
             } header: {
                 Text("Discover")
                     .font(.caption.weight(.semibold))

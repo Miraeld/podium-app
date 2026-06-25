@@ -1,10 +1,12 @@
 import SwiftUI
 import UniformTypeIdentifiers
+import AppKit
 
 enum SessionTab: String, CaseIterable {
     case overview      = "Overview"
     case agents        = "Agents"
     case events        = "Events"
+    case replay        = "Replay"
     case conversation  = "Conversation"
     case thinking      = "Thinking"
     case cost          = "Cost"
@@ -34,6 +36,22 @@ struct SessionDetailView: View {
                     .padding(.horizontal, 24)
                     .padding(.top, 20)
                     .padding(.bottom, 12)
+                    .contextMenu {
+                        if let cwd = session.cwd, directoryExists(cwd) {
+                            Button("Show in Finder") { openInFinder(cwd) }
+                            Button("Open in Terminal") { openInTerminal(cwd) }
+                            Divider()
+                            Button("Copy Path") {
+                                NSPasteboard.general.clearContents()
+                                NSPasteboard.general.setString(cwd, forType: .string)
+                            }
+                            Divider()
+                        }
+                        Button("Copy Session ID") {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(session.id, forType: .string)
+                        }
+                    }
 
                     // Annotation card
                     SessionAnnotationView(sessionId: sessionId)
@@ -59,6 +77,8 @@ struct SessionDetailView: View {
                         SessionAgentsTab(agents: detail?.agents ?? [])
                     case .events:
                         SessionEventsTab(events: detail?.events ?? [], sessionId: sessionId)
+                    case .replay:
+                        SessionReplayView(sessionId: sessionId)
                     case .conversation:
                         ConversationTabView(sessionId: sessionId)
                     case .thinking:
@@ -72,20 +92,26 @@ struct SessionDetailView: View {
             }
         }
         .toolbar {
-            ToolbarItem {
-                Button {
-                    Task { @MainActor in
-                        isExporting = true
-                        defer { isExporting = false }
-                        guard let data = try? await state.exportSession(sessionId) else { return }
-                        let panel = NSSavePanel()
-                        panel.nameFieldStringValue = "podium-session-\(sessionId.prefix(8)).json"
-                        panel.allowedContentTypes = [.json]
-                        panel.canCreateDirectories = true
-                        if panel.runModal() == .OK, let url = panel.url {
-                            try? data.write(to: url)
-                        }
+            // Open working directory in Finder / Terminal
+            if let cwd = session?.cwd, directoryExists(cwd) {
+                ToolbarItemGroup {
+                    Button { openInFinder(cwd) } label: {
+                        Image(systemName: "folder")
                     }
+                    .help("Show in Finder")
+
+                    Button { openInTerminal(cwd) } label: {
+                        Image(systemName: "terminal")
+                    }
+                    .help("Open in Terminal")
+                }
+            }
+
+            ToolbarItem {
+                Menu {
+                    Button("Export JSON") { exportJSON() }
+                    Button("Export Markdown") { exportMarkdown() }
+                    Button("Export PDF") { exportPDF() }
                 } label: {
                     if isExporting {
                         ProgressView().scaleEffect(0.6)
@@ -93,7 +119,7 @@ struct SessionDetailView: View {
                         Image(systemName: "square.and.arrow.up")
                     }
                 }
-                .help("Export session as JSON")
+                .help("Export session")
                 .disabled(isExporting)
             }
         }
@@ -101,6 +127,62 @@ struct SessionDetailView: View {
             await state.loadSessionDetail(sessionId)
             await state.loadSessionStats(sessionId)
             await state.loadSessionCost(sessionId)
+            if let session { await state.loadGitContext(for: session) }
+        }
+    }
+
+    // MARK: - Export helpers
+
+    private func exportJSON() {
+        Task { @MainActor in
+            isExporting = true
+            defer { isExporting = false }
+            guard let data = try? await state.exportSession(sessionId) else { return }
+            let panel = NSSavePanel()
+            panel.nameFieldStringValue = "podium-session-\(sessionId.prefix(8)).json"
+            panel.allowedContentTypes = [.json]
+            panel.canCreateDirectories = true
+            if panel.runModal() == .OK, let url = panel.url {
+                try? data.write(to: url)
+            }
+        }
+    }
+
+    private func exportMarkdown() { presentExport(format: .markdown) }
+    private func exportPDF()      { presentExport(format: .pdf) }
+
+    private func presentExport(format: SessionExporter.ExportFormat) {
+        guard let session else { return }
+        SessionExporter.presentSavePanel(
+            session: session,
+            agents: state.sessionDetailCache[session.id]?.agents ?? [],
+            events: state.sessionDetailCache[session.id]?.events ?? [],
+            stats: state.sessionStatsCache[session.id],
+            format: format
+        )
+    }
+}
+
+// MARK: - Working-directory actions
+
+private func directoryExists(_ path: String) -> Bool {
+    var isDir: ObjCBool = false
+    return FileManager.default.fileExists(atPath: path, isDirectory: &isDir) && isDir.boolValue
+}
+
+private func openInFinder(_ cwd: String) {
+    guard directoryExists(cwd) else { return }
+    NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: cwd)])
+}
+
+private func openInTerminal(_ cwd: String) {
+    guard directoryExists(cwd) else { return }
+    let dir = URL(fileURLWithPath: cwd)
+    let terminal = URL(fileURLWithPath: "/System/Applications/Utilities/Terminal.app")
+    NSWorkspace.shared.open([dir], withApplicationAt: terminal, configuration: .init()) { _, error in
+        if error != nil {
+            // Fallback: open the directory with the default handler.
+            NSWorkspace.shared.activateFileViewerSelecting([dir])
         }
     }
 }
@@ -123,27 +205,32 @@ struct SessionDetailHeader: View {
     var body: some View {
         HStack(alignment: .top, spacing: 16) {
             VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 10) {
+                HStack(spacing: 12) {
                     StatusDot(color: color, active: session.status == .active)
                     Text(session.name ?? Theme.projectName(from: session.cwd))
                         .font(.title2.weight(.bold))
-                    StatusBadge(label: session.status.label, color: color)
-                    if session.awaitingInputSince != nil {
-                        StatusBadge(label: "Awaiting Input", color: .yellow)
-                    }
-                    if let count = errorCount, count > 0 {
-                        Button {
-                            onErrorChipTap?()
-                        } label: {
-                            Label("\(count) error\(count == 1 ? "" : "s")", systemImage: "exclamationmark.triangle.fill")
-                                .font(.caption2.weight(.semibold))
-                                .padding(.horizontal, 8).padding(.vertical, 3)
-                                .background(Color.red.opacity(0.18))
-                                .foregroundStyle(.red)
-                                .clipShape(Capsule())
+                    // Status pills grouped with their own spacing so adjacent
+                    // pill borders never touch, regardless of the title width.
+                    HStack(spacing: 8) {
+                        StatusBadge(label: session.status.label, color: color)
+                        if session.awaitingInputSince != nil {
+                            StatusBadge(label: "Awaiting Input", color: .yellow)
                         }
-                        .buttonStyle(.plain)
+                        if let count = errorCount, count > 0 {
+                            Button {
+                                onErrorChipTap?()
+                            } label: {
+                                Label("\(count) error\(count == 1 ? "" : "s")", systemImage: "exclamationmark.triangle.fill")
+                                    .font(.caption2.weight(.semibold))
+                                    .padding(.horizontal, 8).padding(.vertical, 3)
+                                    .background(Color.red.opacity(0.18))
+                                    .foregroundStyle(.red)
+                                    .clipShape(Capsule())
+                            }
+                            .buttonStyle(.plain)
+                        }
                     }
+                    .fixedSize()
                 }
                 if let cwd = session.cwd {
                     Text(cwd)
@@ -264,29 +351,61 @@ struct SessionOverviewTab: View {
     let sessionId: String
     @Environment(AppState.self) var state
 
+    @State private var transcriptTokens: TokenTotals? = nil
+    @State private var transcriptPartial = false
+
     private var stats: SessionStats? { state.sessionStatsCache[sessionId] }
     private var cost: CostResult?  { state.sessionCostCache[sessionId] }
+    private var session: Session? {
+        state.sessionDetailCache[sessionId]?.session
+            ?? state.sessions.first(where: { $0.id == sessionId })
+    }
+
+    /// Resolved token counts. The per-session `/stats` endpoint currently
+    /// reports 0 for token totals, so we prefer numbers aggregated from the
+    /// transcript and fall back to the stats endpoint when those are present.
+    private var resolvedTokens: TokenTotals {
+        let statsTotals = stats.map {
+            TokenTotals(input: $0.tokens.inputTokens,
+                        output: $0.tokens.outputTokens,
+                        cacheRead: $0.tokens.cacheReadTokens,
+                        cacheWrite: $0.tokens.cacheWriteTokens)
+        }
+        if let statsTotals, statsTotals.grandTotal > 0 { return statsTotals }
+        if let transcriptTokens, transcriptTokens.grandTotal > 0 { return transcriptTokens }
+        return statsTotals ?? .zero
+    }
 
     var body: some View {
         ScrollView {
             LazyVStack(spacing: 20) {
                 if let stats {
+                    let tokens = resolvedTokens
                     // Token stats
                     VStack(alignment: .leading, spacing: 14) {
-                        SectionHeader(title: "Token Usage")
-                        let total = stats.tokens.inputTokens + stats.tokens.outputTokens
+                        HStack {
+                            SectionHeader(title: "Token Usage")
+                            Spacer()
+                            if transcriptPartial && tokens.grandTotal > 0 {
+                                Text("partial")
+                                    .font(.caption2)
+                                    .foregroundStyle(.tertiary)
+                                    .help("Aggregated from the most recent transcript messages; older messages are not yet included.")
+                            }
+                        }
+                        let total = tokens.input + tokens.output
                         LazyVGrid(columns: [.init(.flexible()), .init(.flexible())], spacing: 12) {
-                            MiniStat(label: "Input", value: Theme.formatTokens(stats.tokens.inputTokens), color: .cyan)
-                            MiniStat(label: "Output", value: Theme.formatTokens(stats.tokens.outputTokens), color: Color(red: 0.6, green: 0.4, blue: 1))
-                            MiniStat(label: "Cache Read", value: Theme.formatTokens(stats.tokens.cacheReadTokens), color: .green)
-                            MiniStat(label: "Cache Write", value: Theme.formatTokens(stats.tokens.cacheWriteTokens), color: .yellow)
+                            MiniStat(label: "Input", value: Theme.formatTokens(tokens.input), color: .cyan)
+                            MiniStat(label: "Output", value: Theme.formatTokens(tokens.output), color: Color(red: 0.6, green: 0.4, blue: 1))
+                            MiniStat(label: "Cache Read", value: Theme.formatTokens(tokens.cacheRead), color: .green)
+                            MiniStat(label: "Cache Write", value: Theme.formatTokens(tokens.cacheWrite), color: .yellow)
                         }
                         // Progress bars
                         if total > 0 {
                             VStack(spacing: 8) {
-                                TokenBar(label: "Input", value: stats.tokens.inputTokens, max: total, color: .cyan)
-                                TokenBar(label: "Output", value: stats.tokens.outputTokens, max: total, color: Color(red: 0.6, green: 0.4, blue: 1))
-                                TokenBar(label: "Cache Read", value: stats.tokens.cacheReadTokens, max: total, color: .green)
+                                TokenBar(label: "Input", value: tokens.input, max: total, color: .cyan)
+                                TokenBar(label: "Output", value: tokens.output, max: total, color: Color(red: 0.6, green: 0.4, blue: 1))
+                                TokenBar(label: "Cache Read", value: tokens.cacheRead, max: total, color: .green)
                             }
                         }
                     }
@@ -300,33 +419,24 @@ struct SessionOverviewTab: View {
                         MiniStat(label: "Agents", value: "\(stats.agents.total)", color: .cyan)
                     }
 
-                    // Cost
+                    // Cost — de-emphasized: just a small secondary line.
+                    // Full per-model breakdown lives in the dedicated Cost tab.
                     if let cost, cost.totalCost > 0 {
-                        VStack(alignment: .leading, spacing: 12) {
-                            SectionHeader(title: "Cost Breakdown")
-                            HStack {
-                                Text("Total").font(.callout)
-                                Spacer()
-                                Text(Theme.formatCost(cost.totalCost))
-                                    .font(.title3.weight(.bold))
-                                    .foregroundStyle(.green)
-                            }
-                            Divider().opacity(0.3)
-                            ForEach(cost.breakdown) { item in
-                                HStack {
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(item.model).font(.caption).lineLimit(1)
-                                        Text("\(Theme.formatTokens(item.inputTokens)) in / \(Theme.formatTokens(item.outputTokens)) out")
-                                            .font(.caption2).foregroundStyle(.secondary)
-                                    }
-                                    Spacer()
-                                    Text(Theme.formatCost(item.cost))
-                                        .font(.caption.monospacedDigit())
-                                }
-                            }
+                        HStack(spacing: 6) {
+                            Image(systemName: "dollarsign.circle")
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                            Text("Estimated cost \(Theme.formatCost(cost.totalCost))")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Spacer()
                         }
-                        .padding(Theme.cardPadding)
-                        .glassCard()
+                        .padding(.horizontal, 4)
+                    }
+
+                    // Git context
+                    if let git = state.gitContextCache[sessionId] {
+                        GitContextCard(git: git)
                     }
 
                     // Top tools
@@ -348,6 +458,60 @@ struct SessionOverviewTab: View {
             }
             .padding(24)
         }
+        .task(id: sessionId) { await loadTranscriptTokens() }
+        .task(id: session?.cwd) {
+            if let session { await state.loadGitContext(for: session) }
+        }
+    }
+
+    /// Aggregate token usage from the transcript because the per-session
+    /// `/stats` endpoint reports 0. The transcript endpoint caps each page at
+    /// 200 messages, so we walk backwards with the `before` cursor up to a
+    /// bounded number of pages; if more remain we flag the total as partial.
+    private func loadTranscriptTokens() async {
+        // Skip if the stats endpoint already has real token data.
+        if let stats, (stats.tokens.inputTokens + stats.tokens.outputTokens
+                       + stats.tokens.cacheReadTokens + stats.tokens.cacheWriteTokens) > 0 {
+            return
+        }
+        var totals = TokenTotals.zero
+        var before: Int? = nil
+        var partial = false
+        let maxPages = 12   // 200 msgs/page → up to ~2400 messages
+        for page in 0..<maxPages {
+            guard let resp = try? await state.fetchTranscript(sessionId, before: before) else { break }
+            for msg in resp.messages {
+                if let u = msg.usage { totals.add(u) }
+            }
+            if resp.hasMore, let first = resp.firstLine {
+                before = first
+                if page == maxPages - 1 { partial = true }
+            } else {
+                break
+            }
+        }
+        await MainActor.run {
+            self.transcriptTokens = totals
+            self.transcriptPartial = partial
+        }
+    }
+}
+
+/// Simple aggregate of the four token dimensions.
+struct TokenTotals {
+    var input: Int
+    var output: Int
+    var cacheRead: Int
+    var cacheWrite: Int
+
+    static let zero = TokenTotals(input: 0, output: 0, cacheRead: 0, cacheWrite: 0)
+    var grandTotal: Int { input + output + cacheRead + cacheWrite }
+
+    mutating func add(_ u: TranscriptUsage) {
+        input += u.inputTokens
+        output += u.outputTokens
+        cacheRead += u.cacheReadTokens
+        cacheWrite += u.cacheWriteTokens
     }
 }
 
@@ -367,6 +531,110 @@ struct MiniStat: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
         .glassCard(radius: 12)
+    }
+}
+
+// MARK: - Git Context Card
+
+struct GitContextCard: View {
+    let git: GitInfo
+
+    private var hasAny: Bool {
+        git.branch != nil || git.lastCommit != nil || git.remoteURL != nil
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            SectionHeader(title: "Git Context")
+
+            if hasAny {
+                if let branch = git.branch {
+                    row(label: "Branch", systemImage: "arrow.triangle.branch") {
+                        Text(branch)
+                            .font(.caption.monospaced())
+                            .lineLimit(1)
+                        Spacer()
+                        copyButton(branch)
+                    }
+                }
+                if let commit = git.lastCommit {
+                    row(label: "Last commit", systemImage: "checkmark.seal") {
+                        Text(commit)
+                            .font(.caption.monospaced())
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                        Spacer()
+                    }
+                }
+                if let remote = git.remoteURL {
+                    row(label: "Remote", systemImage: "link") {
+                        if let url = git.remoteWebURL {
+                            Button {
+                                NSWorkspace.shared.open(url)
+                            } label: {
+                                HStack(spacing: 4) {
+                                    Text(url.host.map { $0 + url.path } ?? url.absoluteString)
+                                        .font(.caption.monospaced())
+                                        .lineLimit(1)
+                                    Image(systemName: "arrow.up.right.square")
+                                        .font(.caption2)
+                                }
+                                .foregroundStyle(.cyan)
+                            }
+                            .buttonStyle(.plain)
+                        } else {
+                            Text(remote)
+                                .font(.caption.monospaced())
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+                        Spacer()
+                    }
+                }
+                // Status badge
+                HStack(spacing: 8) {
+                    Image(systemName: "circle.fill")
+                        .font(.system(size: 7))
+                        .foregroundStyle(git.isDirty ? .yellow : .green)
+                    Text(git.isDirty ? "Dirty (uncommitted changes)" : "Clean working tree")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.top, 2)
+            } else {
+                Text("Not a git repository")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .padding(Theme.cardPadding)
+        .glassCard()
+    }
+
+    @ViewBuilder
+    private func row<Content: View>(label: String,
+                                    systemImage: String,
+                                    @ViewBuilder content: () -> Content) -> some View {
+        HStack(spacing: 10) {
+            Label(label, systemImage: systemImage)
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.secondary)
+                .frame(width: 110, alignment: .leading)
+            content()
+        }
+    }
+
+    private func copyButton(_ value: String) -> some View {
+        Button {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(value, forType: .string)
+        } label: {
+            Image(systemName: "doc.on.doc")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+        }
+        .buttonStyle(.plain)
+        .help("Copy branch name")
     }
 }
 

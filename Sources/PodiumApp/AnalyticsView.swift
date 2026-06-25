@@ -1,42 +1,81 @@
 import SwiftUI
 import Charts
 
+// MARK: - Shared Time Range
+
+enum TimeRange: String, CaseIterable, Identifiable {
+    case week  = "Last 7 days"
+    case month = "Last 30 days"
+    case all   = "All time"
+
+    var id: String { rawValue }
+
+    var days: Int? {
+        switch self {
+        case .week:  return 7
+        case .month: return 30
+        case .all:   return nil
+        }
+    }
+}
+
+// MARK: - Date filter helper
+
+private extension Array where Element == Analytics.DailyCount {
+    func filtered(by range: TimeRange) -> [Analytics.DailyCount] {
+        guard let days = range.days else { return self }
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: Date())
+        guard let cutoff = cal.date(byAdding: .day, value: -(days - 1), to: today) else { return self }
+        let fmt = DateFormatter()
+        fmt.dateFormat = "yyyy-MM-dd"
+        return self.filter { item in
+            guard let date = fmt.date(from: item.date) else { return true }
+            return date >= cutoff
+        }
+    }
+}
+
 struct AnalyticsView: View {
     @Environment(AppState.self) var state
     @State private var loaded = false
     @State private var lastRefreshed: Date? = nil
+    @State private var range: TimeRange = .week
 
     var body: some View {
         ScrollView {
             if let analytics = state.analytics {
+                let filteredSessions = analytics.dailySessions.filtered(by: range)
+                let filteredEvents   = analytics.dailyEvents.filtered(by: range)
+
                 LazyVStack(spacing: 20) {
                     // Summary row
                     AnalyticsSummaryRow(analytics: analytics, totalCost: state.totalCost)
 
                     // Activity heatmap
-                    ActivityHeatmapCard(dailySessions: analytics.dailySessions)
+                    ActivityHeatmapCard(dailySessions: filteredSessions)
 
-                    // Token overview
+                    // Token overview (all-time — not daily-bucketed)
                     TokenOverviewCard(tokens: analytics.tokens)
 
                     // Two-column: daily sessions + daily events
                     HStack(alignment: .top, spacing: 20) {
                         DailyChartCard(
                             title: "Daily Sessions",
-                            data: analytics.dailySessions,
+                            data: filteredSessions,
                             color: .cyan
                         )
                         DailyChartCard(
                             title: "Daily Events",
-                            data: analytics.dailyEvents,
+                            data: filteredEvents,
                             color: Color(red: 0.6, green: 0.4, blue: 1)
                         )
                     }
 
-                    // Tool usage
+                    // Tool usage (all-time)
                     ToolUsageCard(tools: analytics.toolUsage)
 
-                    // Agent types
+                    // Agent types (all-time)
                     if !analytics.agentTypes.isEmpty {
                         AgentTypesCard(types: analytics.agentTypes)
                     }
@@ -74,6 +113,15 @@ struct AnalyticsView: View {
             lastRefreshed = Date()
         }
         .toolbar {
+            ToolbarItem(placement: .automatic) {
+                Picker("Time range", selection: $range) {
+                    ForEach(TimeRange.allCases) { r in
+                        Text(r.rawValue).tag(r)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 280)
+            }
             ToolbarItem(placement: .automatic) {
                 if let ts = lastRefreshed {
                     Text("Updated \(Theme.shortDate(ts))")
@@ -170,7 +218,16 @@ struct TokenOverviewCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            SectionHeader(title: "Token Usage", trailing: "\(Theme.formatTokens(total)) total")
+            HStack {
+                SectionHeader(title: "Token Usage", trailing: "\(Theme.formatTokens(total)) total")
+                Spacer()
+                Text("All time")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(.ultraThinMaterial, in: Capsule())
+            }
 
             LazyVGrid(columns: [.init(.flexible()), .init(.flexible()), .init(.flexible()), .init(.flexible())], spacing: 12) {
                 TokenStat(label: "Input", value: tokens.totalInput, color: .cyan)
@@ -282,7 +339,16 @@ struct ToolUsageCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            SectionHeader(title: "Top Tools Used", trailing: "\(tools.count) tools")
+            HStack {
+                SectionHeader(title: "Top Tools Used", trailing: "\(tools.count) tools")
+                Spacer()
+                Text("All time")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(.ultraThinMaterial, in: Capsule())
+            }
 
             if tools.isEmpty {
                 Text("No data").font(.callout).foregroundStyle(.tertiary)
@@ -334,7 +400,16 @@ struct AgentTypesCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            SectionHeader(title: "Agent Types", trailing: "\(total) total")
+            HStack {
+                SectionHeader(title: "Agent Types", trailing: "\(total) total")
+                Spacer()
+                Text("All time")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(.ultraThinMaterial, in: Capsule())
+            }
 
             Chart {
                 ForEach(types.sorted(by: { $0.count > $1.count }).prefix(10)) { item in
@@ -425,7 +500,7 @@ struct ActivityHeatmapCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            SectionHeader(title: "Activity", trailing: "\(totalSessions) sessions")
+            SectionHeader(title: "Activity", trailing: "\(totalSessions) sessions in range")
 
             ScrollView(.horizontal, showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 4) {

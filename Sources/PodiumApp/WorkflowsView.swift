@@ -1,6 +1,21 @@
 import SwiftUI
 import Charts
 
+// MARK: - Session date filter helper
+
+private extension Array where Element == Session {
+    func filtered(by range: TimeRange) -> [Session] {
+        guard let days = range.days else { return self }
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: Date())
+        guard let cutoff = cal.date(byAdding: .day, value: -(days - 1), to: today) else { return self }
+        return self.filter { s in
+            let reference = s.lastActivity ?? s.updatedAt
+            return reference >= cutoff || s.startedAt >= cutoff
+        }
+    }
+}
+
 // MARK: - WorkflowsView
 
 struct WorkflowsView: View {
@@ -9,6 +24,11 @@ struct WorkflowsView: View {
     @State private var workflowData: WorkflowSessionRaw? = nil
     @State private var isLoadingWorkflow = false
     @State private var loaded = false
+    @State private var range: TimeRange = .week
+
+    private var filteredSessions: [Session] {
+        state.sessions.filtered(by: range)
+    }
 
     var body: some View {
         ScrollView {
@@ -25,7 +45,7 @@ struct WorkflowsView: View {
                     toolFlowSection(analytics.toolUsage)
                 }
 
-                if !state.sessions.isEmpty {
+                if !filteredSessions.isEmpty {
                     complexitySection
                 }
 
@@ -49,6 +69,15 @@ struct WorkflowsView: View {
         }
         .toolbar {
             ToolbarItem(placement: .automatic) {
+                Picker("Time range", selection: $range) {
+                    ForEach(TimeRange.allCases) { r in
+                        Text(r.rawValue).tag(r)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 280)
+            }
+            ToolbarItem(placement: .automatic) {
                 Picker("Session", selection: $selectedSessionId) {
                     Text("Overview").tag(nil as String?)
                     ForEach(Array(state.sessions.prefix(50))) { s in
@@ -71,8 +100,9 @@ struct WorkflowsView: View {
 
     @ViewBuilder
     var workflowStatsRow: some View {
-        let totalSessions = state.sessions.count
-        let totalAgents = state.sessions.compactMap(\.agentCount).reduce(0, +)
+        let sessions = filteredSessions
+        let totalSessions = sessions.count
+        let totalAgents = sessions.compactMap(\.agentCount).reduce(0, +)
         let avgSubagents: Double = totalSessions > 0
             ? Double(totalAgents) / Double(totalSessions)
             : 0
@@ -111,7 +141,27 @@ struct WorkflowsView: View {
     @ViewBuilder
     var sessionDrilldownSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            SectionHeader(title: "Session Drilldown", trailing: selectedSessionId != nil ? "Agent Tree" : nil)
+            // Section header row with inline session picker
+            HStack(spacing: 12) {
+                Text("SESSION DRILLDOWN")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .tracking(1)
+                if selectedSessionId != nil {
+                    Text("Agent Tree")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+                Spacer()
+                Picker("Session", selection: $selectedSessionId) {
+                    Text("None selected").tag(nil as String?)
+                    ForEach(Array(state.sessions.prefix(50))) { s in
+                        Text(s.name ?? Theme.projectName(from: s.cwd)).tag(s.id as String?)
+                    }
+                }
+                .pickerStyle(.menu)
+                .frame(maxWidth: 280)
+            }
 
             if selectedSessionId == nil {
                 HStack {
@@ -205,7 +255,16 @@ struct WorkflowsView: View {
         let total = sorted.reduce(0) { $0 + $1.count }
 
         VStack(alignment: .leading, spacing: 12) {
-            SectionHeader(title: "Agent Type Distribution", trailing: "\(sorted.count) types")
+            HStack {
+                SectionHeader(title: "Agent Type Distribution", trailing: "\(sorted.count) types")
+                Spacer()
+                Text("All time")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(.ultraThinMaterial, in: Capsule())
+            }
 
             VStack(alignment: .leading, spacing: 0) {
                 Chart(Array(sorted)) { stat in
@@ -257,7 +316,16 @@ struct WorkflowsView: View {
         let maxCount = sorted.map(\.count).max() ?? 1
 
         VStack(alignment: .leading, spacing: 12) {
-            SectionHeader(title: "Tool Usage Across All Sessions", trailing: "\(sorted.count) tools")
+            HStack {
+                SectionHeader(title: "Tool Usage Across All Sessions", trailing: "\(sorted.count) tools")
+                Spacer()
+                Text("All time")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(.ultraThinMaterial, in: Capsule())
+            }
 
             VStack(alignment: .leading, spacing: 8) {
                 ForEach(Array(sorted)) { stat in
@@ -298,14 +366,18 @@ struct WorkflowsView: View {
 
     @ViewBuilder
     var complexitySection: some View {
-        let maxAgents = state.sessions.compactMap(\.agentCount).max() ?? 1
+        let sessions = filteredSessions
+        let maxAgents = sessions.compactMap(\.agentCount).max() ?? 1
         let columns = Array(repeating: GridItem(.flexible(), spacing: 12), count: 4)
 
         VStack(alignment: .leading, spacing: 12) {
-            SectionHeader(title: "Session Complexity (by agent count)", trailing: "\(state.sessions.count) sessions")
+            SectionHeader(
+                title: "Session Complexity (by agent count)",
+                trailing: "\(sessions.count) sessions"
+            )
 
             LazyVGrid(columns: columns, spacing: 12) {
-                ForEach(state.sessions.prefix(40)) { session in
+                ForEach(sessions.prefix(40)) { session in
                     SessionComplexityTile(session: session, maxAgents: maxAgents)
                 }
             }
@@ -316,7 +388,7 @@ struct WorkflowsView: View {
 
     @ViewBuilder
     var patternSection: some View {
-        let sessions = state.sessions
+        let sessions = filteredSessions
         let total = sessions.count
 
         let deepOrchestration = sessions.filter { ($0.agentCount ?? 0) > 5 }.count
