@@ -4,3 +4,7 @@
 *.d
 *.swp
 PodiumApp.app/
+
+# Local signing team + generated Xcode project (see install.sh --widget / MIGRATION.md)
+.podium-team
+Podium.xcodeproj/
