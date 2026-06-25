@@ -97,7 +97,7 @@ if [ "$WIDGET" -eq 1 ]; then
   BUILT_APP="$DERIVED/Build/Products/Release/$APP_NAME.app"
   [ -d "$BUILT_APP" ] || { echo "✗ Built app not found at $BUILT_APP"; exit 1; }
 
-  echo "▶ Installing to $APP_BUNDLE…"
+  echo "▶ Installing to ${APP_BUNDLE}…"
   osascript -e "quit app \"$APP_NAME\"" 2>/dev/null || true
   sleep 0.3
   rm -rf "$APP_BUNDLE"
@@ -175,7 +175,7 @@ echo "▶ Ad-hoc code-signing…"
 codesign --force --deep --sign - "$STAGE" 2>/dev/null \
   || echo "  (codesign unavailable — app will still run, just unsigned)"
 
-echo "▶ Installing to $APP_BUNDLE…"
+echo "▶ Installing to ${APP_BUNDLE}…"
 # Quit a running copy so we can replace it cleanly.
 osascript -e "quit app \"$APP_NAME\"" 2>/dev/null || true
 sleep 0.3
