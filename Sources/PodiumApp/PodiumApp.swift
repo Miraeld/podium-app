@@ -42,6 +42,8 @@ struct PodiumApp: App {
                 .task { PodiumShortcuts.updateAppShortcutParameters() }
                 .onOpenURL { url in
                     guard url.scheme == "podium" else { return }
+                    // Bring the existing window forward instead of spawning a new one.
+                    NSApp.activate(ignoringOtherApps: true)
                     if url.host == "session" {
                         if let id = url.pathComponents.last, !id.isEmpty, id != "/" {
                             appState.selectedSessionId = id
@@ -52,6 +54,7 @@ struct PodiumApp: App {
                     }
                 }
                 .onContinueUserActivity(SpotlightIndexer.activityType) { activity in
+                    NSApp.activate(ignoringOtherApps: true)
                     if let sessionId = activity.userInfo?["sessionId"] as? String {
                         appState.selectedSessionId = sessionId
                         appState.navigationRequest = .sessions
