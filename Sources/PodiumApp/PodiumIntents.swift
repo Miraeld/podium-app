@@ -81,9 +81,9 @@ struct PodiumShortcuts: AppShortcutsProvider {
         AppShortcut(
             intent: GetActiveSessionsIntent(),
             phrases: [
-                "How many active Claude sessions",
+                "How many active sessions in \(.applicationName)",
                 "Show \(.applicationName) sessions",
-                "Are any Claude sessions running"
+                "Are any \(.applicationName) sessions running"
             ],
             shortTitle: "Active Sessions",
             systemImageName: "person.fill.badge.clock"
@@ -91,7 +91,7 @@ struct PodiumShortcuts: AppShortcutsProvider {
         AppShortcut(
             intent: ListRecentSessionsIntent(),
             phrases: [
-                "List my recent Claude sessions",
+                "List my recent \(.applicationName) sessions",
                 "Show recent \(.applicationName) sessions",
                 "What sessions ran in \(.applicationName)"
             ],
