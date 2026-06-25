@@ -61,8 +61,9 @@ if [ "$WIDGET" -eq 1 ]; then
   TEAM="${PODIUM_TEAM_ID:-}"
   [ -z "$TEAM" ] && [ -f "$SCRIPT_DIR/.podium-team" ] && TEAM="$(tr -d '[:space:]' < "$SCRIPT_DIR/.podium-team")"
   if [ -z "$TEAM" ]; then
-    # Best-effort auto-detect from an installed Apple Development identity.
-    TEAM="$(security find-identity -v -p codesigning 2>/dev/null | grep -m1 'Apple Development' | sed -E 's/.*\(([A-Z0-9]{10})\).*/\1/' | grep -E '^[A-Z0-9]{10}$' || true)"
+    # Best-effort auto-detect: the Team ID is the cert's Organizational Unit
+    # (NOT the parenthetical in the identity name — that's the cert ID).
+    TEAM="$(security find-certificate -a -c 'Apple Development' -p 2>/dev/null | openssl x509 -noout -subject -nameopt multiline 2>/dev/null | sed -n 's/.*organizationalUnitName *= *//p' | head -1 | tr -d '[:space:]')"
   fi
   if [ -z "$TEAM" ]; then
     echo "✗ No signing team found. The widget needs a (free) Personal Team."
