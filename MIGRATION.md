@@ -1,36 +1,44 @@
-# Xcode Migration Guide — PodiumApp + PodiumWidget
+# Make the Widget Live — FREE (no Apple Developer Program needed)
 
-This guide explains how to move from the current `swift build` + `run.sh` setup to a full
-Xcode project that enables the WidgetKit extension. Two paths are provided: **Path A** (fast,
-uses xcodegen) and **Path B** (manual, pure Xcode GUI).
+This guide shows how to enable the PodiumWidget WidgetKit extension using only a
+**free personal Apple ID** — no $99/yr Apple Developer Program account required.
 
 ---
 
-## Why This Migration Is Needed
+## Why Xcode Is Still Needed (Even for Free)
 
-The current `swift build` / `run.sh` pipeline produces an **unsigned** `.app` bundle. That
-works fine day-to-day — Spotlight indexing, App Intents, `podium://` deep links, and the main
-UI all function without code signing.
+The `swift build` / `run.sh` pipeline produces an unsigned `.app` bundle. That
+works perfectly for day-to-day development of the main app — no signing, no Xcode.
 
-**WidgetKit is the exception.** A Widget Extension is a separate process that:
+**WidgetKit is the exception.** A Widget Extension is a separate sandboxed XPC
+process that must be:
 
-1. Runs inside a **sandboxed XPC service** — it must be a distinct Xcode target.
-2. Shares data with the host app via an **App Group** — which requires a provisioning profile
-   issued by Apple's servers.
-3. Must be **embedded and signed** inside the host `.app` bundle at build time.
+1. A distinct Xcode target (SPM has no concept of extension bundles).
+2. Embedded and code-signed inside the host `.app` at build time.
+3. Granted specific sandbox entitlements (at minimum, `network.client` to reach
+   the Podium server).
 
-None of these three steps are achievable with a bare `Package.swift` executable. The Xcode
-project (via either path below) wires all three together automatically.
+All three steps require an Xcode build. The good news: they do **not** require a
+paid Developer account. A free personal Apple ID (the "Personal Team" Xcode shows
+when you add an account) is sufficient.
 
-### What Still Works in the Unsigned Build
+### What Changed vs. the App-Group Approach
 
-- `run.sh` / `swift build` — continue to use for day-to-day development; the SPM build is
-  kept working in parallel (the Xcode project references the same `Sources/PodiumApp/` files).
-- `WidgetStore.save()` / `WidgetStore.load()` — the `WidgetStore` helper degrades gracefully:
-  when the App Group suite `group.com.gaelrobin.PodiumApp` is unavailable (unsigned), it falls
-  back to `UserDefaults.standard`. The main app **will not crash** — it just writes to the
-  standard defaults instead of the shared container. The widget only receives real data once the
-  App Group entitlement is active (i.e., after the Xcode build is signed and run).
+The previous scaffold shared data between the app and widget via an App Group
+(`group.com.gaelrobin.PodiumApp`). **App Groups require a paid account** because
+Apple must register the group ID against your paid team.
+
+The new approach is simpler and free:
+
+- The widget fetches live data **directly** from `http://localhost:4820` using its
+  own `URLSession`. It calls `/api/stats` and `/api/sessions?limit=6` on every
+  timeline refresh.
+- The widget needs only the `com.apple.security.network.client` entitlement
+  (outgoing connections), which is available to free personal teams.
+- No App Group capability is wired to either target. No shared `WidgetData.swift`
+  membership is needed; the widget is fully standalone.
+- The main app target (`PodiumApp.entitlements`) no longer contains any App Group
+  or sandbox entitlement — it stays unsandboxed, exactly as it runs via `run.sh`.
 
 ---
 
@@ -38,7 +46,7 @@ project (via either path below) wires all three together automatically.
 
 ### Prerequisites
 
-- Xcode 26.5 installed (you already have this)
+- Xcode installed (16 or later)
 - Homebrew installed
 
 ### Steps
@@ -55,107 +63,95 @@ xcodegen generate
 open Podium.xcodeproj
 ```
 
-**What `project.yml` already handles** (no manual steps needed):
-- Both the `Podium` app target and `PodiumWidget` extension target are defined.
-- `Sources/PodiumApp/WidgetData.swift` is added to **both** targets so the shared types
-  compile in the widget without importing the app module.
-- App Group `group.com.gaelrobin.PodiumApp` is wired to both targets via entitlements files.
-- The `podium://` URL scheme and `NSUserActivityTypes` are set in the app's Info.plist.
-- The widget is marked for embedding inside the app bundle (`embed: true`).
-
 **After opening Xcode:**
 
 ```
-4. In Xcode → Project navigator → select "Podium" project
-5. Select the "Podium" target → Signing & Capabilities tab
-   → Set "Team" to your Apple Developer account
-6. Select the "PodiumWidget" target → Signing & Capabilities tab
-   → Set the same Team
-7. Press ⌘R (build & run)
+4. Project navigator → select "Podium" project → "Podium" target
+   → Signing & Capabilities tab
+   → Team: pick your personal (free) Apple ID team
+     ("Add an Account…" if not listed, then choose the Personal Team entry)
+
+5. Select the "PodiumWidget" target → Signing & Capabilities tab
+   → Team: same personal (free) Apple ID team
+
+6. Press ⌘R (build & run)
 ```
 
-> **Note:** If you see "No matching provisioning profiles found," make sure you are signed into
-> Xcode with your Apple ID (Xcode → Settings → Accounts) and that both bundle IDs
-> (`com.gaelrobin.PodiumApp` and `com.gaelrobin.PodiumApp.widget`) exist in the Apple Developer
-> portal, or let Xcode manage signing automatically.
+No App Group capability to add. The widget's `network.client` entitlement is
+already set in `PodiumWidget/PodiumWidget.entitlements` and wired via `project.yml`.
+
+> **Tip:** If Xcode shows "Signing requires a development team — select a
+> development team in the Signing & Capabilities editor," simply select your
+> Personal Team and click "Try Again." Xcode will auto-provision a development
+> certificate for you at no cost.
 
 ---
 
 ## Path B — Manual (Xcode GUI only)
 
-Use this if you prefer not to install xcodegen, or if `xcodegen generate` produces an
-unexpected result.
+Use this if you prefer not to install xcodegen, or want to understand every step.
 
 ### Step 1 — Create the Xcode project
 
-1. Open Xcode → **File → New → Project**
-2. Select **macOS → App** → click Next
+1. Xcode → **File → New → Project**
+2. **macOS → App** → Next
 3. Fill in:
    - **Product Name:** `Podium`
    - **Bundle Identifier:** `com.gaelrobin.PodiumApp`
-   - **Language:** Swift
-   - **Interface:** SwiftUI
-4. Uncheck "Include Tests" (tests live in SPM)
-5. Save next to the existing repo (or inside it — does not matter)
+   - **Language:** Swift / **Interface:** SwiftUI
+4. Uncheck "Include Tests" → Finish
 
 ### Step 2 — Set deployment target
 
-6. Select the **Podium project** in the navigator → **Podium target** → General tab
-7. Set **macOS Deployment Target** to `14.0`
+5. Select the **Podium project** → **Podium target** → General tab
+6. Set **macOS Deployment Target** to `14.0`
 
 ### Step 3 — Replace the default source files
 
-8. Delete the auto-generated `ContentView.swift` and `PodiumApp.swift` placeholders
-   (Move to Trash)
-9. In Finder, select all files in `Sources/PodiumApp/` and drag them into the Xcode
+7. Delete the auto-generated `ContentView.swift` and `<AppName>App.swift` (Move to Trash)
+8. In Finder, select all files in `Sources/PodiumApp/` and drag them into the Xcode
    project navigator under the `Podium` group
-10. In the "Choose options" sheet: check **"Copy items if needed"** = NO (reference in place),
-    **"Add to targets"** = `Podium` ✓
+9. "Choose options" sheet: **Copy items if needed** = NO, **Add to targets** = `Podium` ✓
 
-### Step 4 — Add App Group to the app target
+### Step 4 — Add the Widget Extension target
 
-11. Select **Podium target** → **Signing & Capabilities** tab → **+ Capability**
-12. Add **App Groups** → click `+` → enter `group.com.gaelrobin.PodiumApp` → OK
-13. Xcode generates `Podium.entitlements` automatically. Verify it contains:
-    ```xml
-    <key>com.apple.security.application-groups</key>
-    <array><string>group.com.gaelrobin.PodiumApp</string></array>
-    ```
-    (You can replace this auto-generated file with the pre-built `PodiumApp.entitlements`
-    from the repo root if you prefer.)
-
-### Step 5 — Add the Widget Extension target
-
-14. **File → New → Target** → select **Widget Extension** → Next
-15. Fill in:
+10. **File → New → Target** → **Widget Extension** → Next
+11. Fill in:
     - **Product Name:** `PodiumWidget`
     - **Bundle Identifier:** `com.gaelrobin.PodiumApp.widget`
     - **Include Configuration Intent:** NO (static configuration)
-16. Click **Finish** — Xcode creates the `PodiumWidget/` group with a default template
+12. Finish
 
-### Step 6 — Add App Group to the widget target
+### Step 5 — Set personal (free) team on both targets
 
-17. Select **PodiumWidget target** → **Signing & Capabilities** tab → **+ Capability**
-18. Add **App Groups** → check `group.com.gaelrobin.PodiumApp`
+13. **Podium target** → Signing & Capabilities → **Team:** your personal Apple ID
+14. **PodiumWidget target** → Signing & Capabilities → **Team:** same personal Apple ID
 
-### Step 7 — Replace widget template with the real implementation
+### Step 6 — Add network-client entitlement to the widget
 
-19. Delete the auto-generated template file inside the `PodiumWidget` group (Move to Trash)
-20. Drag `PodiumWidget/PodiumWidget.swift` from this repo into the `PodiumWidget` Xcode group
+15. **PodiumWidget target** → Signing & Capabilities → **+ Capability**
+16. Add **App Sandbox** → this enables the sandbox and creates an entitlements file
+17. In the sandbox capability panel, check **Outgoing Connections (Client)**
+    — this adds `com.apple.security.network.client = true`
+
+    Alternatively, replace the auto-generated entitlements file with
+    `PodiumWidget/PodiumWidget.entitlements` from this repo (already contains the
+    correct keys).
+
+> **Do NOT add App Groups** — it is not needed and requires a paid account.
+
+### Step 7 — Replace the widget template with the real implementation
+
+18. Delete the auto-generated template `.swift` file in the `PodiumWidget` Xcode group
+19. Drag `PodiumWidget/PodiumWidget.swift` from this repo into the group
     - Add to target: **PodiumWidget** ✓ (not Podium)
     - Copy items if needed: NO
 
-### Step 8 — Add WidgetData.swift to BOTH targets
+The widget is **standalone** — `WidgetData.swift` is NOT added to the widget target.
 
-`WidgetData.swift` must compile in both the app and the widget (they are separate processes).
+### Step 8 — Configure the app Info.plist
 
-21. In Xcode, select `Sources/PodiumApp/WidgetData.swift` in the navigator
-22. Open the **File Inspector** (right panel → first tab)
-23. Under **Target Membership**, check **both** `Podium` ✓ and `PodiumWidget` ✓
-
-### Step 9 — Configure the app Info.plist
-
-24. Open the app target's `Info.plist` and add:
+20. Open the app target's `Info.plist` and add:
 
     **`CFBundleURLTypes`** (for `podium://` deep links):
     ```xml
@@ -178,35 +174,50 @@ unexpected result.
     </array>
     ```
 
-### Step 10 — Set signing teams
+### Step 9 — Build and run
 
-25. Select **Podium target** → Signing & Capabilities → set **Team**
-26. Select **PodiumWidget target** → Signing & Capabilities → set the same **Team**
-27. Press **⌘R** — build and run
+21. Press **⌘R** — Xcode builds both the app and the widget, signs them with your
+    free personal team certificate, and launches the app.
 
 ---
 
 ## Keeping `run.sh` Working (Dual Build System)
 
-`Package.swift` continues to compile all `Sources/PodiumApp/*.swift` files, including
-`WidgetData.swift`. The SPM build does not include the widget extension target (it has no
-`Package.swift` entry), so `swift build` remains green and `run.sh` works as before.
+`Package.swift` + `run.sh` continue to compile all `Sources/PodiumApp/*.swift`
+files for day-to-day development. The SPM build does not include the widget
+extension target (it has no `Package.swift` entry), so `swift build` remains
+green and `run.sh` works as before.
 
-Day-to-day workflow recommendation:
-- Use `./run.sh` for rapid iteration on the main app UI (no signing required, ~3 s build).
-- Use Xcode when you need to test the widget, App Intents, or any extension target.
-- The two build systems share the same source files; changes you make to `.swift` files under
-  `Sources/PodiumApp/` are reflected in both builds automatically.
+Day-to-day recommendation:
+- `./run.sh` — rapid iteration on the main app UI (~3 s build, no signing needed).
+- Xcode — when you need to test the widget, or any other extension target.
+- Changes to files under `Sources/PodiumApp/` are reflected in both builds.
+
+Note: `Sources/PodiumApp/WidgetData.swift` is now unused by the widget (the
+widget fetches its own data). The app may still write to it harmlessly. It can be
+removed from the app target in a future cleanup pass.
 
 ---
 
-## App Store / Notarization (optional future step)
+## Caveats
 
-Once you are ready to distribute beyond your own Mac:
-
-1. In Xcode, set `CODE_SIGN_STYLE = Manual` and select a Distribution certificate.
-2. **Product → Archive** → Distribute → Developer ID (notarized).
-3. The unsigned `run.sh` path is unaffected and continues to work for local development.
+- **Widget refresh cadence:** WidgetKit controls the exact refresh schedule. The
+  widget requests a new timeline approximately every 5 minutes, but WidgetKit may
+  adjust this based on system load and power state. There are no push-triggered
+  refreshes on the free path.
+- **Server must be running:** The widget fetches from `localhost:4820`. If the
+  Podium server is not running, the widget shows a "Podium server not running"
+  state and retries on the next scheduled refresh.
+- **Host/port:** The base URL is hardcoded to `http://localhost:4820` (Podium's
+  default). If you run the server on a different port, update the `podiumBaseURL`
+  constant at the top of `PodiumWidget/PodiumWidget.swift`. A paid-account
+  App-Group alternative would let the widget read the app's configured host/port
+  from a shared `UserDefaults` container — but that requires the $99/yr program.
+- **No live-push updates:** On the App-Group path, the main app could call
+  `WidgetCenter.shared.reloadAllTimelines()` after every WebSocket `stats_update`
+  to push instant refreshes. On the free localhost-fetch path this is not possible
+  (the widget is a separate sandboxed process with no IPC channel to the app).
+  The widget refreshes on its own ~5-minute schedule instead.
 
 ---
 
@@ -214,8 +225,9 @@ Once you are ready to distribute beyond your own Mac:
 
 | Symptom | Fix |
 |---|---|
-| Widget shows "No data yet" even after the app runs | Verify the App Group ID matches exactly in both entitlements files. Check Console.app for "container lookup failed" errors. |
+| Widget shows "Podium server not running" | Make sure the Podium server is running: `/podium start` from the Podium project directory. |
+| Widget shows stale data | WidgetKit controls cadence. Force a refresh: remove and re-add the widget in Notification Center. |
 | `xcodegen generate` fails with "unknown target type" | Update xcodegen: `brew upgrade xcodegen`. Requires ≥ 2.40. |
-| Build error: "WidgetSnapshot redefined" | `WidgetData.swift` was accidentally added to both targets AND reimported from the app module. Remove the duplicate — target membership (Step 8) is the correct approach. |
-| Widget does not appear in Notification Center | On macOS, widgets require at least one successful signed build; re-launch the app after first Xcode build to register the extension. |
+| Signing error: "No matching provisioning profile" | In Signing & Capabilities, make sure the Team is set to your Personal Team (not "None"). Let Xcode manage signing automatically. |
 | `run.sh` fails after Xcode migration | The SPM build is independent of Xcode. If `swift build` fails, check that you did not accidentally edit `Package.swift` or any file in `Sources/PodiumApp/`. |
+| Widget does not appear in Notification Center | On macOS, widgets register after at least one successful signed build. Re-launch the app after the first Xcode build. |

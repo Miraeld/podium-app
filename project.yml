@@ -28,9 +28,8 @@ targets:
 
     entitlements:
       path: PodiumApp.entitlements
-      properties:
-        com.apple.security.application-groups:
-          - group.com.gaelrobin.PodiumApp
+      # No App Group capability — the widget fetches from localhost directly.
+      # The app target does not need sandbox or App Group for the free path.
 
     info:
       path: Podium-Info.plist
@@ -66,10 +65,8 @@ targets:
       - target: PodiumWidget
         embed: true
 
-    capabilities:
-      appGroups:
-        groups:
-          - group.com.gaelrobin.PodiumApp
+    # No appGroups capability — App Groups require a paid Apple Developer account.
+    # The free path does not need them.
 
   # ── Widget Extension ──────────────────────────────────────────────────────────
   PodiumWidget:
@@ -79,17 +76,20 @@ targets:
     deploymentTarget: "14.0"
 
     sources:
-      # Widget-specific code
+      # Widget-only code — fully standalone, no shared files with the app target.
+      # The widget fetches its own data from localhost:4820 via URLSession.
+      # WidgetData.swift is NOT included here: the widget does not use WidgetStore
+      # or WidgetSnapshot. (WidgetData.swift in Sources/PodiumApp/ remains in the
+      # app target and can be removed in a future cleanup; it is now unused by the widget.)
       - path: PodiumWidget
-      # Shared data contract — WidgetSnapshot + WidgetStore
-      # This file is in BOTH the app target and the widget target.
-      - path: Sources/PodiumApp/WidgetData.swift
 
     entitlements:
       path: PodiumWidget/PodiumWidget.entitlements
+      # network.client lets the sandboxed widget reach localhost:4820.
+      # Available to FREE personal Apple ID teams — no paid account needed.
       properties:
-        com.apple.security.application-groups:
-          - group.com.gaelrobin.PodiumApp
+        com.apple.security.app-sandbox: true
+        com.apple.security.network.client: true
 
     info:
       path: PodiumWidget/PodiumWidget-Info.plist
@@ -112,7 +112,4 @@ targets:
         # Set DEVELOPMENT_TEAM to your Apple Developer Team ID after generating
         # DEVELOPMENT_TEAM: XXXXXXXXXX
 
-    capabilities:
-      appGroups:
-        groups:
-          - group.com.gaelrobin.PodiumApp
+    # No appGroups capability — not needed on the free path.

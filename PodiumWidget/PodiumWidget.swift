@@ -1,21 +1,79 @@
 // PodiumWidget/PodiumWidget.swift
 //
-// WidgetKit extension for PodiumApp.
-// This file is compiled into the PodiumWidget extension target only.
-// WidgetData.swift (shared) is added to BOTH the app target and this target
-// so WidgetSnapshot and WidgetStore are available here without re-importing
-// the main app module.
+// WidgetKit extension for PodiumApp — FREE PATH (no paid Apple Developer account needed).
 //
-// No cost fields are referenced — WidgetSnapshot intentionally omits them.
+// This widget fetches live data directly from the local Podium server at
+// http://localhost:4820 using URLSession. This requires only the network-client
+// sandbox entitlement, which is available to free personal Apple ID teams.
+//
+// It does NOT use App Groups or WidgetStore/WidgetSnapshot. Those types live in
+// Sources/PodiumApp/WidgetData.swift (app-only file) and are not compiled into
+// this target.
+//
+// NOTE on host/port: The base URL is hardcoded to http://localhost:4820 (Podium's
+// default). A paid-account App-Group alternative would let the widget read the
+// app's configured host/port from a shared UserDefaults container. On the free
+// path, localhost:4820 is the pragmatic default — if you change the server port,
+// update podiumBaseURL below.
 
 import WidgetKit
 import SwiftUI
+
+// MARK: - Local Decodable models (self-contained — no app module import)
+
+/// Response from GET /api/stats
+private struct WidgetStats: Decodable {
+    let activeSessions: Int
+    let activeAgents: Int
+}
+
+/// One session item from GET /api/sessions?limit=6
+private struct WidgetSessionDTO: Decodable, Identifiable {
+    let id: String
+    let name: String
+    let status: String
+    let cwd: String?
+}
+
+/// Wrapper for GET /api/sessions response
+private struct WidgetSessionsResponse: Decodable {
+    let sessions: [WidgetSessionDTO]
+    let total: Int
+}
+
+// MARK: - Shared decoder
+
+private let podiumDecoder: JSONDecoder = {
+    let d = JSONDecoder()
+    d.keyDecodingStrategy = .convertFromSnakeCase
+    return d
+}()
+
+// MARK: - Network helper
+
+/// Base URL for the Podium server. Change only this constant if your server runs on a different port.
+private let podiumBaseURL = "http://localhost:4820"
+
+private func fetchStats() async -> WidgetStats? {
+    guard let url = URL(string: "\(podiumBaseURL)/api/stats") else { return nil }
+    guard let (data, _) = try? await URLSession.shared.data(from: url) else { return nil }
+    return try? podiumDecoder.decode(WidgetStats.self, from: data)
+}
+
+private func fetchSessions() async -> [WidgetSessionDTO] {
+    guard let url = URL(string: "\(podiumBaseURL)/api/sessions?limit=6") else { return [] }
+    guard let (data, _) = try? await URLSession.shared.data(from: url) else { return [] }
+    guard let response = try? podiumDecoder.decode(WidgetSessionsResponse.self, from: data) else { return [] }
+    return response.sessions
+}
 
 // MARK: - Timeline Entry
 
 struct PodiumEntry: TimelineEntry {
     let date: Date
-    let snapshot: WidgetSnapshot?
+    /// nil means the server could not be reached.
+    let stats: WidgetStats?
+    let sessions: [WidgetSessionDTO]
 }
 
 // MARK: - Timeline Provider
@@ -23,20 +81,26 @@ struct PodiumEntry: TimelineEntry {
 struct PodiumProvider: TimelineProvider {
 
     func placeholder(in context: Context) -> PodiumEntry {
-        PodiumEntry(date: .now, snapshot: nil)
+        PodiumEntry(date: .now, stats: nil, sessions: [])
     }
 
     func getSnapshot(in context: Context, completion: @escaping (PodiumEntry) -> Void) {
-        completion(PodiumEntry(date: .now, snapshot: WidgetStore.load()))
+        Task {
+            let stats = await fetchStats()
+            let sessions = await fetchSessions()
+            completion(PodiumEntry(date: .now, stats: stats, sessions: sessions))
+        }
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<PodiumEntry>) -> Void) {
-        let snapshot = WidgetStore.load()
-        let entry = PodiumEntry(date: .now, snapshot: snapshot)
-        // Refresh every 5 minutes as a fallback; the main app triggers early
-        // via WidgetCenter.shared.reloadAllTimelines() on every stats_update.
-        let next = Calendar.current.date(byAdding: .minute, value: 5, to: .now) ?? .now
-        completion(Timeline(entries: [entry], policy: .after(next)))
+        Task {
+            let stats = await fetchStats()
+            let sessions = await fetchSessions()
+            let entry = PodiumEntry(date: .now, stats: stats, sessions: sessions)
+            // Refresh approximately every 5 minutes. WidgetKit controls the exact cadence.
+            let next = Calendar.current.date(byAdding: .minute, value: 5, to: .now) ?? .now
+            completion(Timeline(entries: [entry], policy: .after(next)))
+        }
     }
 }
 
@@ -72,16 +136,16 @@ struct PodiumWidgetView: View {
     @Environment(\.widgetFamily) private var family
 
     var body: some View {
-        if let snapshot = entry.snapshot {
+        if let stats = entry.stats {
             switch family {
             case .systemSmall:
-                SmallWidgetView(snapshot: snapshot)
+                SmallWidgetView(stats: stats, sessions: entry.sessions)
             case .systemMedium:
-                MediumWidgetView(snapshot: snapshot)
+                MediumWidgetView(stats: stats, sessions: entry.sessions)
             case .systemLarge:
-                LargeWidgetView(snapshot: snapshot)
+                LargeWidgetView(stats: stats, sessions: entry.sessions)
             default:
-                SmallWidgetView(snapshot: snapshot)
+                SmallWidgetView(stats: stats, sessions: entry.sessions)
             }
         } else {
             EmptyWidgetView()
@@ -89,7 +153,7 @@ struct PodiumWidgetView: View {
     }
 }
 
-// MARK: - Empty / Placeholder State
+// MARK: - Empty / Server-down State
 
 struct EmptyWidgetView: View {
     var body: some View {
@@ -97,9 +161,10 @@ struct EmptyWidgetView: View {
             Image(systemName: "gauge.with.dots.needle.67percent")
                 .font(.title2)
                 .foregroundStyle(.secondary)
-            Text("No data yet")
+            Text("Podium server not running")
                 .font(.caption.weight(.semibold))
-            Text("Open Podium to connect.")
+                .multilineTextAlignment(.center)
+            Text("Start Podium on localhost:4820.")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -114,7 +179,8 @@ struct EmptyWidgetView: View {
 // Tapping the whole widget opens podium://dashboard.
 
 struct SmallWidgetView: View {
-    let snapshot: WidgetSnapshot
+    let stats: WidgetStats
+    let sessions: [WidgetSessionDTO]
 
     var body: some View {
         let dashboardURL = URL(string: "podium://dashboard")
@@ -126,7 +192,7 @@ struct SmallWidgetView: View {
 
             Spacer()
 
-            Text("\(snapshot.activeSessions)")
+            Text("\(stats.activeSessions)")
                 .font(.system(size: 42, weight: .bold, design: .rounded))
 
             Text("active sessions")
@@ -138,7 +204,7 @@ struct SmallWidgetView: View {
             HStack(spacing: 4) {
                 Image(systemName: "person.fill")
                     .font(.caption2)
-                Text("\(snapshot.activeAgents) agents")
+                Text("\(stats.activeAgents) agents")
                     .font(.caption2.monospacedDigit())
             }
             .foregroundStyle(.tertiary)
@@ -154,7 +220,8 @@ struct SmallWidgetView: View {
 // Shows: header (active sessions · active agents) + last 3 sessions.
 
 struct MediumWidgetView: View {
-    let snapshot: WidgetSnapshot
+    let stats: WidgetStats
+    let sessions: [WidgetSessionDTO]
 
     var body: some View {
         let dashboardURL = URL(string: "podium://dashboard")
@@ -166,7 +233,7 @@ struct MediumWidgetView: View {
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                 Spacer()
-                Text("\(snapshot.activeSessions) active · \(snapshot.activeAgents) agents")
+                Text("\(stats.activeSessions) active · \(stats.activeAgents) agents")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
@@ -176,15 +243,15 @@ struct MediumWidgetView: View {
                 .padding(.bottom, 6)
 
             // Last 3 sessions
-            let sessions = Array(snapshot.recentSessions.prefix(3))
-            if sessions.isEmpty {
+            let displaySessions = Array(sessions.prefix(3))
+            if displaySessions.isEmpty {
                 Text("No sessions yet.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             } else {
                 VStack(spacing: 5) {
-                    ForEach(sessions) { session in
+                    ForEach(displaySessions) { session in
                         SessionRowView(session: session)
                     }
                 }
@@ -200,10 +267,11 @@ struct MediumWidgetView: View {
 
 // MARK: - Large Widget  (systemLarge)
 //
-// Adds agent count in header + last 6 sessions.
+// Shows header + last 6 sessions.
 
 struct LargeWidgetView: View {
-    let snapshot: WidgetSnapshot
+    let stats: WidgetStats
+    let sessions: [WidgetSessionDTO]
 
     var body: some View {
         let dashboardURL = URL(string: "podium://dashboard")
@@ -216,10 +284,10 @@ struct LargeWidgetView: View {
                     .foregroundStyle(.secondary)
                 Spacer()
                 VStack(alignment: .trailing, spacing: 1) {
-                    Text("\(snapshot.activeSessions) active sessions")
+                    Text("\(stats.activeSessions) active sessions")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
-                    Text("\(snapshot.activeAgents) agents")
+                    Text("\(stats.activeAgents) agents")
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
                 }
@@ -230,15 +298,15 @@ struct LargeWidgetView: View {
                 .padding(.bottom, 6)
 
             // Last 6 sessions
-            let sessions = Array(snapshot.recentSessions.prefix(6))
-            if sessions.isEmpty {
+            let displaySessions = Array(sessions.prefix(6))
+            if displaySessions.isEmpty {
                 Text("No sessions yet.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             } else {
                 VStack(spacing: 6) {
-                    ForEach(sessions) { session in
+                    ForEach(displaySessions) { session in
                         SessionRowView(session: session)
                     }
                 }
@@ -255,7 +323,7 @@ struct LargeWidgetView: View {
 // MARK: - Session Row
 
 struct SessionRowView: View {
-    let session: WidgetSnapshot.WidgetSession
+    let session: WidgetSessionDTO
 
     var body: some View {
         let sessionURL = URL(string: "podium://session/\(session.id)")
@@ -305,7 +373,7 @@ struct SessionRowView: View {
 // MARK: - View Extension: widgetURL helper
 
 private extension View {
-    /// Applies `.widgetURL` when the URL is non-nil, otherwise returns unmodified view.
+    /// Applies `.widgetURL` when the URL is non-nil, otherwise returns the unmodified view.
     @ViewBuilder
     func applyWidgetURL(_ url: URL?) -> some View {
         if let url = url {
