@@ -116,18 +116,13 @@ struct Sidebar: View {
         List(selection: $selection) {
             Section {
                 HStack(spacing: 10) {
-                    PodiumLogo(size: 30)
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text("Podium")
-                            .font(.headline.weight(.bold))
-                        Text("WP-MEDIA")
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                            .tracking(1.5)
-                    }
+                    PodiumLogo(size: 32)
+                    Text("Podium")
+                        .font(.title3.weight(.bold))
                     Spacer()
                 }
-                .padding(.vertical, 4)
+                .padding(.leading, 8)
+                .padding(.vertical, 6)
                 .listRowSeparator(.hidden)
                 .selectionDisabled()
             }
