@@ -113,9 +113,11 @@ private struct MiniEventStrip: View {
                 }
                 .frame(height: 8)
 
-                // Current-position thumb
+                // Current-position thumb (guard against a single-event session,
+                // where count - 1 == 0 would divide by zero).
+                let denom = max(1, count - 1)
                 let thumbX = events.isEmpty ? 0 :
-                    (CGFloat(currentIndex) / CGFloat(count - 1)) * (geo.size.width - 12)
+                    (CGFloat(currentIndex) / CGFloat(denom)) * (geo.size.width - 12)
                 RoundedRectangle(cornerRadius: 2)
                     .fill(Color.white.opacity(0.9))
                     .frame(width: 3, height: 14)
@@ -163,7 +165,7 @@ private struct ReplayTransportBar: View {
                     in: 0...Double(max(1, replay.allEvents.count - 1)),
                     step: 1
                 )
-                .tint(.cyan)
+                .tint(Theme.accent)
 
                 Button { replay.stepForward() } label: {
                     Image(systemName: "forward.fill")
@@ -195,7 +197,7 @@ private struct ReplayTransportBar: View {
                     .font(.subheadline.weight(.semibold))
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(replay.isPlaying ? .orange : .cyan)
+                .tint(replay.isPlaying ? .orange : Theme.accent)
                 .keyboardShortcut(.space, modifiers: [])
 
                 Spacer()
@@ -334,7 +336,7 @@ struct SessionReplayView: View {
 
     @Environment(AppState.self) var state
     @State private var replay = ReplayState()
-    @State private var isLoading = false
+    @State private var hasLoaded = false
 
     private var events: [DashboardEvent] {
         (state.sessionDetailCache[sessionId]?.events ?? [])
@@ -343,9 +345,10 @@ struct SessionReplayView: View {
 
     var body: some View {
         Group {
-            if isLoading {
+            if !hasLoaded && replay.allEvents.isEmpty {
+                // First load only — never replace already-loaded content with a spinner.
                 LoadingView()
-            } else if events.isEmpty {
+            } else if replay.allEvents.isEmpty {
                 EmptyStateView(
                     icon: "clock.arrow.trianglehead.counterclockwise.rotate.90",
                     title: "No Events",
@@ -355,8 +358,12 @@ struct SessionReplayView: View {
                 replayContent
             }
         }
-        .task {
+        .task(id: sessionId) {
             await loadEvents()
+        }
+        .onChange(of: events) { _, newEvents in
+            // Keep the replay buffer in sync as live events stream in.
+            syncEvents(newEvents)
         }
         .onDisappear {
             replay.pause()
@@ -396,7 +403,10 @@ struct SessionReplayView: View {
                         let firstDate = replay.allEvents.first?.createdAt ?? Date()
                         let visible = Array(replay.visibleEvents)
 
-                        ForEach(Array(visible.enumerated()), id: \.element.id) { idx, event in
+                        // Index-based identity: DashboardEvent.id is an optional
+                        // Int and can be nil/duplicated, which would collapse rows
+                        // and break scrollTo. The prefix slice is stable by index.
+                        ForEach(Array(visible.enumerated()), id: \.offset) { idx, event in
                             let elapsed = event.createdAt.timeIntervalSince(firstDate)
                             let isCurrent = idx == visible.count - 1
 
@@ -405,7 +415,7 @@ struct SessionReplayView: View {
                                 isCurrent: isCurrent,
                                 elapsed: elapsed
                             )
-                            .id(event.id)
+                            .id(idx)
 
                             if idx < visible.count - 1 {
                                 Divider().opacity(0.3)
@@ -414,11 +424,9 @@ struct SessionReplayView: View {
                     }
                     .padding(Theme.cardPadding)
                     .glassCard()
-                    .onChange(of: replay.currentIndex) { _, _ in
-                        if let last = Array(replay.visibleEvents).last {
-                            withAnimation(.easeOut(duration: 0.3)) {
-                                proxy.scrollTo(last.id, anchor: .bottom)
-                            }
+                    .onChange(of: replay.currentIndex) { _, newIndex in
+                        withAnimation(.easeOut(duration: 0.3)) {
+                            proxy.scrollTo(newIndex, anchor: .bottom)
                         }
                     }
                 }
@@ -430,14 +438,33 @@ struct SessionReplayView: View {
     // MARK: - Data loading
 
     private func loadEvents() async {
-        isLoading = true
+        // Seed immediately from any cached events so the transport appears
+        // without waiting on the network (avoids a needless spinner).
+        syncEvents(events)
         await state.loadSessionDetail(sessionId)
-        isLoading = false
+        syncEvents(events)
+        hasLoaded = true
+    }
 
-        let sorted = events
-        if replay.allEvents.isEmpty && !sorted.isEmpty {
+    /// Reconcile the replay buffer with the latest sorted events.
+    /// On the first non-empty load we seed the buffer and reset to the start.
+    /// On later updates (live streaming) we append the new tail while keeping
+    /// the user's current scrub position, and snap to the end only if the user
+    /// was already at the end.
+    private func syncEvents(_ sorted: [DashboardEvent]) {
+        guard !sorted.isEmpty else { return }
+        if replay.allEvents.isEmpty {
             replay.allEvents = sorted
             replay.currentIndex = 0
+            return
+        }
+        guard sorted.count != replay.allEvents.count else { return }
+        let wasAtEnd = replay.currentIndex >= replay.allEvents.count - 1
+        replay.allEvents = sorted
+        if wasAtEnd {
+            replay.currentIndex = max(0, sorted.count - 1)
+        } else {
+            replay.currentIndex = min(replay.currentIndex, sorted.count - 1)
         }
     }
 }

@@ -9,7 +9,6 @@ enum SessionTab: String, CaseIterable {
     case replay        = "Replay"
     case conversation  = "Conversation"
     case thinking      = "Thinking"
-    case cost          = "Cost"
 }
 
 struct SessionDetailView: View {
@@ -58,13 +57,16 @@ struct SessionDetailView: View {
                         .padding(.horizontal, 24)
                         .padding(.bottom, 4)
 
-                    // Tab picker
-                    HStack(spacing: 0) {
-                        ForEach(SessionTab.allCases, id: \.self) { t in
-                            TabButton(title: t.rawValue, selected: tab == t) { tab = t }
+                    // Tab picker — scrolls horizontally if labels don't fit so
+                    // they never wrap or hyphenate ("Conversation", "Thinking").
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 0) {
+                            ForEach(SessionTab.allCases, id: \.self) { t in
+                                TabButton(title: t.rawValue, selected: tab == t) { tab = t }
+                            }
                         }
+                        .padding(.horizontal, 24)
                     }
-                    .padding(.horizontal, 24)
                     .padding(.bottom, 16)
 
                     Divider().opacity(0.3)
@@ -83,8 +85,6 @@ struct SessionDetailView: View {
                         ConversationTabView(sessionId: sessionId)
                     case .thinking:
                         ThinkingTabView(sessionId: sessionId)
-                    case .cost:
-                        CostTabView(sessionId: sessionId)
                     }
                 }
             } else {
@@ -178,10 +178,24 @@ private func openInFinder(_ cwd: String) {
 private func openInTerminal(_ cwd: String) {
     guard directoryExists(cwd) else { return }
     let dir = URL(fileURLWithPath: cwd)
-    let terminal = URL(fileURLWithPath: "/System/Applications/Utilities/Terminal.app")
+
+    // Resolve the user's preferred terminal. NSWorkspace.open(dir) alone would
+    // hand a directory to Finder, so we target a terminal app explicitly.
+    // iTerm2 wins when installed; otherwise fall back to Terminal.app.
+    let candidates = ["com.googlecode.iterm2", "com.apple.Terminal"]
+    let terminal = candidates
+        .lazy
+        .compactMap { NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0) }
+        .first
+
+    guard let terminal else {
+        // No known terminal installed — fall back to revealing in Finder.
+        NSWorkspace.shared.activateFileViewerSelecting([dir])
+        return
+    }
+
     NSWorkspace.shared.open([dir], withApplicationAt: terminal, configuration: .init()) { _, error in
         if error != nil {
-            // Fallback: open the directory with the default handler.
             NSWorkspace.shared.activateFileViewerSelecting([dir])
         }
     }
@@ -333,14 +347,16 @@ struct TabButton: View {
                 Text(title)
                     .font(.callout.weight(selected ? .semibold : .regular))
                     .foregroundStyle(selected ? .primary : .secondary)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
                 Rectangle()
-                    .fill(selected ? Color.cyan : .clear)
+                    .fill(selected ? Theme.accent : .clear)
                     .frame(height: 2)
                     .clipShape(Capsule())
             }
         }
         .buttonStyle(.plain)
-        .padding(.horizontal, 16)
+        .padding(.horizontal, 14)
         .animation(.easeInOut(duration: 0.15), value: selected)
     }
 }
@@ -396,7 +412,7 @@ struct SessionOverviewTab: View {
                         let total = tokens.input + tokens.output
                         LazyVGrid(columns: [.init(.flexible()), .init(.flexible())], spacing: 12) {
                             MiniStat(label: "Input", value: Theme.formatTokens(tokens.input), color: .cyan)
-                            MiniStat(label: "Output", value: Theme.formatTokens(tokens.output), color: Color(red: 0.6, green: 0.4, blue: 1))
+                            MiniStat(label: "Output", value: Theme.formatTokens(tokens.output), color: Theme.accent)
                             MiniStat(label: "Cache Read", value: Theme.formatTokens(tokens.cacheRead), color: .green)
                             MiniStat(label: "Cache Write", value: Theme.formatTokens(tokens.cacheWrite), color: .yellow)
                         }
@@ -404,7 +420,7 @@ struct SessionOverviewTab: View {
                         if total > 0 {
                             VStack(spacing: 8) {
                                 TokenBar(label: "Input", value: tokens.input, max: total, color: .cyan)
-                                TokenBar(label: "Output", value: tokens.output, max: total, color: Color(red: 0.6, green: 0.4, blue: 1))
+                                TokenBar(label: "Output", value: tokens.output, max: total, color: Theme.accent)
                                 TokenBar(label: "Cache Read", value: tokens.cacheRead, max: total, color: .green)
                             }
                         }
@@ -420,7 +436,6 @@ struct SessionOverviewTab: View {
                     }
 
                     // Cost — de-emphasized: just a small secondary line.
-                    // Full per-model breakdown lives in the dedicated Cost tab.
                     if let cost, cost.totalCost > 0 {
                         HStack(spacing: 6) {
                             Image(systemName: "dollarsign.circle")
@@ -445,7 +460,7 @@ struct SessionOverviewTab: View {
                             SectionHeader(title: "Top Tools Used")
                             MiniBarChart(
                                 items: stats.toolsUsed.prefix(10).map { ($0.toolName, $0.count) },
-                                color: Color(red: 0.6, green: 0.4, blue: 1)
+                                color: Theme.accent
                             )
                         }
                         .padding(Theme.cardPadding)
@@ -836,7 +851,7 @@ struct EventRow: View {
         if t.contains("error") || t.contains("fail") { color = .red }
         else if t.contains("stop") { color = .orange }
         else if t.contains("start") { color = .cyan }
-        else if t.contains("tool") { color = Color(red: 0.6, green: 0.4, blue: 1) }
+        else if t.contains("tool") { color = Theme.accent }
         else { color = .secondary }
     }
 
@@ -962,10 +977,10 @@ private struct ThinkingBlockView: View {
                 HStack(spacing: 6) {
                     Image(systemName: "brain")
                         .font(.caption.weight(.medium))
-                        .foregroundStyle(Color.indigo)
+                        .foregroundStyle(Theme.accent)
                     Text("Thinking")
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(Color.indigo)
+                        .foregroundStyle(Theme.accent)
                     Text("· \(text.count) chars")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
@@ -991,10 +1006,10 @@ private struct ThinkingBlockView: View {
                 .frame(maxHeight: 280)
             }
         }
-        .background(Color.indigo.opacity(0.08), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .background(Theme.accent.opacity(0.08), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .strokeBorder(Color.indigo.opacity(0.20), lineWidth: 0.75)
+                .strokeBorder(Theme.accent.opacity(0.20), lineWidth: 0.75)
         )
     }
 }
@@ -1004,7 +1019,7 @@ struct MessageBubbleView: View {
     @State private var expandedIdx: Int? = nil
 
     private var isUser: Bool { message.type == "user" }
-    private var roleColor: Color { isUser ? .accentColor : Color(red: 0.6, green: 0.4, blue: 1) }
+    private var roleColor: Color { isUser ? .accentColor : Theme.accent }
 
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
@@ -1048,9 +1063,9 @@ struct MessageBubbleView: View {
                         Image(systemName: expandedIdx == idx ? "chevron.up" : "chevron.down")
                     }
                     .font(.caption.weight(.medium))
-                    .foregroundStyle(Color(red: 0.6, green: 0.4, blue: 1))
+                    .foregroundStyle(Theme.accent)
                     .padding(.horizontal, 12).padding(.vertical, 8)
-                    .background(Color(red: 0.6, green: 0.4, blue: 1).opacity(0.1))
+                    .background(Theme.accent.opacity(0.1))
                     .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 }
                 .buttonStyle(.plain)
@@ -1159,89 +1174,5 @@ private struct ThinkingTabView: View {
             } catch {}
             isLoading = false
         }
-    }
-}
-
-// MARK: - Cost Tab
-
-struct CostTabView: View {
-    let sessionId: String
-    @Environment(AppState.self) var state
-
-    private var cost: CostResult? { state.sessionCostCache[sessionId] }
-
-    var body: some View {
-        Group {
-            if let c = cost {
-                ScrollView {
-                    VStack(spacing: 16) {
-                        // Total cost header card
-                        HStack(alignment: .top) {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Total Cost").font(.headline)
-                                Text(Theme.formatCost(c.totalCost))
-                                    .font(.system(size: 36, weight: .bold, design: .rounded))
-                                    .foregroundStyle(Color(red: 0.1, green: 0.82, blue: 0.48))
-                            }
-                            Spacer()
-                            VStack(alignment: .trailing, spacing: 6) {
-                                let totalInput = c.breakdown.reduce(0) { $0 + $1.inputTokens }
-                                let totalOutput = c.breakdown.reduce(0) { $0 + $1.outputTokens }
-                                Label(Theme.formatTokens(totalInput), systemImage: "arrow.down.circle")
-                                    .font(.callout).foregroundStyle(.cyan)
-                                Label(Theme.formatTokens(totalOutput), systemImage: "arrow.up.circle")
-                                    .font(.callout).foregroundStyle(Color(red: 0.6, green: 0.4, blue: 1))
-                            }
-                        }
-                        .padding(Theme.cardPadding)
-                        .glassCard()
-
-                        // Per-model breakdown
-                        if !c.breakdown.isEmpty {
-                            VStack(alignment: .leading, spacing: 0) {
-                                HStack {
-                                    Text("Model").frame(maxWidth: .infinity, alignment: .leading)
-                                    Text("Input").frame(width: 80, alignment: .trailing)
-                                    Text("Output").frame(width: 80, alignment: .trailing)
-                                    Text("Cost").frame(width: 70, alignment: .trailing)
-                                }
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.secondary)
-                                .padding(.horizontal, 16).padding(.vertical, 10)
-                                Divider().opacity(0.3)
-                                ForEach(c.breakdown) { item in
-                                    HStack {
-                                        VStack(alignment: .leading, spacing: 2) {
-                                            Text(item.model).font(.caption).lineLimit(1)
-                                            if let rule = item.matchedRule {
-                                                Text(rule).font(.caption2).foregroundStyle(.tertiary).lineLimit(1)
-                                            }
-                                        }
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                        Text(Theme.formatTokens(item.inputTokens))
-                                            .font(.caption.monospacedDigit()).frame(width: 80, alignment: .trailing)
-                                        Text(Theme.formatTokens(item.outputTokens))
-                                            .font(.caption.monospacedDigit()).frame(width: 80, alignment: .trailing)
-                                        Text(Theme.formatCost(item.cost))
-                                            .font(.caption.weight(.semibold).monospacedDigit()).frame(width: 70, alignment: .trailing)
-                                    }
-                                    .padding(.horizontal, 16).padding(.vertical, 10)
-                                    Divider().opacity(0.2)
-                                }
-                            }
-                            .glassCard()
-                        }
-                    }
-                    .padding(16)
-                }
-            } else {
-                EmptyStateView(
-                    icon: "dollarsign.circle",
-                    title: "Cost Unavailable",
-                    message: "Cost data is not available for this session."
-                )
-            }
-        }
-        .task(id: sessionId) { await state.loadSessionCost(sessionId) }
     }
 }

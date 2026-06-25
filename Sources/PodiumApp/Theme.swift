@@ -25,32 +25,48 @@ enum Theme {
 
     // MARK: Background gradients
 
+    // Deep navy — the gold comes from accents, not the background.
     static let darkBackgroundGradient = LinearGradient(
         colors: [
-            Color(red: 0.04, green: 0.04, blue: 0.13),
-            Color(red: 0.07, green: 0.03, blue: 0.17),
-            Color(red: 0.02, green: 0.07, blue: 0.14)
+            Color(red: 10/255, green: 12/255, blue: 20/255),
+            Color(red: 13/255, green: 16/255, blue: 26/255),
+            Color(red: 17/255, green: 20/255, blue: 32/255)
         ],
         startPoint: .topLeading,
         endPoint: .bottomTrailing
     )
 
+    // Soft white → blue/indigo.
     static let lightBackgroundGradient = LinearGradient(
         colors: [
-            Color(red: 0.85, green: 0.82, blue: 0.98),
-            Color(red: 0.88, green: 0.78, blue: 0.96),
-            Color(red: 0.82, green: 0.88, blue: 0.98)
+            Color(red: 0.95, green: 0.96, blue: 1.0),
+            Color(red: 0.93, green: 0.95, blue: 1.0),
+            Color(red: 0.96, green: 0.94, blue: 1.0)
         ],
         startPoint: .topLeading,
         endPoint: .bottomTrailing
     )
 
-    // MARK: Accent gradient
+    // MARK: Brand accent — WP Media gold (#FED23A)
+
+    static let accent = Color(red: 254/255, green: 210/255, blue: 58/255)        // #FED23A
+    static let accentHover = Color(red: 255/255, green: 223/255, blue: 90/255)   // #FFDF5A
 
     static let accentGradient = LinearGradient(
-        colors: [Color(red: 0.3, green: 0.6, blue: 1), Color(red: 0.15, green: 0.4, blue: 0.9)],
+        colors: [
+            Color(red: 1, green: 0.886, blue: 0.478),   // #FFE27A
+            accent,                                       // #FED23A
+            Color(red: 0.788, green: 0.635, blue: 0.153) // #C9A227
+        ],
         startPoint: .topLeading,
         endPoint: .bottomTrailing
+    )
+
+    // Gold gradient for chart bars.
+    static let chartGradient = LinearGradient(
+        colors: [accent, Color(red: 0.788, green: 0.635, blue: 0.153)],
+        startPoint: .leading,
+        endPoint: .trailing
     )
 
     // MARK: Formatting

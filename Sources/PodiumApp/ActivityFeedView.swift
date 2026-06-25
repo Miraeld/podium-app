@@ -1,44 +1,103 @@
 import SwiftUI
 
+// MARK: - Feed Filter
+
+/// Named filter categories. Each case carries a client-side predicate so the
+/// filter works regardless of what the backend accepts as a `type` query param.
+enum FeedFilter: String, CaseIterable, Identifiable {
+    case all         = "All"
+    case toolCall    = "Tool Call"
+    case agentStart  = "Agent Start"
+    case agentEnd    = "Agent End"
+    case error       = "Error"
+
+    var id: String { rawValue }
+
+    var color: Color? {
+        switch self {
+        case .all:        return nil
+        case .toolCall:   return .cyan
+        case .agentStart: return .green
+        case .agentEnd:   return .secondary
+        case .error:      return .red
+        }
+    }
+
+    /// Returns true if the event matches this filter.
+    func matches(_ event: DashboardEvent) -> Bool {
+        switch self {
+        case .all:
+            return true
+        case .toolCall:
+            // PreToolUse, PostToolUse, or any event with a toolName
+            let et = event.eventType.lowercased()
+            return et.contains("tooluse") || et.contains("tool_use") || event.toolName != nil
+        case .agentStart:
+            // SubagentStart, UserPromptSubmit, session/agent started events
+            let et = event.eventType.lowercased()
+            return et.contains("start") || et.contains("userprompt") || et.contains("user_prompt")
+        case .agentEnd:
+            // Stop, SubagentStop, End, Compaction (treated as a winding-down signal)
+            let et = event.eventType.lowercased()
+            return et.contains("stop") || et.contains("end") || et.contains("compaction")
+        case .error:
+            // PostToolUseFailure, anything with Error/Fail
+            let et = event.eventType.lowercased()
+            return et.contains("error") || et.contains("fail") || et.contains("failure")
+        }
+    }
+}
+
 struct ActivityFeedView: View {
     @Environment(AppState.self) var state
-    @State private var events: [DashboardEvent] = []
+    @State private var allEvents: [DashboardEvent] = []   // unfiltered backing store
     @State private var totalEvents = 0
     @State private var isLoading = false
-    @State private var filterType: String? = nil
+    @State private var selectedFilter: FeedFilter = .all
     @State private var expandedIdx: Int? = nil
     @State private var isPaused = false
     @State private var bufferedEvents: [DashboardEvent] = []
     @State private var sessionNames: [String: String] = [:]
 
+    /// Derived filtered list shown in the UI.
+    private var displayedEvents: [DashboardEvent] {
+        guard selectedFilter != .all else { return allEvents }
+        return allEvents.filter { selectedFilter.matches($0) }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             filterBar
             Divider().opacity(0.3)
-            if isLoading && events.isEmpty {
+            // Spinner only when we have no events yet; never hides a populated list
+            if isLoading && allEvents.isEmpty {
                 LoadingView()
-            } else if events.isEmpty {
+            } else if displayedEvents.isEmpty {
                 emptyState
             } else {
                 eventList
             }
         }
         .task { await loadEvents(reset: true) }
-        .onChange(of: filterType) { _, _ in Task { await loadEvents(reset: true) } }
+        .onChange(of: selectedFilter) { _, _ in
+            // No need to re-fetch; predicate is applied to allEvents in-memory.
+            expandedIdx = nil
+        }
         .onChange(of: state.recentEvents) { _, newEvents in
             guard let newest = newEvents.first else { return }
-            let alreadyPresent = events.contains { $0.id == newest.id }
+            let alreadyPresent = allEvents.contains { $0.id == newest.id }
             guard !alreadyPresent else { return }
-            let matchesFilter = filterType == nil || newest.eventType == filterType
-            guard matchesFilter else { return }
             if isPaused {
                 if !bufferedEvents.contains(where: { $0.id == newest.id }) {
                     bufferedEvents.insert(newest, at: 0)
                 }
             } else {
-                events.insert(newest, at: 0)
+                allEvents.insert(newest, at: 0)
                 totalEvents += 1
-                expandedIdx = expandedIdx.map { $0 + 1 }
+                // Shift expanded index only if the new event is visible under current filter
+                if selectedFilter.matches(newest) {
+                    expandedIdx = expandedIdx.map { $0 + 1 }
+                }
                 Task { await fetchSessionName(for: newest.sessionId) }
             }
         }
@@ -50,20 +109,14 @@ struct ActivityFeedView: View {
         HStack(spacing: 0) {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    FilterChip(label: "All", active: filterType == nil) {
-                        filterType = nil
-                    }
-                    FilterChip(label: "Tool Call", color: .cyan, active: filterType == "tool_call") {
-                        filterType = filterType == "tool_call" ? nil : "tool_call"
-                    }
-                    FilterChip(label: "Agent Start", color: .green, active: filterType == "agent_started") {
-                        filterType = filterType == "agent_started" ? nil : "agent_started"
-                    }
-                    FilterChip(label: "Agent End", color: .secondary, active: filterType == "agent_completed") {
-                        filterType = filterType == "agent_completed" ? nil : "agent_completed"
-                    }
-                    FilterChip(label: "Error", color: .red, active: filterType == "error") {
-                        filterType = filterType == "error" ? nil : "error"
+                    ForEach(FeedFilter.allCases) { filter in
+                        FilterChip(
+                            label: filter.rawValue,
+                            color: filter.color ?? .secondary,
+                            active: selectedFilter == filter
+                        ) {
+                            selectedFilter = filter
+                        }
                     }
                 }
                 .padding(.horizontal, 16)
@@ -80,9 +133,9 @@ struct ActivityFeedView: View {
     private var pauseButton: some View {
         Button {
             if isPaused {
-                // Resume: flush buffer
-                let fresh = bufferedEvents.filter { e in !events.contains { $0.id == e.id } }
-                events.insert(contentsOf: fresh, at: 0)
+                // Resume: flush buffer into allEvents
+                let fresh = bufferedEvents.filter { e in !allEvents.contains { $0.id == e.id } }
+                allEvents.insert(contentsOf: fresh, at: 0)
                 totalEvents += fresh.count
                 bufferedEvents = []
                 isPaused = false
@@ -117,11 +170,11 @@ struct ActivityFeedView: View {
 
     @ViewBuilder
     private var emptyState: some View {
-        if let active = filterType {
+        if selectedFilter != .all {
             EmptyStateView(
                 icon: "bolt.slash",
                 title: "No Results",
-                message: "No \(active) events found."
+                message: "No \(selectedFilter.rawValue) events found."
             )
         } else {
             EmptyStateView(
@@ -137,7 +190,7 @@ struct ActivityFeedView: View {
     private var eventList: some View {
         ScrollView {
             LazyVStack(spacing: 0) {
-                ForEach(Array(events.enumerated()), id: \.offset) { idx, event in
+                ForEach(Array(displayedEvents.enumerated()), id: \.offset) { idx, event in
                     ActivityEventRow(
                         event: event,
                         isExpanded: expandedIdx == idx,
@@ -154,16 +207,16 @@ struct ActivityFeedView: View {
                     )
                     Divider().opacity(0.2)
                 }
-                let hasMore = events.count < totalEvents
+                let hasMore = allEvents.count < totalEvents
                 if hasMore {
-                    Button("Load more… (\(totalEvents - events.count) remaining)") {
+                    Button("Load more… (\(totalEvents - allEvents.count) remaining)") {
                         Task { await loadMore() }
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(.cyan)
                     .padding()
                 }
-                if isLoading && !events.isEmpty {
+                if isLoading && !allEvents.isEmpty {
                     ProgressView().tint(.cyan).padding()
                 }
             }
@@ -183,11 +236,12 @@ struct ActivityFeedView: View {
 
     private func loadEvents(reset: Bool) async {
         isLoading = true
-        if reset { events = []; expandedIdx = nil }
+        if reset { allEvents = []; expandedIdx = nil }
         defer { isLoading = false }
         do {
-            let resp = try await state.fetchEvents(type: filterType, limit: 50, offset: 0)
-            events = resp.events
+            // Always fetch without a type filter; filtering is applied client-side
+            let resp = try await state.fetchEvents(type: nil, limit: 50, offset: 0)
+            allEvents = resp.events
             totalEvents = resp.total
             await fetchSessionNames(for: resp.events)
         } catch {}
@@ -197,10 +251,10 @@ struct ActivityFeedView: View {
         isLoading = true
         defer { isLoading = false }
         do {
-            let resp = try await state.fetchEvents(type: filterType, limit: 50, offset: events.count)
-            let newIds = Set(events.compactMap(\.id))
+            let resp = try await state.fetchEvents(type: nil, limit: 50, offset: allEvents.count)
+            let newIds = Set(allEvents.compactMap(\.id))
             let fresh = resp.events.filter { !newIds.contains($0.id ?? -1) }
-            events.append(contentsOf: fresh)
+            allEvents.append(contentsOf: fresh)
             totalEvents = resp.total
             await fetchSessionNames(for: fresh)
         } catch {}
@@ -224,13 +278,21 @@ struct ActivityFeedView: View {
 // MARK: - Event Type Color
 
 private func eventTypeColor(_ type: String) -> Color {
-    switch type {
-    case "tool_call": return .cyan
-    case "error": return .red
-    case "agent_started": return .green
-    case "agent_completed": return .secondary
-    default: return .purple
+    let et = type.lowercased()
+    if et.contains("error") || et.contains("fail") || et.contains("failure") {
+        return .red
     }
+    if et.contains("tooluse") || et.contains("tool_use") {
+        return .cyan
+    }
+    if et.contains("start") || et.contains("userprompt") || et.contains("user_prompt") {
+        return .green
+    }
+    if et.contains("stop") || et.contains("end") || et.contains("compaction") {
+        return .secondary
+    }
+    // Default decorative color: brand gold instead of purple
+    return Theme.accent
 }
 
 // MARK: - Activity Event Row

@@ -68,7 +68,7 @@ struct AnalyticsView: View {
                         DailyChartCard(
                             title: "Daily Events",
                             data: filteredEvents,
-                            color: Color(red: 0.6, green: 0.4, blue: 1)
+                            color: Theme.accent
                         )
                     }
 
@@ -90,7 +90,7 @@ struct AnalyticsView: View {
                         MiniStat(
                             label: "Total Subagents",
                             value: "\(analytics.totalSubagents)",
-                            color: Color(red: 0.6, green: 0.4, blue: 1)
+                            color: Theme.accent
                         )
                     }
                 }
@@ -171,7 +171,7 @@ struct AnalyticsSummaryRow: View {
             SummaryTile(
                 label: "Output Tokens",
                 value: Theme.formatTokens(analytics.tokens.totalOutput),
-                color: Color(red: 0.6, green: 0.4, blue: 1)
+                color: Theme.accent
             )
 
             // Cache Hits
@@ -231,7 +231,7 @@ struct TokenOverviewCard: View {
 
             LazyVGrid(columns: [.init(.flexible()), .init(.flexible()), .init(.flexible()), .init(.flexible())], spacing: 12) {
                 TokenStat(label: "Input", value: tokens.totalInput, color: .cyan)
-                TokenStat(label: "Output", value: tokens.totalOutput, color: Color(red: 0.6, green: 0.4, blue: 1))
+                TokenStat(label: "Output", value: tokens.totalOutput, color: Theme.accent)
                 TokenStat(label: "Cache Read", value: tokens.totalCacheRead, color: .green)
                 TokenStat(label: "Cache Write", value: tokens.totalCacheWrite, color: .yellow)
             }
@@ -239,7 +239,7 @@ struct TokenOverviewCard: View {
             if total > 0 {
                 VStack(spacing: 10) {
                     TokenBar(label: "Input",       value: tokens.totalInput,      max: total, color: .cyan)
-                    TokenBar(label: "Output",      value: tokens.totalOutput,     max: total, color: Color(red: 0.6, green: 0.4, blue: 1))
+                    TokenBar(label: "Output",      value: tokens.totalOutput,     max: total, color: Theme.accent)
                     TokenBar(label: "Cache Read",  value: tokens.totalCacheRead,  max: total, color: .green)
                     TokenBar(label: "Cache Write", value: tokens.totalCacheWrite, max: total, color: .yellow)
                 }
@@ -359,12 +359,7 @@ struct ToolUsageCard: View {
                             x: .value("Count", item.count),
                             y: .value("Tool", item.toolName)
                         )
-                        .foregroundStyle(
-                            LinearGradient(
-                                colors: [Color(red: 0.6, green: 0.4, blue: 1), Color(red: 0.3, green: 0.6, blue: 1)],
-                                startPoint: .leading, endPoint: .trailing
-                            )
-                        )
+                        .foregroundStyle(Theme.chartGradient)
                         .cornerRadius(4)
                         .annotation(position: .trailing) {
                             Text("\(item.count)")
@@ -552,10 +547,10 @@ struct ActivityHeatmapCard: View {
     private func heatColor(_ count: Int) -> Color {
         switch count {
         case 0:        return Color.primary.opacity(0.08)
-        case 1...2:    return Color.cyan.opacity(0.4)
-        case 3...5:    return Color(red: 0.3, green: 0.5, blue: 1).opacity(0.7)
-        case 6...9:    return Color(red: 0.5, green: 0.3, blue: 1)
-        default:       return Color(red: 0.7, green: 0.2, blue: 1)
+        case 1...2:    return Theme.accent.opacity(0.25)
+        case 3...5:    return Theme.accent.opacity(0.55)
+        case 6...9:    return Theme.accent.opacity(0.80)
+        default:       return Theme.accent
         }
     }
 
