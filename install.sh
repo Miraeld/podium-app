@@ -104,6 +104,12 @@ if [ "$WIDGET" -eq 1 ]; then
   ditto "$BUILT_APP" "$APP_BUNDLE"
   /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister \
     -f "$APP_BUNDLE" 2>/dev/null || true
+  # Remove the just-built copy so only /Applications/Podium.app owns the
+  # podium:// scheme — otherwise LaunchServices may launch a duplicate instance
+  # (e.g. when a widget is tapped) instead of focusing the installed app.
+  /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister \
+    -u "$BUILT_APP" 2>/dev/null || true
+  rm -rf "$BUILT_APP"
   echo "✓ Installed (with widget): $APP_BUNDLE"
   if [ "$OPEN_AFTER" -eq 1 ]; then
     echo "▶ Launching…"
