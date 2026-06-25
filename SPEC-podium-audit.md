@@ -1421,3 +1421,39 @@ All items below verified in codebase as of `git log` head on `develop`.
 ### Watcher
 
 A background watcher (`/tmp/podium_watcher.sh`, PID tracked in `/tmp/podium_watcher.log`) polls `Sources/` every 20s, verifies `swift build`, and auto-commits any new changes from parallel agent instances.
+
+---
+
+## 10. Native Superpowers + Run + Widget — Technical Notes (feature/native-superpowers, merged to develop)
+
+Implemented in an isolated worktree (`PodiumSwiftApp-native`, branch `feature/native-superpowers`), then merged into `develop` (fast-forward). All cost/$ omitted per product decision.
+
+### 10.1 Run Claude subprocess (`RunView.swift`, `RunState.swift`, `RunModels.swift`)
+- Spawn a `claude` run from inside the app: working-dir picker (`NSOpenPanel`), multiline prompt, Conversation/One-shot (headless) mode, Stop, follow-up input.
+- **Streaming via dedicated WebSocket** — `RunState` owns its own `WebSocketClient` (separate from `AppState`'s), connects to `ws://host:port/ws`, filters `run_stream` / `run_status` by run id. One catch-up `GET /api/run/:id?envelopes=1` on select and on WS reconnect closes gaps. No polling.
+- `RunEnvelope` has a custom `Decodable` that normalizes Anthropic stream-json envelopes into typed segments (`.text`, `.toolUse`, `.toolResult`, `.system`, `.result`); a recursive `JSONValue` flattens arbitrary tool inputs. Undecodable blocks are skipped, never throw.
+- `RunHandle.startedAt`/`endedAt` are **epoch milliseconds** (Double), not ISO dates — decoded as Double, converted with `Date(timeIntervalSince1970:)`.
+- API: `PodiumAPI` gained `runs()`, `runHistory()`, `run(_:)`, `createRun(...)`, `sendRunMessage(...)`, `killRun(...)` + `postDecodable<T>` and `delete` helpers. Nav: `.run` case, ⌘9, "Run" sidebar row (terminal icon).
+
+### 10.2 CoreSpotlight (`SpotlightIndexer.swift`)
+- `SpotlightIndexer` actor indexes sessions (domain `com.gaelrobin.PodiumApp.sessions`, activity `com.gaelrobin.PodiumApp.viewSession`). Each `CSSearchableItem` carries an `NSUserActivity` with `userInfo["sessionId"]` for tap-to-open. Cost omitted from descriptions.
+- `AppState` hooks: `index(sessions)` after `refresh()`, `indexOne(session)` in `upsertSession` — both via `Task.detached(.background)`.
+- Works in the current unsigned build.
+
+### 10.3 App Intents / Siri (`PodiumIntents.swift`, `IntentAPIClient.swift`)
+- `GetActiveSessionsIntent`, `ListRecentSessionsIntent`, `OpenSessionIntent` + `PodiumShortcuts: AppShortcutsProvider`. The cost intent from the spec was deliberately omitted.
+- `IntentAPIClient` is a standalone client (own URLSession, reads host/port from UserDefaults). Registered via `.task { PodiumShortcuts.updateAppShortcutParameters() }`.
+
+### 10.4 Deep linking (`PodiumApp.swift`, `run.sh`, `install.sh`)
+- `podium://session/{id}` and `podium://dashboard` handled via `onOpenURL`; `onContinueUserActivity` routes Spotlight taps. Both set `appState.selectedSessionId` + `appState.navigationRequest`.
+- URL scheme + `NSUserActivityTypes` added to BOTH `run.sh` and `install.sh` Info.plist heredocs (install.sh is the `/Applications` installer; ad-hoc signed — deep links + Spotlight + Intents work; widgets do not).
+
+### 10.5 Widget — FREE localhost path (`PodiumWidget/`, `project.yml`, `MIGRATION.md`)
+- Widget does NOT use an App Group (that needs the paid Developer Program). Instead its `TimelineProvider` fetches `GET /api/stats` + `/api/sessions?limit=6` from `localhost:4820` directly (hardcoded default). Entitlements: `app-sandbox` + `network.client` (both free on a personal Apple ID).
+- Graceful "server not running" state on fetch failure. `podium://` deep links on rows. ~5-min timeline refresh.
+- **Not built by SPM/`run.sh`** — requires the Xcode step in `MIGRATION.md`: `brew install xcodegen && xcodegen generate`, open in Xcode, set a free Personal Team on both targets, ⌘R. No App Group, no $99.
+- `Sources/PodiumApp/WidgetData.swift` (App-Group helper) is now unused by the widget — harmless dead code; the app's `WidgetStore.save` calls fall back to standard defaults. Can be removed later.
+
+### 10.6 Merge notes
+- Conflict was only `ContentView.swift` (wave5 added `.configExplorer` / ⌘9; this branch added `.run` / ⌘9). Resolved by keeping BOTH: Run = ⌘9, CC Config = ⌘0.
+- Known remaining cleanup: notification dedup guard (pre-existing); `WidgetData.swift` dead code; widget host/port is hardcoded localhost:4820 (App Group + paid account would allow configurable host + live push).

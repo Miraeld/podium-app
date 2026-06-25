@@ -13,7 +13,7 @@ All three features require entitlements and extension targets that are **impossi
 3. Add an **App Group** entitlement: `group.com.wpMedia.podium` (needed for widget data sharing)
 4. Move all `Sources/PodiumApp/*.swift` files into the Xcode app target
 5. Keep `Package.swift` only for local development builds if desired, but Xcode is the primary build system going forward
-6. Minimum deployment target: **macOS 14.0** (already the Package.swift target)
+6. Minimum deployment target: **macOS 26.0** (already the Package.swift target)
 
 ---
 
