@@ -78,7 +78,12 @@ if [ "$WIDGET" -eq 1 ]; then
   fi
 
   echo "▶ Building with widget (xcodebuild · team $TEAM)…"
-  DERIVED="$SCRIPT_DIR/.build/_xcode"
+  # Build OUTSIDE the project dir: ~/Desktop is iCloud-synced, which stamps
+  # com.apple.FinderInfo on build products and makes codesign fail with
+  # "resource fork, Finder information, or similar detritus not allowed".
+  # ~/Library/Caches is not synced.
+  DERIVED="$HOME/Library/Caches/Podium-xcodebuild"
+  mkdir -p "$DERIVED"
   xcodebuild \
     -project "$SCRIPT_DIR/Podium.xcodeproj" \
     -scheme "$APP_NAME" \
