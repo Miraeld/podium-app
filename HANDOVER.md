@@ -94,7 +94,13 @@ gate between phases.
   then go idle WITHOUT sending their report — ping them via SendMessage before
   assuming death or re-dispatching. /Applications/Podium.app (old install) can
   shadow the dev bundle when UI-testing — check `ps` first. Session-limit
-  errors can kill an Agent spawn with 0 tokens used — just re-dispatch. The
+  errors can kill an Agent spawn with 0 tokens used — just re-dispatch. A USER
+  INTERRUPT of the main conversation also kills running background agents
+  (SendMessage answers "stopped by the user, won't be resumed") — relaunch via
+  a fresh Agent call. Liveness check: stat the RESOLVED transcript path twice
+  ~20s apart (tasks/*.output is a symlink whose own 150-byte size is
+  meaningless); flat mtime + no new commits = dead/stalled → ping, then
+  relaunch. The
   user's live plugin data (Docker `podium` container, port 4820) bind-mounts
   ~/.claude/podium/data/dashboard.db + vapid-keys.json — NEVER point tests at
   it; the Swift server is schema-compatible and will take over that DB at
