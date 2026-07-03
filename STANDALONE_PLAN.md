@@ -847,6 +847,12 @@ Product frame (binding for all UI/UX tasks): Podium will be advertised inside
 GroupOne as a standalone product — **useful, easy to use, not info-bloated, sexy**.
 Linux must get the macOS niceties wherever possible (see №2).
 
+**The objection to kill (Gaël's manager, blocking the plugin today): "too
+complicated."** The acceptance bar for P5.1 and P6.x is therefore: download →
+open → your agents appear live. Zero manual steps — hooks self-install, history
+self-imports, defaults are right. Any step that needs explaining in a README is
+a defect against this goal, not a docs task.
+
 1. **Pre-migration DB backup** — parked, low priority (single user today; still
    cheap insurance for Gaël's own plugin-era dashboard.db — revisit before first
    GroupOne distribution).
