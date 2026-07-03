@@ -1,8 +1,19 @@
 # Handover prompt — paste this into a fresh Claude session to continue
 
 > Keep this file updated: the orchestrator refreshes the "Live state" section
-> after every task completion. Last update: 2026-07-04 ~01:40 CEST (Fable 5,
-> session 2, second limit approaching — written for a cold session-3 pickup).
+> after every task completion. Last update: 2026-07-04 ~01:55 CEST (Fable 5,
+> session 3 — reconciled session 2's death, completion agent in flight).
+>
+> SESSION-3 RECONCILIATION (supersedes "In flight" below): tree compiles again
+> (orchestrator fixed 2 access-level errors in WebPushEncryptor.swift), 324/324
+> tests green, P3.2's orphaned test files committed (88dd7a8). A single
+> completion agent now owns BOTH remaining lanes + all main.swift wiring debt:
+> P3.2 audit vs its §6 prompt, Import+Push mounts, ReimportRunner adapter,
+> PushService/Notifier construction, and P4.2's entire missing test suite
+> (RFC 8291 vectors etc.). If IT died: same recovery — audit its owned paths
+> (everything, it has the whole checkout), swift test, finish the list above.
+> After it lands: Phase-3 hardening gate (everything since 38b08ba), then
+> P4.3 ∥ P4.4, then P5.1.
 
 ## Paste-ready prompt
 
