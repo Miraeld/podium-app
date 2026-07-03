@@ -45,7 +45,7 @@ public enum WebDistResolver {
 /// and doesn't match a file on disk.
 public struct StaticFileHandler<Context: RequestContext>: RouterMiddleware {
     public let distDirectory: String
-    private let fileManager = FileManager.default
+    private var fileManager: FileManager { .default }
 
     public init(distDirectory: String) {
         self.distDirectory = distDirectory
@@ -130,7 +130,17 @@ public struct StaticFileHandler<Context: RequestContext>: RouterMiddleware {
 
     // MARK: - Media type
 
-    private static let extensionMediaTypes: [String: String] = [
+    private func mediaType(forPath filePath: String) -> String {
+        let ext = (filePath as NSString).pathExtension.lowercased()
+        return StaticFileExtensionMediaTypes.map[ext] ?? "application/octet-stream"
+    }
+}
+
+/// Extension -> media type lookup, hoisted out of the generic
+/// `StaticFileHandler<Context>` type because Swift doesn't support static
+/// stored properties on generic types.
+enum StaticFileExtensionMediaTypes {
+    static let map: [String: String] = [
         "html": "text/html; charset=utf-8",
         "js": "text/javascript; charset=utf-8",
         "mjs": "text/javascript; charset=utf-8",
@@ -150,9 +160,4 @@ public struct StaticFileHandler<Context: RequestContext>: RouterMiddleware {
         "map": "application/json",
         "webmanifest": "application/manifest+json",
     ]
-
-    private func mediaType(forPath filePath: String) -> String {
-        let ext = (filePath as NSString).pathExtension.lowercased()
-        return Self.extensionMediaTypes[ext] ?? "application/octet-stream"
-    }
 }
