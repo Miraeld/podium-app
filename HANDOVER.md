@@ -1,8 +1,9 @@
 # Handover prompt — paste this into a fresh Claude session to continue
 
 > Keep this file updated: the orchestrator refreshes the "Live state" section
-> after every task completion. Last update: 2026-07-03 ~22:20 CEST (Fable 5,
-> session 2 — nearing its limit; written for a cold session-3 pickup).
+> after every task completion. Last update: 2026-07-04 ~00:40 CEST (Fable 5,
+> session 2 resumed after the 23:10 limit reset; all 3 lanes reconciled and
+> re-dispatched — see run log "🟦 reconcile #2" for what each lane resumes from).
 
 ## Paste-ready prompt
 
