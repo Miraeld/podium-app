@@ -83,6 +83,23 @@ public enum CostCalculator {
         calculate(tokenRows: tokenRows, pricingRules: pricingRules).totalCost
     }
 
+    /// Port of `calculateDailyCosts(dailyTokenRows, pricingRules)`
+    /// (pricing.js lines 54–69): groups `(date, per-model row)` pairs by
+    /// date, costs each date's rows independently via `calculate`, and
+    /// returns them sorted ascending by date string (matches Node's
+    /// `[...rowsByDate.entries()].sort(([a], [b]) => a.localeCompare(b))` —
+    /// ISO `YYYY-MM-DD` strings sort identically under plain `Comparable`
+    /// and `localeCompare`).
+    public static func dailyCosts(_ rows: [DailyCostTokenRow], pricingRules: [ModelPricing]) -> [DailyCost] {
+        var byDate: [String: [CostTokenRow]] = [:]
+        for entry in rows {
+            byDate[entry.date, default: []].append(entry.row)
+        }
+        return byDate.keys.sorted().map { date in
+            DailyCost(date: date, cost: calculate(tokenRows: byDate[date] ?? [], pricingRules: pricingRules).totalCost)
+        }
+    }
+
     /// `model_pattern` LIKE pattern → regex, matching Node's
     /// `new RegExp("^" + pattern.replace(/%/g, ".*") + "$")` exactly.
     private static func matches(pattern: String, model: String) -> Bool {

@@ -261,6 +261,31 @@ public enum HookInstaller {
         hasHookMatching(settings, markers: allActiveMarkers)
     }
 
+    /// Port of settings.js's `getHookStatus()`: per-event installed flags for
+    /// the Settings page. Uses `hookEvents` (the 8 events this installer
+    /// actually registers) rather than Node's stale 7-event list
+    /// (`PreToolUse/PostToolUse/Stop/SubagentStop/Notification/
+    /// SessionStart/SessionEnd`, which predates `UserPromptSubmit`/
+    /// `PostToolUseFailure`/`SubagentStart` support and includes `Stop`/
+    /// `Notification`, never registered by `install()`) — the React
+    /// Settings page just iterates `Object.entries(hooks)` generically, so
+    /// this is a compatible, more-accurate substitution. `installed` is true
+    /// only when every event has an active entry. Never throws: an
+    /// unreadable/missing settings file reports everything as not installed,
+    /// matching Node's `catch` fallback.
+    public static func hookStatus(settingsPath: String = HookInstaller.defaultSettingsPath()) -> (installed: Bool, hooks: [String: Bool]) {
+        guard let settings = try? readSettings(at: settingsPath) else {
+            return (false, Dictionary(uniqueKeysWithValues: hookEvents.map { ($0, false) }))
+        }
+        let allHooks = settings["hooks"] as? [String: Any]
+        var perEvent: [String: Bool] = [:]
+        for event in hookEvents {
+            let entries = (allHooks?[event] as? [[String: Any]]) ?? []
+            perEvent[event] = entries.contains { entryMatches($0, markers: allActiveMarkers) }
+        }
+        return (perEvent.values.allSatisfy { $0 }, perEvent)
+    }
+
     // MARK: - Public operations
 
     /// `install.mjs --check` equivalent — purely read-only, no binary copy.
