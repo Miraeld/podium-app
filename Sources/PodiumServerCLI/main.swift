@@ -74,6 +74,7 @@ struct PodiumServerCLI: AsyncParsableCommand {
                     AnalyticsRouterMount.self,
                     SearchRouterMount.self,
                     HooksRouterMount.self,
+                    WorkflowsRouterMount.self,
                 ],
                 logger: logger
             )
