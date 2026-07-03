@@ -71,6 +71,7 @@ public enum PricingRouterMount: RouterMount {
     /// `decodeURIComponent(req.params.pattern)`.
     private static func delete(_ req: Request, _ ctx: ServerRequestContext, context: ServerContext) async throws -> JSONResponse {
         let pattern = try ctx.parameters.require("pattern")
+        FileHandle.standardError.write("DEBUG pattern=\(pattern)\n".data(using: .utf8)!)
         guard try context.store.getPricing(pattern: pattern) != nil else {
             return try JSONResponse(status: .notFound, CodedErrorResponse(code: "NOT_FOUND", message: "Pricing rule not found"))
         }
