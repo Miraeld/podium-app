@@ -749,4 +749,37 @@ final class IngestEngineTests: XCTestCase {
         let mainAgent = try engine.store.getAgent(id: engine.mainAgentId(sessionId))
         XCTAssertEqual(mainAgent?.status.knownValue, .working)
     }
+
+    // MARK: - P3.1: real TranscriptCacheTokenSource wiring (not the stub)
+
+    /// Every other token-usage test in this file injects `StubTranscriptTokenSource`
+    /// with pre-canned results — useful for exercising the engine's own logic
+    /// (baseline/compaction handling) in isolation, but it can't catch a
+    /// wiring mistake between `IngestEngine` and the *real* JSONL parser.
+    /// This is the one test that goes through the actual production path —
+    /// `TranscriptCacheTokenSource` reading a real fixture file from disk —
+    /// the same path `HooksRouter` wires in. It exists specifically to guard
+    /// against a regression of the known Podium backend bug (memory:
+    /// `feedback_ui_bugs_wave4.md`) where `token_usage` silently stays at 0
+    /// because the extraction seam wasn't actually hooked up end-to-end.
+    func testRealTranscriptCacheTokenSourceEndToEndPopulatesNonZeroTokenUsage() throws {
+        let transcriptPath = tempDir.appendingPathComponent("real-transcript.jsonl").path
+        let lines = [
+            """
+            {"type":"assistant","timestamp":"2026-07-03T10:00:00.000Z","message":{"model":"claude-sonnet-4-5","content":[{"type":"text","text":"hi"}],"usage":{"input_tokens":1500,"output_tokens":300,"cache_read_input_tokens":50,"cache_creation_input_tokens":10}}}
+            """,
+        ]
+        try (lines.joined(separator: "\n") + "\n").write(toFile: transcriptPath, atomically: true, encoding: .utf8)
+
+        let engine = try makeEngine(transcriptSource: TranscriptCacheTokenSource())
+        let sessionId = "sess-real-tokens"
+        engine.process(hookType: "SessionStart", data: HookFixture.sessionStart(sessionId: sessionId, transcriptPath: transcriptPath))
+
+        let tokens = try XCTUnwrap(engine.store.getTokensBySession(sessionId: sessionId).first)
+        XCTAssertEqual(tokens.model, "claude-sonnet-4-5")
+        XCTAssertEqual(tokens.inputTokens, 1500, "token_usage must reflect the real transcript's usage — not silently stay at 0")
+        XCTAssertEqual(tokens.outputTokens, 300)
+        XCTAssertEqual(tokens.cacheReadTokens, 50)
+        XCTAssertEqual(tokens.cacheWriteTokens, 10)
+    }
 }
