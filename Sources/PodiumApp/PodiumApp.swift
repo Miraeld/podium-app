@@ -30,15 +30,21 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 struct PodiumApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var delegate
     @State private var appState = AppState()
+    @AppStorage("appearance_mode") private var appearanceMode = AppearanceMode.system.rawValue
 
     init() {
         NSApplication.shared.setActivationPolicy(.regular)
+    }
+
+    private var preferredColorScheme: ColorScheme? {
+        AppearanceMode(rawValue: appearanceMode)?.colorScheme
     }
 
     var body: some Scene {
         WindowGroup("Podium") {
             ContentView()
                 .environment(appState)
+                .preferredColorScheme(preferredColorScheme)
                 .task { await appState.start() }
                 .task { PodiumShortcuts.updateAppShortcutParameters() }
                 .onOpenURL { url in

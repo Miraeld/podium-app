@@ -76,21 +76,21 @@ public struct TranscriptMessage: Codable, Equatable, Sendable {
     /// Per-message token usage, as recorded directly on the transcript
     /// entry by Claude Code. Field names are the raw Anthropic Messages API
     /// usage keys (`cache_read_input_tokens`, `cache_creation_input_tokens`)
-    /// — NOT the DB's `cache_read_tokens`/`cache_write_tokens` naming, so
-    /// this needs explicit `CodingKeys` rather than relying on
-    /// `.convertFromSnakeCase` + a renamed Swift property.
+    /// — NOT the DB's `cache_read_tokens`/`cache_write_tokens` naming.
+    ///
+    /// IMPORTANT: `PodiumJSON.decoder`/`.encoder` already apply
+    /// `.convertFromSnakeCase`/`.convertToSnakeCase` globally, which convert
+    /// the wire key to camelCase *before* matching against `CodingKeys` raw
+    /// values — so `CodingKeys` here must use the camelCase Swift property
+    /// names (the implicit default), NOT the original snake_case wire
+    /// strings, or decoding silently fails to find every key. Explicit
+    /// snake_case `CodingKeys` are only correct for types decoded with a
+    /// plain (non-converting) `JSONDecoder`.
     public struct Usage: Codable, Equatable, Sendable {
         public var inputTokens: Int
         public var outputTokens: Int
         public var cacheReadInputTokens: Int?
         public var cacheCreationInputTokens: Int?
-
-        enum CodingKeys: String, CodingKey {
-            case inputTokens = "input_tokens"
-            case outputTokens = "output_tokens"
-            case cacheReadInputTokens = "cache_read_input_tokens"
-            case cacheCreationInputTokens = "cache_creation_input_tokens"
-        }
 
         public init(
             inputTokens: Int,
