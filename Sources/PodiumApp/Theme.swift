@@ -141,6 +141,7 @@ extension View {
         modifier(GlassCardModifier(radius: radius))
     }
 
+    @available(macOS 26.0, *)
     func glassSurface() -> some View {
         glassEffect()
     }
