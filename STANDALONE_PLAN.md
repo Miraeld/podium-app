@@ -246,8 +246,8 @@ Legend: ⬜ todo · 🟦 in progress · ✅ done · ⚠️ done with caveats (se
 | **P3.1** | Transcript engine: JSONL parser, cache, GET transcript endpoints, token reconcile | P2.2 | 🟦 |
 | **P3.2** | Legacy import + rescan/scan-path/upload + periodic sweeps | P3.1, P2.3 | ⬜ |
 | **P3.3** | Pricing + cost endpoints + settings router (info/clear/reimport/cleanup/export/claude-home) | P2.2 | ⬜ |
-| **P3.4** | Workflows API (port workflows.js: tree, swimLanes, patterns) | P2.2 | 🟦 |
-| **P4.1** | Run-spawner: spawn claude CLI, stream-json, run router, WS run_* messages | P2.1 | ⬜ |
+| **P3.4** | Workflows API (port workflows.js: tree, swimLanes, patterns) | P2.2 | ✅ |
+| **P4.1** | Run-spawner: spawn claude CLI, stream-json, run router, WS run_* messages | P2.1 | 🟦 |
 | **P4.2** | Web-push (VAPID via swift-crypto) + push router + notify-on-end | P2.1 | ⬜ |
 | **P4.3** | cc-config explorer + FS watcher + updates router + session export/import bundles | P2.2 | ⬜ |
 | **P4.4** | Diagnostics: /api/diagnostics (hook latency, last event, log ring buffer) + native panel + web note | P2.3 | ⬜ |
@@ -923,6 +923,7 @@ Explicitly rejected: iOS companion, Raycast/Alfred, session-diff views.
 | 2026-07-03 | P2.3 ingestion engine | Sonnet 5 | ✅ | Full hooks.js state machine in PodiumCore/Ingest/ + HooksRouter; 45 new tests (replay suite). Seams: TranscriptTokenSource (P3.1), Notifier (P4.2) — call sites wired + stub-tested. Deviations: BEGIN/COMMIT bracketing instead of Database.transaction (re-entrancy), broadcasts after COMMIT (safer than Node). TODOs owned elsewhere: scanAndImportSubagents (P3.1/P3.2), watchdog + stuck-agent periodic loops (P3.2 ServicesRunner). |
 | 2026-07-03 | **Phase 2 gate** | Fable 5 | ✅ | 171/171 tests re-run by orchestrator. Live E2E smoke: booted real podium-server binary → POSTed SessionStart/PreToolUse → session+main agent+tool state correct via read API; **machine's real production hooks discovered the Swift server via .agent-dashboard.json and fed it live events unprompted**; garbage POST → clean 400 CodedErrorResponse; static dashboard served with exact cache headers; SIGTERM removed server-info entry + file. Full code-review gate deferred to end of phase 3 (will cover phases 2+3 together). |
 | 2026-07-03 | Session handover + 🟦 reconcile | Fable 5 (new session) | ✅ | Old session hit its limit; P3.1/P3.4 agents died. P3.1: zero traces → clean re-dispatch. P3.4: partial work found uncommitted (WorkflowAggregator.swift, PodiumStore+Workflows.swift, small PodiumStore.swift diff) with 3 compile errors at the interruption point — orchestrator applied stopgap unwrap fixes (`?? 0`, `.int`→`.intValue`), auto-commit hook landed it as c909bcb, baseline re-verified 171/171 green. Both tasks re-dispatched ~21:35 CEST with path fences (P3.1 additionally owns HooksRouter.swift:25 seam wiring; P3.4 told to audit predecessor work + review the stopgaps). |
+| 2026-07-03 | P3.4 workflows API | Sonnet 5 | ✅ | Predecessor's WorkflowAggregator/PodiumStore+Workflows audited line-by-line vs workflows.js — solid, continued not restarted; orchestrator's 3 stopgap fixes confirmed correct (SUM()-over-zero-rows returns SQL NULL → `intValue` coalesce matches Node's `|| 0`). Added WorkflowsRouter (GET /api/workflows, /session/:id; CodedErrorResponse 404), main.swift mount, 12 tests (8 aggregator unit + 4 HTTP vs seeded DB incl. negative-duration clamp). 183/183 green at completion. **Node parity quirk preserved, not fixed: 2–3-step tool sequences double-count in pattern mining (full-sequence + sliding-window passes collide on the same key).** For P5.4: response models = WorkflowSummary/WorkflowDetail in Models/Workflow.swift, match client types.ts WorkflowData/SessionDrillIn. Commits 7095054 + f894704. |
 
 ### Notes for future runs
 
