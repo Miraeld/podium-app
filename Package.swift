@@ -63,10 +63,13 @@ let package = Package(
             path: "Sources/PodiumServerCLI"
         ),
 
-        // podium-hook: tiny native replacement for hook.mjs. Foundation only
-        // — deliberately dependency-free so it stays a fast, small binary.
+        // podium-hook: tiny native replacement for hook.mjs. Depends only on
+        // PodiumCore (Foundation-only within that library) — deliberately
+        // dependency-free of third-party packages so it stays a fast, small
+        // binary Claude Code shells out to on every tool call.
         .executableTarget(
             name: "PodiumHook",
+            dependencies: ["PodiumCore"],
             path: "Sources/PodiumHook"
         ),
 
