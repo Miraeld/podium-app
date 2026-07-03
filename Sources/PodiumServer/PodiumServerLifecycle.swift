@@ -21,14 +21,29 @@ public enum PodiumServerLifecycleError: Error, CustomStringConvertible {
     }
 }
 
-/// Small actor tracking whether the server-info file has been written for
-/// the in-flight bind attempt, so a later bind failure on a *different*
-/// candidate port doesn't try to remove an entry that was never written.
+/// Small actor bridging `PodiumServerApp`'s `onListening` closure (created
+/// *before* the app it needs to reference exists) to the app's
+/// `servicesRunner`/`serverContext` once construction finishes, and tracking
+/// whether the server-info file has been written for the in-flight bind
+/// attempt so a later bind failure on a *different* candidate port doesn't
+/// try to remove an entry that was never written.
 private actor ListenState {
     private(set) var didWriteInfo = false
+    private var runner: ServicesRunner?
+    private var context: ServerContext?
 
     func markWritten() {
         didWriteInfo = true
+    }
+
+    func attach(runner: ServicesRunner, context: ServerContext) {
+        self.runner = runner
+        self.context = context
+    }
+
+    func startServices(_ services: [any BackgroundService]) async {
+        guard let runner, let context else { return }
+        await runner.start(services: services, context: context)
     }
 }
 
@@ -61,7 +76,6 @@ public enum PodiumServerLifecycle {
         logger: Logger = Logger(label: "podium-server")
     ) -> PodiumServerApp {
         let state = ListenState()
-        var appBox: PodiumServerApp?
         let app = PodiumServerApp(
             store: store,
             port: port,
@@ -74,15 +88,10 @@ public enum PodiumServerLifecycle {
             onListening: {
                 ServerInfoWriter.write(port: port)
                 await state.markWritten()
-                if let app = appBox {
-                    await app.servicesRunner.start(
-                        services: services ?? ServicesRunner.defaultServices(),
-                        context: app.serverContext
-                    )
-                }
+                await state.startServices(services ?? ServicesRunner.defaultServices())
             }
         )
-        appBox = app
+        Task { await state.attach(runner: app.servicesRunner, context: app.serverContext) }
         return app
     }
 

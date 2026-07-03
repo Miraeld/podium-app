@@ -8,7 +8,7 @@
 import CSQLite
 import Foundation
 
-public final class PodiumStore {
+public final class PodiumStore: @unchecked Sendable {
     public let db: Database
 
     public init(db: Database) {
