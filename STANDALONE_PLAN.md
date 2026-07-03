@@ -184,6 +184,11 @@ PodiumSwiftApp/
 6. **Do not modify** `/Users/gaelrobin/Desktop/Work/Claude/podium` — read-only reference.
 7. **Report:** finish with a summary of files touched, deviations from the task
    prompt, and anything the next task must know. The orchestrator updates this file.
+8. **Quality over breadth (Gaël, 2026-07-03):** depth and polish beat feature
+   count — nothing ships half-working. Prefer finishing fewer things completely
+   (and saying so) over shallow coverage. A hardening gate (code review +
+   contract check against the React client) runs at the end of each phase, not
+   only at P6.2.
 
 ---
 
@@ -197,8 +202,8 @@ Legend: ⬜ todo · 🟦 in progress · ✅ done · ⚠️ done with caveats (se
 | **P1.1** | SQLite wrapper + schema + migrations + prepared statements (port db.js) | P0.1 | ✅ |
 | **P1.2** | Core models + JSON coding (snake_case parity) | P0.1 | ✅ |
 | **P2.1** | Hummingbird server skeleton: health, WS hub, static client, server-info file | P1.1, P1.2 | ✅ |
-| **P2.2** | Read API: sessions, agents, events, stats, analytics, search, facets | P2.1 | ⬜ |
-| **P2.3** | Hook ingestion engine (port hooks.js) + POST /api/hooks/event | P2.1 | ⬜ |
+| **P2.2** | Read API: sessions, agents, events, stats, analytics, search, facets | P2.1 | 🟦 |
+| **P2.3** | Hook ingestion engine (port hooks.js) + POST /api/hooks/event | P2.1 | 🟦 |
 | **P2.4** | podium-hook binary + hook installer (port hook.mjs + install.mjs) | P0.1 | ✅ |
 | **P3.1** | Transcript engine: JSONL parser, cache, GET transcript endpoints, token reconcile | P2.2 | ⬜ |
 | **P3.2** | Legacy import + rescan/scan-path/upload + periodic sweeps | P3.1, P2.3 | ⬜ |
@@ -792,6 +797,26 @@ TASK P6.2 — Prove the React client runs unmodified on the Swift server + docs.
 ```
 
 ---
+
+## 6b. Backlog — nice-to-haves, parked until parity is solid
+
+Not scheduled. Do NOT start these before P6.2 passes, per the quality-over-breadth
+principle — except №1 which is small, protective, and recommended early.
+
+1. **Pre-migration DB backup** (recommended — awaiting Gaël's go): before opening
+   a dashboard.db whose schema version is older, copy it to
+   `dashboard.db.backup-<ISO date>` in the data dir, keep the 3 most recent.
+   Fits in PodiumStore(path:) init. Converts "migration bug" into a non-event.
+2. **Actionable awaiting-input notifications**: native notification on
+   awaiting_input_since with a click-through that focuses the right terminal.
+3. **Diagnostics panel**: hook latency, last-event-received, dropped events,
+   server log tail, "test my hooks" button — in SettingsView and/or web Settings.
+4. **Cost budget alert**: user-set daily/weekly $ threshold; menu-bar tint +
+   notification (server already has cost_spike heuristics to build on).
+5. **Quick Look extension** for exported session bundles (macOS).
+
+Explicitly rejected for now: iOS companion, Raycast/Alfred extensions,
+session-diff views — wide + shallow, steal polish time from parity.
 
 ## 7. Run log
 
