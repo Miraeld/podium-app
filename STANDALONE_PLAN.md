@@ -14,6 +14,40 @@
 
 ---
 
+## 0. Resuming this project in a fresh session (any account, any model)
+
+This file is self-sufficient — no conversation history or memory files needed.
+An orchestrator picking this up cold should:
+
+1. Read §1 (architecture), §4 (working agreements — binding), §5 (task board),
+   §6b (product decisions), §7 (run log, bottom-up for the latest state).
+2. **Reconcile 🟦 tasks first.** 🟦 means an agent was dispatched; if your session
+   just started, that agent is dead. Its partial work IS committed (this repo has
+   an auto-commit hook — check `git log --oneline -20` for `Auto-commit:` entries
+   naming the task's files) but possibly unfinished. Verify with `swift build &&
+   swift test`: if green and the task's deliverables look complete, mark ✅ with a
+   run-log note "completed by earlier session, verified"; otherwise re-dispatch
+   the task's prompt from §6 *plus* one line telling the dev to first audit
+   existing partial work in its owned paths and continue, not restart.
+3. Dispatch the next unblocked ⬜ task(s): spawn `general-purpose` agents on
+   model `sonnet`, prompt = §6.0 shared preamble + the task prompt, verbatim.
+   Parallel agents share the checkout — always give each an explicit
+   "YOU OWN / DO NOT TOUCH" path fence (see the P2.2/P2.3 prompts for the
+   pattern) and never let two agents own the same file.
+4. After every completion: flip the board, append to the run log (result +
+   hand-off notes for dependent tasks), commit this file.
+5. Hardening gates between phases (working agreement #8): run a code review over
+   the phase's diff + a contract sanity check against the React client before
+   opening the next phase.
+
+State that lives OUTSIDE this file (same machine only): auto-memory in
+`~/.claude/projects/-Users-gaelrobin-Desktop-PodiumSwiftApp/memory/` (product
+principles are duplicated here in §4/§6b, so losing memory loses nothing
+critical); the vendored web client in `WebClient/dist`; CI in
+`.github/workflows/ci.yml`.
+
+---
+
 ## 1. Architecture (decided with Gaël, 2026-07-03)
 
 **One Swift package, four products:**
