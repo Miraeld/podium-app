@@ -32,17 +32,16 @@ public enum SessionsRouterMount: RouterMount {
         group.get("/facets") { req, ctx in try await facets(req, ctx, context: context) }
         group.get("/:id") { req, ctx in try await detail(req, ctx, context: context) }
         group.get("/:id/stats") { req, ctx in try await stats(req, ctx, context: context) }
+        // Task spec (P2.2) mandates this EXACT flat-string error body —
+        // `{"error": "transcript parsing lands in P3.1"}` — not the
+        // `{code, message}` object shape used by every other error response
+        // in this file, so `ErrorResponse` (not `CodedErrorResponse`) is
+        // deliberate here.
         group.get("/:id/transcripts") { _, _ in
-            try JSONResponse(
-                status: .notImplemented,
-                CodedErrorResponse(code: "NOT_IMPLEMENTED", message: "transcript parsing lands in P3.1")
-            )
+            try JSONResponse(status: .notImplemented, ErrorResponse("transcript parsing lands in P3.1"))
         }
         group.get("/:id/transcript") { _, _ in
-            try JSONResponse(
-                status: .notImplemented,
-                CodedErrorResponse(code: "NOT_IMPLEMENTED", message: "transcript parsing lands in P3.1")
-            )
+            try JSONResponse(status: .notImplemented, ErrorResponse("transcript parsing lands in P3.1"))
         }
         group.post { req, ctx in try await create(req, ctx, context: context) }
         group.patch("/:id") { req, ctx in try await patch(req, ctx, context: context) }
