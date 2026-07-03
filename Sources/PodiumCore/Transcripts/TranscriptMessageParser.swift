@@ -23,7 +23,6 @@ public enum TranscriptMessageParser {
     /// its `catch` block.
     public static func page(
         path: String,
-        agentId: String?,
         limit: Int,
         after: Int?,
         before: Int?,

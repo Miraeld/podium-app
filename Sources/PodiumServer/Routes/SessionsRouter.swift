@@ -312,7 +312,7 @@ public enum SessionsRouterMount: RouterMount {
             return try JSONResponse(TranscriptResult(messages: [], total: 0, hasMore: false, lastLine: 0, firstLine: 0))
         }
 
-        let result = TranscriptMessageParser.page(path: jsonlPath, agentId: agentId, limit: limit, after: after, before: before, offset: offset)
+        let result = TranscriptMessageParser.page(path: jsonlPath, limit: limit, after: after, before: before, offset: offset)
         return try JSONResponse(result)
     }
 

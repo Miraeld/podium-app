@@ -8,12 +8,17 @@
 // file is owned by another dev in this checkout per the task's concurrency
 // fence — flagged in the task report, not wired here).
 //
+// P3.1: `IngestEngine` is now wired to the real `TranscriptCacheTokenSource`
+// (Sources/PodiumCore/Transcripts/) instead of the P2.3-era
+// `NoOpTranscriptTokenSource` default — token usage, compaction markers, API
+// errors, and turn-duration events are extracted from live transcripts.
+//
 // TODO(P3.2): hooks.js additionally kicks off `scanAndImportSubagents` after
 // responding to a SubagentStop event with a transcript_path (lines
-// 1031–1054) — a fire-and-forget JSONL sweep that belongs with P3.1/P3.2's
-// transcript/import work, not this route. Left as a TODO here so the hook
-// remains a no-op until that lands, rather than silently dropping the
-// behavior from the plan.
+// 1031–1054) — a fire-and-forget JSONL sweep that belongs with P3.2's
+// import work, not this route. Left as a TODO here so that sweep remains a
+// no-op until P3.2 lands, rather than silently dropping the behavior from
+// the plan.
 
 import Foundation
 import Hummingbird
@@ -22,7 +27,7 @@ import PodiumCore
 
 public enum HooksRouterMount: RouterMount {
     public static func mount(on router: PodiumRouter, context: ServerContext) {
-        let engine = IngestEngine(store: context.store)
+        let engine = IngestEngine(store: context.store, transcriptSource: TranscriptCacheTokenSource())
         let group = router.group("/api/hooks")
 
         group.post("/event") { request, requestContext -> JSONResponse in
