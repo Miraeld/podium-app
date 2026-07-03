@@ -142,14 +142,17 @@ public enum TranscriptMessageParser {
                     if blockType == "text", let text = block.nonEmptyString("text") {
                         content.append(TranscriptContent(type: "text", text: truncate(text, contentTruncateLen)))
                     } else if blockType == "tool_result" {
+                        // `typeof block.content === "string" ? block.content
+                        // : JSON.stringify(block.content || "")` — a missing/
+                        // null content encodes as the JSON string `""`, not
+                        // a bare empty string.
                         let rawContent = block["content"]
                         let output: String
                         if let string = rawContent?.asString {
                             output = string
-                        } else if let rawContent, rawContent != .null {
-                            output = (try? String(data: JSONEncoder().encode(rawContent), encoding: .utf8)) ?? ""
                         } else {
-                            output = ""
+                            let toEncode: JSONValue = (rawContent == nil || rawContent == .null) ? .string("") : rawContent!
+                            output = (try? String(data: JSONEncoder().encode(toEncode), encoding: .utf8)) ?? "\"\""
                         }
                         content.append(TranscriptContent(
                             type: "tool_result", id: block.string("tool_use_id"),
