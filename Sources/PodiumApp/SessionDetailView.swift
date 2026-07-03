@@ -978,10 +978,10 @@ private struct ThinkingBlockView: View {
                 HStack(spacing: 6) {
                     Image(systemName: "brain")
                         .font(.caption.weight(.medium))
-                        .foregroundStyle(Theme.accent)
+                        .foregroundStyle(Theme.accentText)
                     Text("Thinking")
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(Theme.accent)
+                        .foregroundStyle(Theme.accentText)
                     Text("· \(text.count) chars")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
@@ -1064,7 +1064,7 @@ struct MessageBubbleView: View {
                         Image(systemName: expandedIdx == idx ? "chevron.up" : "chevron.down")
                     }
                     .font(.caption.weight(.medium))
-                    .foregroundStyle(Theme.accent)
+                    .foregroundStyle(Theme.accentText)
                     .padding(.horizontal, 12).padding(.vertical, 8)
                     .background(Theme.accent.opacity(0.1))
                     .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))

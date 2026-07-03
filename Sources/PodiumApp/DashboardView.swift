@@ -403,7 +403,7 @@ struct EventFeedRow: View {
         if t.contains("error") || t.contains("fail") { return .red }
         if t.contains("stop") { return .orange }
         if t.contains("start") { return .cyan }
-        if t.contains("tool") { return Theme.accent }
+        if t.contains("tool") { return Theme.accentText }
         return .secondary
     }
 }

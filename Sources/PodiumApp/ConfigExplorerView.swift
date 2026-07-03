@@ -535,7 +535,7 @@ struct ConfigDetailView: View {
                     HStack(alignment: .top, spacing: 12) {
                         Text(key)
                             .font(.caption.weight(.semibold))
-                            .foregroundStyle(Theme.accent)
+                            .foregroundStyle(Theme.accentText)
                             .frame(width: 100, alignment: .leading)
                         Text(frontmatter[key] ?? "")
                             .font(.caption)

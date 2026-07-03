@@ -53,6 +53,15 @@ enum Theme {
     static let accent = Color(red: 254/255, green: 210/255, blue: 58/255)        // #FED23A
     static let accentHover = Color(red: 255/255, green: 223/255, blue: 90/255)   // #FFDF5A
 
+    // Gold for *text/glyphs*: the brand gold has ~1.3:1 contrast on light glass,
+    // so text usages get a darkened gold in light appearance while fills and
+    // gradients keep the true brand color in both.
+    static let accentText = Color(nsColor: NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            ? NSColor(red: 254/255, green: 210/255, blue: 58/255, alpha: 1)  // #FED23A
+            : NSColor(red: 0.58, green: 0.44, blue: 0.02, alpha: 1)          // #947005
+    })
+
     static let accentGradient = LinearGradient(
         colors: [
             Color(red: 1, green: 0.886, blue: 0.478),   // #FFE27A
