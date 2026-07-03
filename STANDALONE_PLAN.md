@@ -259,6 +259,16 @@ Legend: ⬜ todo · 🟦 in progress · ✅ done · ⚠️ done with caveats (se
 | **P6.1** | Packaging: macOS .app/DMG script, Linux static-ish binary + systemd unit + install.sh | P5.1 | ⬜ |
 | **P6.2** | E2E verification: React client vs Swift server contract test; docs (README, MIGRATION) | all | ⬜ |
 
+**PO decisions (Fable 5, delegated by Gaël 2026-07-04 ~02:00, "full power"):**
+1. After the Phase-3 gate, **P5.1 jumps the queue** (app embeds server = the
+   zero-setup demo moment); P4.3/P4.4 trail behind it.
+2. **Gaël's live data is untouchable while he sleeps**: the Docker container
+   (port 4820) and ~/.claude/podium/data/ stay exactly as they are. The
+   switchover of his real 420 MB DB to the Swift server happens only with him
+   awake and watching, after P5.1 is verified against a COPY of that DB.
+3. Overnight goal: completion agent → Phase-3 gate → P5.1 → (P4.3 ∥ P4.4),
+   HANDOVER.md refreshed after every step so any-morning pickup is trivial.
+
 Suggested run order / parallelism:
 `P0.1` → (`P1.1` ∥ `P1.2` ∥ `P2.4`) → `P2.1` → (`P2.2` ∥ `P2.3`) →
 (`P3.1` ∥ `P3.3` ∥ `P3.4` ∥ `P4.1` ∥ `P4.2` ∥ `P4.3` ∥ `P5.2`) → `P3.2` →
