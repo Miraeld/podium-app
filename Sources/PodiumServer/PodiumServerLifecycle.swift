@@ -74,7 +74,7 @@ public enum PodiumServerLifecycle {
         mounts: [any RouterMount.Type] = [],
         services: [any BackgroundService]? = nil,
         logger: Logger = Logger(label: "podium-server")
-    ) -> PodiumServerApp {
+    ) async -> PodiumServerApp {
         let state = ListenState()
         let app = PodiumServerApp(
             store: store,
@@ -91,7 +91,12 @@ public enum PodiumServerLifecycle {
                 await state.startServices(services ?? ServicesRunner.defaultServices())
             }
         )
-        Task { await state.attach(runner: app.servicesRunner, context: app.serverContext) }
+        // The app's own construction never calls onListening synchronously
+        // (that only fires once NIO accepts connections, strictly after
+        // `runService()` is invoked), so attaching here is race-free: this
+        // await always completes before the caller can possibly start the
+        // server and trigger `onListening`.
+        await state.attach(runner: app.servicesRunner, context: app.serverContext)
         return app
     }
 
@@ -120,7 +125,7 @@ public enum PodiumServerLifecycle {
         var lastError: Error?
         for attempt in 0...maxPortAttempts {
             let candidatePort = startPort + attempt
-            let app = makeApp(
+            let app = await makeApp(
                 store: store,
                 port: candidatePort,
                 host: host,
