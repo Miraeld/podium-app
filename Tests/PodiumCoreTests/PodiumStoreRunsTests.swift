@@ -74,8 +74,12 @@ final class PodiumStoreRunsTests: XCTestCase {
         let all = try store.listDashboardRuns(limit: 1000)
         XCTAssertEqual(all.map(\.id), ["new", "old"])
 
+        // Node's listRuns clamps the *limit value* itself to [1, 500] before
+        // passing it to SQL LIMIT (Math.max(1, Math.min(500, limit))) — a
+        // negative limit clamps to 1, not "no limit". LIMIT 1 returns only
+        // the most recent row.
         let clamped = try store.listDashboardRuns(limit: -5)
-        XCTAssertEqual(clamped.count, 2) // clamps to at least 1, still returns everything within [1,500]
+        XCTAssertEqual(clamped.map(\.id), ["new"])
     }
 
     func testReconcileOrphanRunsAbandonsRunningAndSpawningOnly() throws {

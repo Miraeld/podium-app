@@ -154,6 +154,34 @@ final class RunSpawnerTests: XCTestCase {
         await poll { await spawner.getRun(id: handle.id, includeEnvelopes: false)?.status.rawValue == "killed" }
     }
 
+    /// `sendInput` broadcasts `run_input_ack` (run-spawner.js's `sendInput`,
+    /// which fires `broadcast("run_input_ack", { id, messageId, at })` right
+    /// after the stdin write) — distinct from the `run_status`/`run_stream`
+    /// coverage above.
+    func testSendInputBroadcastsRunInputAckWithMatchingMessageId() async throws {
+        let script = try writeFixtureScript("""
+        echo '{"type":"system","subtype":"init","session_id":"ack-session-id"}'
+        cat > /dev/null
+        """)
+        let broadcaster = RecordingBroadcaster()
+        let spawner = RunSpawner(store: nil, broadcaster: broadcaster, claudeBinary: script)
+        let handle = try await spawner.spawnRun(
+            prompt: "first turn", mode: .conversation, cwd: tempDir.path, model: nil,
+            permissionMode: "acceptEdits", resumeSessionId: nil, effort: nil
+        )
+        await poll { await spawner.getRun(id: handle.id, includeEnvelopes: false)?.sessionId == "ack-session-id" }
+
+        let messageId = try await spawner.sendInput(id: handle.id, text: "follow up")
+
+        let acks = await broadcaster.events(ofType: "run_input_ack")
+        XCTAssertEqual(acks.count, 1)
+        XCTAssertEqual(acks[0].objectValue?["id"]?.stringValue, handle.id)
+        XCTAssertEqual(acks[0].objectValue?["messageId"]?.stringValue, messageId)
+        XCTAssertNotNil(acks[0].objectValue?["at"])
+
+        _ = await spawner.killRun(id: handle.id)
+    }
+
     func testSendInputToUnknownRunThrowsNotFound() async {
         let spawner = RunSpawner(store: nil, broadcaster: RecordingBroadcaster())
         do {
@@ -292,5 +320,49 @@ final class RunSpawnerTests: XCTestCase {
         XCTAssertEqual(final?.envelopes?.count, 500)
 
         _ = await spawner.killRun(id: handle.id)
+    }
+
+    // MARK: - Reap after exit
+
+    /// run-spawner.js keeps a finished handle around for `REAP_AFTER_MS`
+    /// (5 min in production) so late clients can still read its final
+    /// status/envelopes, then drops it. `reapDelayNanoseconds` is injectable
+    /// so this test doesn't need to wait 5 real minutes to exercise it.
+    func testFinishedHandleIsReapedAfterTheConfiguredDelay() async throws {
+        let script = try writeFixtureScript("exit 0\n")
+        let spawner = RunSpawner(store: nil, broadcaster: RecordingBroadcaster(), claudeBinary: script, reapDelayNanoseconds: 50_000_000 /* 50ms */)
+        let handle = try await spawner.spawnRun(
+            prompt: "hi", mode: .headless, cwd: tempDir.path, model: nil,
+            permissionMode: "acceptEdits", resumeSessionId: nil, effort: nil
+        )
+        await poll { await spawner.getRun(id: handle.id, includeEnvelopes: false)?.status.rawValue == "completed" }
+
+        // Still present immediately after completion — reap hasn't fired yet.
+        let stillPresent = await spawner.getRun(id: handle.id, includeEnvelopes: false)
+        XCTAssertNotNil(stillPresent)
+
+        await poll(timeout: 2) { await spawner.getRun(id: handle.id, includeEnvelopes: false) == nil }
+        let afterReap = await spawner.getRun(id: handle.id, includeEnvelopes: false)
+        XCTAssertNil(afterReap)
+    }
+
+    /// Killing a handle also schedules a reap (run-spawner.js's `killRun`
+    /// calls `scheduleReap` too, not just the natural-exit path).
+    func testKilledHandleIsReapedAfterTheConfiguredDelay() async throws {
+        let script = try writeFixtureScript("""
+        echo '{"type":"system","subtype":"init","session_id":"reap-kill-session"}'
+        cat > /dev/null
+        """)
+        let spawner = RunSpawner(store: nil, broadcaster: RecordingBroadcaster(), claudeBinary: script, reapDelayNanoseconds: 50_000_000 /* 50ms */)
+        let handle = try await spawner.spawnRun(
+            prompt: "hi", mode: .conversation, cwd: tempDir.path, model: nil,
+            permissionMode: "acceptEdits", resumeSessionId: nil, effort: nil
+        )
+        await poll { await spawner.getRun(id: handle.id, includeEnvelopes: false)?.status.rawValue == "running" }
+        _ = await spawner.killRun(id: handle.id)
+
+        await poll(timeout: 2) { await spawner.getRun(id: handle.id, includeEnvelopes: false) == nil }
+        let afterReap = await spawner.getRun(id: handle.id, includeEnvelopes: false)
+        XCTAssertNil(afterReap)
     }
 }
