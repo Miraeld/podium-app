@@ -194,12 +194,12 @@ Legend: ⬜ todo · 🟦 in progress · ✅ done · ⚠️ done with caveats (se
 | ID | Task | Depends on | Status |
 |---|---|---|---|
 | **P0.1** | Repo restructure: multi-target Package.swift, CSQLite, CI, vendor web client | — | ✅ |
-| **P1.1** | SQLite wrapper + schema + migrations + prepared statements (port db.js) | P0.1 | ⬜ |
-| **P1.2** | Core models + JSON coding (snake_case parity) | P0.1 | ⬜ |
+| **P1.1** | SQLite wrapper + schema + migrations + prepared statements (port db.js) | P0.1 | 🟦 |
+| **P1.2** | Core models + JSON coding (snake_case parity) | P0.1 | ✅ |
 | **P2.1** | Hummingbird server skeleton: health, WS hub, static client, server-info file | P1.1, P1.2 | ⬜ |
 | **P2.2** | Read API: sessions, agents, events, stats, analytics, search, facets | P2.1 | ⬜ |
 | **P2.3** | Hook ingestion engine (port hooks.js) + POST /api/hooks/event | P2.1 | ⬜ |
-| **P2.4** | podium-hook binary + hook installer (port hook.mjs + install.mjs) | P0.1 | ⬜ |
+| **P2.4** | podium-hook binary + hook installer (port hook.mjs + install.mjs) | P0.1 | ✅ |
 | **P3.1** | Transcript engine: JSONL parser, cache, GET transcript endpoints, token reconcile | P2.2 | ⬜ |
 | **P3.2** | Legacy import + rescan/scan-path/upload + periodic sweeps | P3.1, P2.3 | ⬜ |
 | **P3.3** | Pricing + cost endpoints + settings router (info/clear/reimport/cleanup/export/claude-home) | P2.2 | ⬜ |
@@ -208,7 +208,7 @@ Legend: ⬜ todo · 🟦 in progress · ✅ done · ⚠️ done with caveats (se
 | **P4.2** | Web-push (VAPID via swift-crypto) + push router + notify-on-end | P2.1 | ⬜ |
 | **P4.3** | cc-config explorer + FS watcher + updates router + session export/import bundles | P2.2 | ⬜ |
 | **P5.1** | macOS app: embed server in-process, lifecycle, single-instance, menu-bar status | P2.1–P2.4 | ⬜ |
-| **P5.2** | macOS app: brand re-theme (black/gold), fix refresh-spinner annoyance | P0.1 | ⬜ |
+| **P5.2** | macOS app: brand re-theme (black/gold), fix refresh-spinner annoyance | P0.1 | ✅ |
 | **P5.3** | macOS app: transcript viewer + search + session actions | P3.1 | ⬜ |
 | **P5.4** | macOS app: workflows graphs, analytics upgrade, run page, cc-config, import/export UI | P3.4, P4.1, P4.3 | ⬜ |
 | **P6.1** | Packaging: macOS .app/DMG script, Linux static-ish binary + systemd unit + install.sh | P5.1 | ⬜ |
@@ -799,6 +799,9 @@ TASK P6.2 — Prove the React client runs unmodified on the Swift server + docs.
 |---|---|---|---|---|
 | 2026-07-03 | Plan authored | Fable 5 | ✅ | Audit of podium v1.4.0 + PodiumSwiftApp complete |
 | 2026-07-03 | P0.1 Repo restructure | Sonnet 5 | ✅ | 5-product package (PodiumCore, PodiumServer, podium-server, podium-hook, PodiumApp) builds + tests green on macOS and Linux (swift:6.1 container). See notes below. |
+| 2026-07-03 | P2.4 podium-hook + installer | Sonnet 5 | ✅ | HookClient (port discovery, PID liveness, multi-port POST), HookInstaller (install/uninstall/check, legacy plugin-entry upgrade, installBinary), 37 tests green, binary smoke-tested. Startup wiring deferred to P2.1/P5.1 by design. settings.json written with sorted keys (vs Node insertion order) — note for P6.2. |
+| 2026-07-03 | P1.2 core models | Sonnet 5 | ✅ | 15 model files + PodiumJSON (snake_case, ms-ISO8601, JSONValue, lenient enums), 42 fixture tests (80/80 in target). **Footgun documented in PodiumJSON.swift: never mix explicit snake_case CodingKeys with .convertFromSnakeCase — silently decodes nil.** RunHandle (live, epoch-ms) vs DashboardRun (persisted, ISO TEXT) split is load-bearing for P4.1. All routers must use PodiumJSON.encoder/.decoder only. |
+| 2026-07-03 | P5.2 re-theme + spinner fix | Sonnet 5 | ✅ | Brand theme was mostly pre-existing (Wave 6); added persisted appearance setting (system/dark/light, @AppStorage + Settings General tab), isInitialLoad/isAnalyticsInitialLoad spinner gating + in-place mergeSessions() (no more blanking on ⌘R), run.sh now bundles AppIcon.icns. **Human should eyeball light/dark contrast once via ./run.sh** (agent couldn't screenshot). P5.3/P5.4: use the isInitialLoad pattern, never isLoading-gated full-screen spinners. |
 
 ### Notes for future runs
 
@@ -808,6 +811,13 @@ TASK P6.2 — Prove the React client runs unmodified on the Swift server + docs.
   when porting token logic (P2.3/P3.1), verify token-0 sessions render correctly.
 - The other session's `native-superpowers` branch may overlap with P5.x — check
   `git branch -a` before starting P5 tasks.
+- **Discovered during P0.1 (2026-07-03):** `develop` already contains far more native
+  UI than repo CLAUDE.md documents — `RunView`, `SearchView`, `WorkflowsView`,
+  `KanbanView`, `ConfigExplorerView`, `SessionReplayView`, `MenuBarView`,
+  `SessionExporter`, Spotlight/App Intents, widgets (32 source files). **Re-audit
+  Sources/PodiumApp before dispatching P5.1/P5.3/P5.4 and rewrite those prompts to
+  fill only the actual gaps** (they were written against the stale CLAUDE.md
+  inventory). P5.2 (re-theme + spinner fix) is unaffected.
 
 #### P0.1 notes (2026-07-03)
 
