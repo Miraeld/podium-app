@@ -13,7 +13,10 @@ INFO_PLIST="$APP_BUNDLE/Contents/Info.plist"
 
 echo "▶ Building…"
 cd "$SCRIPT_DIR"
-swift build 2>&1
+# Only the macOS app product — the package also vends podium-server /
+# podium-hook (cross-platform daemon + hook binaries), which run.sh doesn't
+# need to build for the native app flow.
+swift build --product PodiumApp 2>&1
 
 echo "▶ Assembling .app bundle…"
 mkdir -p "$MACOS_DIR" "$RESOURCES_DIR"

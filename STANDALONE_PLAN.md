@@ -193,7 +193,7 @@ Legend: ⬜ todo · 🟦 in progress · ✅ done · ⚠️ done with caveats (se
 
 | ID | Task | Depends on | Status |
 |---|---|---|---|
-| **P0.1** | Repo restructure: multi-target Package.swift, CSQLite, CI, vendor web client | — | ⬜ |
+| **P0.1** | Repo restructure: multi-target Package.swift, CSQLite, CI, vendor web client | — | ✅ |
 | **P1.1** | SQLite wrapper + schema + migrations + prepared statements (port db.js) | P0.1 | ⬜ |
 | **P1.2** | Core models + JSON coding (snake_case parity) | P0.1 | ⬜ |
 | **P2.1** | Hummingbird server skeleton: health, WS hub, static client, server-info file | P1.1, P1.2 | ⬜ |
@@ -798,6 +798,7 @@ TASK P6.2 — Prove the React client runs unmodified on the Swift server + docs.
 | Date | Task | Agent | Result | Notes |
 |---|---|---|---|---|
 | 2026-07-03 | Plan authored | Fable 5 | ✅ | Audit of podium v1.4.0 + PodiumSwiftApp complete |
+| 2026-07-03 | P0.1 Repo restructure | Sonnet 5 | ✅ | 5-product package (PodiumCore, PodiumServer, podium-server, podium-hook, PodiumApp) builds + tests green on macOS and Linux (swift:6.1 container). See notes below. |
 
 ### Notes for future runs
 
@@ -807,3 +808,36 @@ TASK P6.2 — Prove the React client runs unmodified on the Swift server + docs.
   when porting token logic (P2.3/P3.1), verify token-0 sessions render correctly.
 - The other session's `native-superpowers` branch may overlap with P5.x — check
   `git branch -a` before starting P5 tasks.
+
+#### P0.1 notes (2026-07-03)
+
+- **Hummingbird version pin:** latest `hummingbird`/`hummingbird-websocket`/`swift-nio-ssl`/
+  `swift-asn1` require Swift **tools-version 6.1**, not 6.0. The plan's CI suggestion said
+  "container swift:6.0 or swift:5.10" — neither works. CI now uses `container: swift:6.1`.
+  Verified locally via Docker (`swift:6.1` image): `swift build` and `swift test` both pass,
+  producing `podium-server`, `podium-hook`, and (with the fix below) `PodiumApp` binaries.
+- **PodiumApp needs a non-macOS fallback entry point.** Wrapping every PodiumApp source in
+  `#if os(macOS)` (as instructed) removes the `@main` on Linux, but `swift build`/`swift test`
+  with no `--product` filter still try to link every target, including `PodiumApp` — link
+  fails with "undefined symbol 'PodiumApp_main'". Fixed by adding
+  `Sources/PodiumApp/LinuxStub.swift`, a small always-compiled file with a `#if !os(macOS)`
+  `@main` stub that just prints a "use podium-server" message. This is required for `swift
+  build`/`swift test` (no product filter) to succeed on Linux; `run.sh` now explicitly builds
+  `swift build --product PodiumApp` so it doesn't need to build the server targets at all.
+- **CSQLite uses a shim header**, not `header "sqlite3.h"` directly — `Sources/CSQLite/shim.h`
+  does `#include <sqlite3.h>` and the modulemap points at the shim. This avoids relying on
+  `sqlite3.h` being on the default include search path in a specific way across apt/brew/SDK;
+  no `pkgConfig` needed since `link "sqlite3"` + system providers suffice on both platforms
+  (verified: macOS SDK ships `sqlite3.h` directly; Linux via `apt-get install libsqlite3-dev`).
+- **Pre-existing bug fixed in passing:** `Theme.swift`'s `glassSurface()` called
+  `.glassEffect()`, a macOS 26–only API, while `Package.swift` claimed macOS 14 — this only
+  "worked" before because the platform requirement was bogus (`"26.0"`). Now gated with
+  `@available(macOS 26.0, *)`; the function has zero callers today so behavior is unchanged.
+  Flagging in case a future task wants a macOS-14-compatible glass surface implementation.
+- **Web client vendored as a straight copy**, not a rebuild — the reference repo's
+  `dashboard/client/dist/` was already fresher than every file under `src/` at copy time, so
+  per the task's "if fresh, just copy it" branch, no `npm install`/`npm run build` was run.
+  See `WebClient/SYNC.md` for the exact rebuild command if a future task needs to refresh it.
+- **Package.resolved is checked in** (new) — first time this repo has external dependencies;
+  pins hummingbird 2.25.0, swift-crypto 3.15.1, swift-argument-parser 1.8.2, and their
+  transitive graph (swift-nio 2.101.2, swift-service-lifecycle 2.11.0, etc).

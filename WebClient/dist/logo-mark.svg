@@ -1,0 +1,39 @@
+<svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Podium">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="42%" r="75%" gradientUnits="objectBoundingBox">
+      <stop offset="0%" stop-color="#141520"/>
+      <stop offset="100%" stop-color="#0A0B12"/>
+    </radialGradient>
+    <linearGradient id="goldLens" x1="19.5" y1="32.2" x2="80.5" y2="67.8" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FFE27A"/>
+      <stop offset="50%" stop-color="#FED23A"/>
+      <stop offset="100%" stop-color="#C9A227"/>
+    </linearGradient>
+    <linearGradient id="goldPupil" x1="45.7" y1="45.7" x2="54.3" y2="54.3" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FFE27A"/>
+      <stop offset="50%" stop-color="#FED23A"/>
+      <stop offset="100%" stop-color="#C9A227"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background tile -->
+  <rect x="0" y="0" width="100" height="100" rx="22" fill="url(#bg)"/>
+
+  <!-- Signal rings — concentric, radiating from pupil -->
+  <circle cx="50" cy="50" r="19.5" fill="none" stroke="url(#goldLens)" stroke-width="1.1" opacity="0.55"/>
+  <circle cx="50" cy="50" r="27.3" fill="none" stroke="url(#goldLens)" stroke-width="1.0" opacity="0.35"/>
+  <circle cx="50" cy="50" r="36.1" fill="none" stroke="url(#goldLens)" stroke-width="0.9" opacity="0.20"/>
+
+  <!-- Eye lens -->
+  <path d="M 19.5,50 C 32.2,32.2 67.8,32.2 80.5,50 C 67.8,67.8 32.2,67.8 19.5,50 Z"
+        fill="none" stroke="url(#goldLens)" stroke-width="1.5" stroke-linecap="round"/>
+
+  <!-- Iris -->
+  <circle cx="50" cy="50" r="14.1" fill="#0A0B12"/>
+
+  <!-- White ring -->
+  <circle cx="50" cy="50" r="10.7" fill="none" stroke="#FFFFFF" stroke-width="1.6"/>
+
+  <!-- Gold pupil -->
+  <circle cx="50" cy="50" r="4.3" fill="url(#goldPupil)"/>
+</svg>
