@@ -18,18 +18,19 @@ public enum BashOutputParsers {
     /// "Tests: 47, Assertions: 123, Failures: 2, Errors: 1".
     public static func parsePhpUnit(_ output: String?) -> PhpUnitResult? {
         guard let output, !output.isEmpty else { return nil }
+        let matcher = RegexMatcher(source: output)
 
-        if let match = firstMatch(in: output, pattern: #"OK\s*\(\s*(\d+)\s*tests?,\s*(\d+)\s*assertions?\s*\)"#, options: [.caseInsensitive]) {
-            let tests = intGroup(match, 1) ?? 0
-            let assertions = intGroup(match, 2) ?? 0
+        if let match = matcher.firstMatch(#"OK\s*\(\s*(\d+)\s*tests?,\s*(\d+)\s*assertions?\s*\)"#, caseInsensitive: true) {
+            let tests = match.intGroup(1) ?? 0
+            let assertions = match.intGroup(2) ?? 0
             return PhpUnitResult(tests: tests, assertions: assertions, failures: 0, errors: 0, passed: true)
         }
 
-        if let summaryMatch = firstMatch(in: output, pattern: #"Tests:\s*(\d+)"#, options: [.caseInsensitive]) {
-            let tests = intGroup(summaryMatch, 1) ?? 0
-            let assertions = intGroup(firstMatch(in: output, pattern: #"Assertions:\s*(\d+)"#, options: [.caseInsensitive]), 1) ?? 0
-            let failures = intGroup(firstMatch(in: output, pattern: #"Failures:\s*(\d+)"#, options: [.caseInsensitive]), 1) ?? 0
-            let errors = intGroup(firstMatch(in: output, pattern: #"Errors:\s*(\d+)"#, options: [.caseInsensitive]), 1) ?? 0
+        if let summaryMatch = matcher.firstMatch(#"Tests:\s*(\d+)"#, caseInsensitive: true) {
+            let tests = summaryMatch.intGroup(1) ?? 0
+            let assertions = matcher.firstMatch(#"Assertions:\s*(\d+)"#, caseInsensitive: true)?.intGroup(1) ?? 0
+            let failures = matcher.firstMatch(#"Failures:\s*(\d+)"#, caseInsensitive: true)?.intGroup(1) ?? 0
+            let errors = matcher.firstMatch(#"Errors:\s*(\d+)"#, caseInsensitive: true)?.intGroup(1) ?? 0
             return PhpUnitResult(tests: tests, assertions: assertions, failures: failures, errors: errors, passed: failures == 0 && errors == 0)
         }
 
@@ -45,14 +46,15 @@ public enum BashOutputParsers {
     /// "FOUND N ERRORS AFFECTING N LINES", or "No errors detected".
     public static func parsePhpcs(_ output: String?) -> PhpcsResult? {
         guard let output, !output.isEmpty else { return nil }
+        let matcher = RegexMatcher(source: output)
 
-        if let match = firstMatch(in: output, pattern: #"FOUND\s+(\d+)\s+ERRORS?\s+AND\s+(\d+)\s+WARNINGS?"#, options: [.caseInsensitive]) {
-            return PhpcsResult(errors: intGroup(match, 1) ?? 0, warnings: intGroup(match, 2) ?? 0)
+        if let match = matcher.firstMatch(#"FOUND\s+(\d+)\s+ERRORS?\s+AND\s+(\d+)\s+WARNINGS?"#, caseInsensitive: true) {
+            return PhpcsResult(errors: match.intGroup(1) ?? 0, warnings: match.intGroup(2) ?? 0)
         }
-        if let match = firstMatch(in: output, pattern: #"FOUND\s+(\d+)\s+ERRORS?\s+AFFECTING"#, options: [.caseInsensitive]) {
-            return PhpcsResult(errors: intGroup(match, 1) ?? 0, warnings: 0)
+        if let match = matcher.firstMatch(#"FOUND\s+(\d+)\s+ERRORS?\s+AFFECTING"#, caseInsensitive: true) {
+            return PhpcsResult(errors: match.intGroup(1) ?? 0, warnings: 0)
         }
-        if matches(output, pattern: #"no (errors?|violations?)\s+(detected|found)"#, options: [.caseInsensitive]) {
+        if matcher.firstMatch(#"no (errors?|violations?)\s+(detected|found)"#, caseInsensitive: true) != nil {
             return PhpcsResult(errors: 0, warnings: 0)
         }
         return nil
@@ -61,10 +63,8 @@ public enum BashOutputParsers {
     /// First GitHub PR URL found anywhere in `output`, or `nil`.
     public static func extractPrUrl(_ output: String?) -> String? {
         guard let output, !output.isEmpty else { return nil }
-        guard let match = firstMatch(in: output, pattern: #"https://github\.com/[^\s/]+/[^\s/]+/pull/\d+"#, options: []) else {
-            return nil
-        }
-        return substring(output, match.range)
+        let matcher = RegexMatcher(source: output)
+        return matcher.firstMatch(#"https://github\.com/[^\s/]+/[^\s/]+/pull/\d+"#, caseInsensitive: false)?.fullMatch
     }
 
     public struct GitStatResult: Equatable, Sendable {
@@ -77,42 +77,46 @@ public enum BashOutputParsers {
     /// "N files changed, N insertions(+), N deletions(-)".
     public static func parseGitStat(_ output: String?) -> GitStatResult? {
         guard let output, !output.isEmpty else { return nil }
+        let matcher = RegexMatcher(source: output)
         let pattern = #"(\d+)\s+files?\s+changed(?:,\s*(\d+)\s+insertions?\(\+\))?(?:,\s*(\d+)\s+deletions?\(-\))?"#
-        guard let match = firstMatch(in: output, pattern: pattern, options: []) else { return nil }
+        guard let match = matcher.firstMatch(pattern, caseInsensitive: false) else { return nil }
         return GitStatResult(
-            filesChanged: intGroup(match, 1) ?? 0,
-            insertions: intGroup(match, 2) ?? 0,
-            deletions: intGroup(match, 3) ?? 0
+            filesChanged: match.intGroup(1) ?? 0,
+            insertions: match.intGroup(2) ?? 0,
+            deletions: match.intGroup(3) ?? 0
         )
     }
+}
 
-    // MARK: - Regex helpers
+/// Small helper bundling an `NSRegularExpression` match with the source
+/// string it matched against, so callers can pull out numbered capture
+/// groups without re-threading the source text through every call site.
+private struct RegexMatcher {
+    let source: String
 
-    private static func firstMatch(in text: String, pattern: String, options: NSRegularExpression.Options) -> NSTextCheckingResult? {
+    func firstMatch(_ pattern: String, caseInsensitive: Bool) -> Match? {
+        let options: NSRegularExpression.Options = caseInsensitive ? [.caseInsensitive] : []
         guard let regex = try? NSRegularExpression(pattern: pattern, options: options) else { return nil }
-        let range = NSRange(text.startIndex..<text.endIndex, in: text)
-        return regex.firstMatch(in: text, options: [], range: range)
+        let range = NSRange(source.startIndex..<source.endIndex, in: source)
+        guard let result = regex.firstMatch(in: source, options: [], range: range) else { return nil }
+        return Match(source: source, result: result)
+    }
+}
+
+private struct Match {
+    let source: String
+    let result: NSTextCheckingResult
+
+    var fullMatch: String? { group(0) }
+
+    func intGroup(_ index: Int) -> Int? {
+        group(index).flatMap { Int($0) }
     }
 
-    private static func firstMatch(in text: String, pattern: NSTextCheckingResult?, group: Int) -> NSTextCheckingResult? {
-        pattern
-    }
-
-    private static func matches(_ text: String, pattern: String, options: NSRegularExpression.Options) -> Bool {
-        firstMatch(in: text, pattern: pattern, options: options) != nil
-    }
-
-    private static func intGroup(_ match: NSTextCheckingResult?, _ index: Int) -> Int? {
-        guard let match, match.numberOfRanges > index else { return nil }
-        // Caller must supply the original text via `substring` below; kept
-        // simple by re-deriving from the match's own captured text isn't
-        // possible without the source string, so intGroup takes the source
-        // implicitly through a bound closure — see overload below.
-        return nil
-    }
-
-    private static func substring(_ text: String, _ range: NSRange) -> String? {
-        guard let swiftRange = Range(range, in: text) else { return nil }
-        return String(text[swiftRange])
+    func group(_ index: Int) -> String? {
+        guard index < result.numberOfRanges else { return nil }
+        let range = result.range(at: index)
+        guard range.location != NSNotFound, let swiftRange = Range(range, in: source) else { return nil }
+        return String(source[swiftRange])
     }
 }

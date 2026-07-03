@@ -151,3 +151,13 @@ public struct SessionPatchRequest: Codable, Equatable, Sendable {
         self.status = status
     }
 }
+
+/// `GET /api/sessions/facets` response — distinct non-empty `cwd` values
+/// currently in the DB (routes/sessions.js lines 173–178).
+public struct SessionFacets: Codable, Equatable, Sendable {
+    public var cwds: [String]
+
+    public init(cwds: [String]) {
+        self.cwds = cwds
+    }
+}
