@@ -13,12 +13,12 @@
 // `NoOpTranscriptTokenSource` default — token usage, compaction markers, API
 // errors, and turn-duration events are extracted from live transcripts.
 //
-// TODO(P3.2): hooks.js additionally kicks off `scanAndImportSubagents` after
-// responding to a SubagentStop event with a transcript_path (lines
-// 1031–1054) — a fire-and-forget JSONL sweep that belongs with P3.2's
-// import work, not this route. Left as a TODO here so that sweep remains a
-// no-op until P3.2 lands, rather than silently dropping the behavior from
-// the plan.
+// P3.2: after a SubagentStop event carrying a transcript_path, fires
+// `LegacyImporter.scanAndImportSubagents` in a detached `Task` — port of
+// hooks.js lines 1031–1054's fire-and-forget `.then()` chain. A subagent's
+// own tool calls never fire hooks on the parent session; this sweep is the
+// only path that attributes them to the subagent's own agent_id without
+// waiting for the periodic sweep.
 
 import Foundation
 import Hummingbird
@@ -74,6 +74,26 @@ public enum HooksRouterMount: RouterMount {
             // fan-out to a handful of local WS connections).
             for broadcast in broadcasts {
                 await context.broadcaster.broadcast(type: broadcast.type, data: broadcast.data)
+            }
+
+            // Fire-and-forget: scan the subagent's own JSONL for tool calls
+            // that never fired a hook, and ingest whatever's missing. Never
+            // blocks the response, never affects it on failure (parity with
+            // hooks.js's detached `.then().catch(() => {})`).
+            if hookType == "SubagentStop",
+               let sessionId = data.nonEmptyString("session_id"),
+               let transcriptPath = data.nonEmptyString("transcript_path") {
+                let store = context.store
+                let broadcaster = context.broadcaster
+                Task.detached {
+                    guard let result = try? LegacyImporter.scanAndImportSubagents(store: store, sessionId: sessionId, transcriptPath: transcriptPath),
+                          result.created > 0 else { return }
+                    await broadcaster.broadcast(type: "new_event", data: JSONValue.object([
+                        "session_id": .string(sessionId), "agent_id": .null, "event_type": .string("SubagentJsonlImported"),
+                        "tool_name": .null, "summary": .string("Imported \(result.created) subagent record(s) from JSONL"),
+                        "created_at": .string(PodiumDate.now()),
+                    ]))
+                }
             }
 
             return try JSONResponse(HookEventOkResponse(ok: true, event: last.data))
