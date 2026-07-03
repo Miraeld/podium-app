@@ -36,6 +36,10 @@ An orchestrator picking this up cold should:
    pattern) and never let two agents own the same file.
 4. After every completion: flip the board, append to the run log (result +
    hand-off notes for dependent tasks), commit this file.
+   **Two orchestrator sessions in parallel:** the board is the lock. Before
+   dispatching, set the task to 🟦 with your session tag (e.g. 🟦@A / 🟦@B) and
+   commit+push this file immediately; only dispatch tasks whose path fences don't
+   overlap another session's 🟦 tasks. Pull before every board edit.
 5. Hardening gates between phases (working agreement #8): run a code review over
    the phase's diff + a contract sanity check against the React client before
    opening the next phase.
