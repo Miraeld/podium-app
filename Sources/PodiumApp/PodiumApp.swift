@@ -74,15 +74,45 @@ struct PodiumApp: App {
         Settings {
             SettingsView()
                 .environment(appState)
+                .preferredColorScheme(preferredColorScheme)
         }
 
         MenuBarExtra {
             MenuBarContentView()
                 .environment(appState)
+                .preferredColorScheme(preferredColorScheme)
         } label: {
             Image(systemName: "gauge.with.dots.needle.67percent")
         }
         .menuBarExtraStyle(.window)
+    }
+}
+
+// MARK: - Appearance mode
+
+/// Persisted appearance override (system/dark/light). `nil` colorScheme means
+/// "follow the system appearance" — SwiftUI's default behavior.
+enum AppearanceMode: String, CaseIterable, Identifiable {
+    case system
+    case dark
+    case light
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .system: return "System"
+        case .dark:   return "Dark"
+        case .light:  return "Light"
+        }
+    }
+
+    var colorScheme: ColorScheme? {
+        switch self {
+        case .system: return nil
+        case .dark:   return .dark
+        case .light:  return .light
+        }
     }
 }
 

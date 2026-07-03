@@ -9,6 +9,8 @@ struct SettingsView: View {
 
     var body: some View {
         TabView {
+            GeneralTab()
+                .tabItem { Label("General", systemImage: "gearshape") }
             ConnectionTab()
                 .environment(state)
                 .tabItem { Label("Connection", systemImage: "wifi") }
@@ -25,6 +27,29 @@ struct SettingsView: View {
                 .tabItem { Label("Hooks", systemImage: "bolt.fill") }
         }
         .frame(width: 560, height: 500)
+    }
+}
+
+// MARK: - General Tab
+
+struct GeneralTab: View {
+    @AppStorage("appearance_mode") private var appearanceMode = AppearanceMode.system.rawValue
+
+    var body: some View {
+        Form {
+            Section("Appearance") {
+                Picker("Theme", selection: $appearanceMode) {
+                    ForEach(AppearanceMode.allCases) { mode in
+                        Text(mode.label).tag(mode.rawValue)
+                    }
+                }
+                .pickerStyle(.segmented)
+                Text("Podium's glassmorphism design adapts to both light and dark appearances. \u{201c}System\u{201d} follows your macOS setting.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
     }
 }
 

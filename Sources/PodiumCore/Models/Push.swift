@@ -3,23 +3,26 @@ import Foundation
 /// A `push_subscriptions` row (db.js lines 112–117) — a Web Push
 /// subscription (RFC 8291 keys). Note the wire/DB key names `p256dh` and
 /// `auth` are NOT snake_case-transformed further (they're already the exact
-/// lowercase tokens the Push API spec and the Node server use) — explicit
-/// `CodingKeys` pin them so `.convertToSnakeCase`/`.convertFromSnakeCase`
-/// can't mangle `p256dh` (no underscore boundaries to convert, so it's safe
-/// either way, but keys are pinned defensively since this is exactly the
-/// kind of field the task warned must round-trip exactly).
+/// lowercase tokens the Push API spec and the Node server use) — no
+/// underscore boundaries, so `.convertToSnakeCase`/`.convertFromSnakeCase`
+/// pass them through unchanged and no explicit `CodingKeys` are needed for
+/// those two.
+///
+/// IMPORTANT: `PodiumJSON.decoder`/`.encoder` apply
+/// `.convertFromSnakeCase`/`.convertToSnakeCase` globally, which convert the
+/// wire key to/from camelCase *before* matching against `CodingKeys` raw
+/// values. An explicit `CodingKeys` entry using the original snake_case
+/// wire string (e.g. `case createdAt = "created_at"`) would silently fail
+/// to match against the already-converted `"createdAt"` key — decoding
+/// `created_at` to `nil` instead of throwing, since the property is
+/// Optional. So `createdAt` here relies on the implicit default
+/// (`createdAt` Swift name ⇄ `created_at` wire name via the strategy) and
+/// carries NO explicit `CodingKeys` case.
 public struct PushSubscription: Codable, Equatable, Sendable {
     public var endpoint: String
     public var p256dh: String
     public var auth: String
     public var createdAt: String?
-
-    enum CodingKeys: String, CodingKey {
-        case endpoint
-        case p256dh
-        case auth
-        case createdAt = "created_at"
-    }
 
     public init(endpoint: String, p256dh: String, auth: String, createdAt: String? = nil) {
         self.endpoint = endpoint
