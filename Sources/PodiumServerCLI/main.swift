@@ -88,7 +88,10 @@ struct PodiumServerCLI: AsyncParsableCommand {
                     RunRouterMount.self,
                     PricingRouterMount.self,
                     SettingsRouterMount.self,
+                    ImportRouterMount.self,
+                    PushRouterMount.self,
                 ],
+                reimportRunner: LegacyImporterReimportRunner(store: store),
                 logger: logger
             )
             print("Podium server running on http://localhost:\(boundPort) (production)")
@@ -130,5 +133,25 @@ struct PodiumServerCLI: AsyncParsableCommand {
         let selfPath = CommandLine.arguments[0]
         let dir = URL(fileURLWithPath: selfPath).deletingLastPathComponent()
         return dir.appendingPathComponent(name).path
+    }
+}
+
+/// Wires `POST /api/settings/reimport` (P3.3's `ReimportRunner` seam) to
+/// P3.2's `LegacyImporter`: a full rescan of `~/.claude/projects` plus a
+/// compaction backfill pass, folded into the single `ReimportResult` shape
+/// the settings router expects. This is the production adapter the
+/// `ReimportRunner.swift` doc comment asks the orchestrator to build once
+/// both P3.2 and P3.3 land.
+struct LegacyImporterReimportRunner: ReimportRunner {
+    let store: PodiumStore
+
+    func run() async throws -> ReimportResult {
+        let counters = try LegacyImporter.importAllSessions(store: store)
+        _ = try LegacyImporter.backfillCompactions(store: store)
+        return ReimportResult(
+            imported: counters.imported,
+            skipped: counters.skipped,
+            errors: counters.errors
+        )
     }
 }

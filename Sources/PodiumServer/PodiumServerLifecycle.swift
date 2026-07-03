@@ -73,6 +73,8 @@ public enum PodiumServerLifecycle {
         webDistDirectory: String? = nil,
         mounts: [any RouterMount.Type] = [],
         services: [any BackgroundService]? = nil,
+        reimportRunner: ReimportRunner? = nil,
+        pushService: PushService? = nil,
         logger: Logger = Logger(label: "podium-server")
     ) async -> PodiumServerApp {
         let state = ListenState()
@@ -84,6 +86,8 @@ public enum PodiumServerLifecycle {
                 fallback: PodiumServerApp.defaultDevDistPath()
             ),
             mounts: mounts,
+            reimportRunner: reimportRunner,
+            pushService: pushService,
             logger: logger,
             onListening: {
                 ServerInfoWriter.write(port: port)
@@ -120,6 +124,8 @@ public enum PodiumServerLifecycle {
         webDistDirectory: String? = nil,
         mounts: [any RouterMount.Type] = [],
         services: [any BackgroundService]? = nil,
+        reimportRunner: ReimportRunner? = nil,
+        pushService: PushService? = nil,
         logger: Logger = Logger(label: "podium-server")
     ) async throws -> Int {
         var lastError: Error?
@@ -132,6 +138,8 @@ public enum PodiumServerLifecycle {
                 webDistDirectory: webDistDirectory,
                 mounts: mounts,
                 services: services,
+                reimportRunner: reimportRunner,
+                pushService: pushService,
                 logger: logger
             )
 
