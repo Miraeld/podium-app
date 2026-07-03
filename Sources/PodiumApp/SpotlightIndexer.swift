@@ -1,3 +1,4 @@
+#if os(macOS)
 import CoreSpotlight
 import UniformTypeIdentifiers
 import Foundation
@@ -83,3 +84,5 @@ actor SpotlightIndexer {
         "podium.session.\(sessionId)"
     }
 }
+
+#endif

@@ -1,3 +1,4 @@
+#if os(macOS)
 import SwiftUI
 import Charts
 
@@ -560,3 +561,5 @@ struct ActivityHeatmapCard: View {
         return f.string(from: date)
     }
 }
+
+#endif

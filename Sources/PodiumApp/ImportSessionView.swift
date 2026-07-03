@@ -1,3 +1,4 @@
+#if os(macOS)
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -330,3 +331,5 @@ struct ImportSessionView: View {
         withAnimation { viewState = .preview }
     }
 }
+
+#endif

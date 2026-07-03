@@ -1,3 +1,4 @@
+#if os(macOS)
 import SwiftUI
 
 // MARK: - Stat Mini Row
@@ -127,3 +128,5 @@ struct MenuBarContentView: View {
         .frame(width: 300)
     }
 }
+
+#endif

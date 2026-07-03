@@ -1,3 +1,4 @@
+#if os(macOS)
 import SwiftUI
 import AppKit
 import UserNotifications
@@ -78,3 +79,5 @@ struct PodiumApp: App {
         .menuBarExtraStyle(.window)
     }
 }
+
+#endif

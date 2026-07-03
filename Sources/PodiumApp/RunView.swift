@@ -1,3 +1,4 @@
+#if os(macOS)
 import SwiftUI
 import AppKit
 
@@ -559,3 +560,5 @@ struct RunOutputRow: View {
         }
     }
 }
+
+#endif

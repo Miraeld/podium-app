@@ -1,3 +1,4 @@
+#if os(macOS)
 import SwiftUI
 
 // MARK: - Podium brand "eye" logo
@@ -92,3 +93,5 @@ private struct EyeLensShape: Shape {
         return path
     }
 }
+
+#endif

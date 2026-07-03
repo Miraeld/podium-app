@@ -1,3 +1,4 @@
+#if os(macOS)
 import Foundation
 import AppKit
 import UniformTypeIdentifiers
@@ -439,3 +440,5 @@ enum SessionExporter {
         return result
     }
 }
+
+#endif

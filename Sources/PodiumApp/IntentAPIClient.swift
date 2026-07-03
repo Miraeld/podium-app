@@ -1,3 +1,4 @@
+#if os(macOS)
 import Foundation
 
 // MARK: - IntentAPIClient
@@ -44,3 +45,5 @@ struct IntentAPIClient {
         return try JSONDecoder.podium.decode(SessionsResponse.self, from: data).sessions
     }
 }
+
+#endif

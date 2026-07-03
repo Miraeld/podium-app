@@ -1,3 +1,4 @@
+#if os(macOS)
 import Foundation
 
 // MARK: - Session
@@ -333,3 +334,5 @@ struct EventHit: Decodable, Identifiable {
     let toolName: String?
     let highlight: String?  // server sends <mark>...</mark> tags
 }
+
+#endif

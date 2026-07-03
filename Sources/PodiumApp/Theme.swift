@@ -1,3 +1,4 @@
+#if os(macOS)
 import SwiftUI
 
 // MARK: - Theme
@@ -144,3 +145,5 @@ extension View {
         glassEffect()
     }
 }
+
+#endif

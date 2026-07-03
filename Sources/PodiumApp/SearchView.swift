@@ -1,3 +1,4 @@
+#if os(macOS)
 import SwiftUI
 
 // MARK: - Search View
@@ -337,3 +338,5 @@ struct HighlightedText: View {
         return result.characters.isEmpty ? AttributedString(raw) : result
     }
 }
+
+#endif

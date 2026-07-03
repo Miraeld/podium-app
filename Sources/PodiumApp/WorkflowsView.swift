@@ -1,3 +1,4 @@
+#if os(macOS)
 import SwiftUI
 import Charts
 
@@ -579,3 +580,5 @@ struct PatternCard: View {
         .glassCard(radius: 12)
     }
 }
+
+#endif

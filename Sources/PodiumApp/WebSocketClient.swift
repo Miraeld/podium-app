@@ -1,3 +1,4 @@
+#if os(macOS)
 import Foundation
 
 // MARK: - WebSocket Client
@@ -85,3 +86,5 @@ final class WebSocketClient: NSObject, URLSessionWebSocketDelegate {
 private struct WSEnvelope: Decodable {
     let type: String
 }
+
+#endif

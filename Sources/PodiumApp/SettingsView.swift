@@ -1,3 +1,4 @@
+#if os(macOS)
 import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
@@ -396,3 +397,5 @@ struct HooksTab: View {
         isLoading = false
     }
 }
+
+#endif

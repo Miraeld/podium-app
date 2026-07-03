@@ -1,3 +1,4 @@
+#if os(macOS)
 import SwiftUI
 
 // MARK: - Kanban Board Mode
@@ -353,3 +354,5 @@ private struct AgentKanbanCard: View {
         .contentShape(Rectangle())
     }
 }
+
+#endif

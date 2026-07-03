@@ -1,3 +1,4 @@
+#if os(macOS)
 import SwiftUI
 
 // MARK: - Feed Filter
@@ -416,3 +417,5 @@ struct ActivityEventRow: View {
         .contentShape(Rectangle())
     }
 }
+
+#endif

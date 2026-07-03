@@ -1,3 +1,4 @@
+#if os(macOS)
 import SwiftUI
 
 // MARK: - Sort Order
@@ -300,3 +301,5 @@ struct SessionListRow: View {
 }
 
 // MARK: - Filter Chip (local override removed — use Components.swift version)
+
+#endif

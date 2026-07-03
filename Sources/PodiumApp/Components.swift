@@ -1,3 +1,4 @@
+#if os(macOS)
 import SwiftUI
 import Charts
 
@@ -289,3 +290,5 @@ struct MiniBarChart: View {
         }
     }
 }
+
+#endif

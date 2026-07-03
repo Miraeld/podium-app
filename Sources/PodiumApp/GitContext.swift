@@ -1,3 +1,4 @@
+#if os(macOS)
 import Foundation
 
 // MARK: - GitInfo
@@ -120,3 +121,5 @@ actor GitContextReader {
         return URL(string: url)
     }
 }
+
+#endif

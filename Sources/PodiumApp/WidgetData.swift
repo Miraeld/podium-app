@@ -1,3 +1,4 @@
+#if os(macOS)
 import Foundation
 import WidgetKit
 
@@ -43,3 +44,5 @@ enum WidgetStore {
         return try? JSONDecoder().decode(WidgetSnapshot.self, from: data)
     }
 }
+
+#endif

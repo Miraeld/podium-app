@@ -1,3 +1,4 @@
+#if os(macOS)
 import Foundation
 
 // MARK: - Search & Patch Extension
@@ -92,3 +93,5 @@ extension PodiumAPI {
         return ""
     }
 }
+
+#endif

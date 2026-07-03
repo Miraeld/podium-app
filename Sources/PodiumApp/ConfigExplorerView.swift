@@ -1,3 +1,4 @@
+#if os(macOS)
 import SwiftUI
 import AppKit
 
@@ -715,3 +716,5 @@ private func parseFrontmatterAndBody(_ text: String) -> ([String: String], Strin
     let body = lines[i...].joined(separator: "\n").trimmingCharacters(in: .newlines)
     return (dict, body)
 }
+
+#endif

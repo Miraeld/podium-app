@@ -1,3 +1,4 @@
+#if os(macOS)
 import SwiftUI
 import UniformTypeIdentifiers
 import AppKit
@@ -1176,3 +1177,5 @@ private struct ThinkingTabView: View {
         }
     }
 }
+
+#endif

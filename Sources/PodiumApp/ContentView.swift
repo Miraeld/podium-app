@@ -1,3 +1,4 @@
+#if os(macOS)
 import SwiftUI
 
 // MARK: - Navigation Destination
@@ -209,3 +210,5 @@ struct SidebarRow: View {
     }
 }
 
+
+#endif

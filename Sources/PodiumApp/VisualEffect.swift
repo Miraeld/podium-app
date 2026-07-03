@@ -1,3 +1,4 @@
+#if os(macOS)
 import SwiftUI
 import AppKit
 
@@ -36,3 +37,5 @@ struct WindowTranslucencyAccessor: NSViewRepresentable {
         window.titlebarAppearsTransparent = true
     }
 }
+
+#endif

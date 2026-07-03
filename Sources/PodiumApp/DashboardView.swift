@@ -1,3 +1,4 @@
+#if os(macOS)
 import SwiftUI
 
 struct DashboardView: View {
@@ -406,3 +407,5 @@ struct EventFeedRow: View {
         return .secondary
     }
 }
+
+#endif

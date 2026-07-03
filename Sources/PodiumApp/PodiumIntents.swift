@@ -1,3 +1,4 @@
+#if os(macOS)
 import AppIntents
 import AppKit
 import Foundation
@@ -100,3 +101,5 @@ struct PodiumShortcuts: AppShortcutsProvider {
         )
     }
 }
+
+#endif

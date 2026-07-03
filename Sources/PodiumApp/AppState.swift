@@ -1,3 +1,4 @@
+#if os(macOS)
 import Foundation
 import SwiftUI
 import UserNotifications
@@ -372,3 +373,5 @@ private struct WSSessionMsg: Decodable { let data: Session? }
 private struct WSAgentMsg: Decodable { let data: Agent? }
 private struct WSEventMsg: Decodable { let data: DashboardEvent? }
 private struct WSStatsMsg: Decodable { let data: Stats? }
+
+#endif

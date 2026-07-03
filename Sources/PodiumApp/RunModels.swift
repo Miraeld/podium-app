@@ -1,3 +1,4 @@
+#if os(macOS)
 import Foundation
 
 // MARK: - RunHandle
@@ -290,3 +291,5 @@ private func jsonString(_ dict: [String: JSONValue]) -> String {
 
 /// Used to skip undecoded values in unkeyed containers.
 private struct SkipValue: Decodable {}
+
+#endif

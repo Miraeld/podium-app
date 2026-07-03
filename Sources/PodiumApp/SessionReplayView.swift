@@ -1,3 +1,4 @@
+#if os(macOS)
 import SwiftUI
 
 // MARK: - Replay State
@@ -468,3 +469,5 @@ struct SessionReplayView: View {
         }
     }
 }
+
+#endif

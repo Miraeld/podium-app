@@ -1,3 +1,4 @@
+#if os(macOS)
 import Foundation
 
 // MARK: - JSON Decoder
@@ -259,3 +260,5 @@ enum APIError: LocalizedError {
         }
     }
 }
+
+#endif
