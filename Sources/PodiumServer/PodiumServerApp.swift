@@ -36,6 +36,11 @@ public struct PodiumServerApp: Sendable {
     ///   `RunRouter` at a fixture "claude" binary instead of spawning the
     ///   real CLI. `nil` (the default) builds a production
     ///   `RunSpawner(store:broadcaster:)` that resolves `claude` off `PATH`.
+    /// - Parameter reimportRunner: Injectable (P3.3) — backs `POST
+    ///   /api/settings/reimport`. `nil` (the default) makes that endpoint
+    ///   respond `503 NOT_IMPLEMENTED` until the orchestrator wires a
+    ///   concrete adapter over P3.2's `LegacyImporter`. See
+    ///   `Routes/ReimportRunner.swift`.
     public init(
         store: PodiumStore,
         port: Int,
@@ -45,6 +50,7 @@ public struct PodiumServerApp: Sendable {
         ),
         mounts: [any RouterMount.Type] = [],
         runSpawner: RunSpawner? = nil,
+        reimportRunner: ReimportRunner? = nil,
         logger: Logger = Logger(label: "podium-server"),
         onListening: @escaping @Sendable () async -> Void = {}
     ) {
@@ -54,7 +60,7 @@ public struct PodiumServerApp: Sendable {
         self.servicesRunner = ServicesRunner()
         let resolvedRunSpawner = runSpawner ?? RunSpawner(store: store, broadcaster: broadcaster)
         self.runSpawner = resolvedRunSpawner
-        let context = ServerContext(store: store, broadcaster: broadcaster, runSpawner: resolvedRunSpawner)
+        let context = ServerContext(store: store, broadcaster: broadcaster, runSpawner: resolvedRunSpawner, reimportRunner: reimportRunner)
         self.serverContext = context
 
         let router = Router(context: ServerRequestContext.self)
