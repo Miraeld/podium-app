@@ -30,7 +30,16 @@ final class AppState {
     var sessionStatsCache: [String: SessionStats] = [:]
     var sessionCostCache: [String: CostResult] = [:]
     var gitContextCache: [String: GitInfo] = [:]
+    /// True only while the very first `refresh()` is in flight. Views should
+    /// gate full-screen spinners/skeletons on `isInitialLoad`, never on
+    /// `isLoading` alone — that flag flips true/false on every periodic or
+    /// manual (⌘R) refresh too, and blanking the UI each time is the "spinner
+    /// always popping in" annoyance. Once the first load completes (success
+    /// or failure), stale data stays visible and refreshes update in place.
     var isLoading = false
+    var isInitialLoad = true
+    /// Mirrors `isInitialLoad` for the separate `loadAnalytics()` data domain.
+    var isAnalyticsInitialLoad = true
     var lastError: String?
 
     // Live activity feed
