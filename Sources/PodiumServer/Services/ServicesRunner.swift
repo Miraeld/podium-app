@@ -201,7 +201,7 @@ public struct StaleSessionSweepService: BackgroundService {
     }
 
     /// Step 1: abandon stale sessions + batch-complete their agents.
-    private func sweepStaleSessions(context: ServerContext, staleMinutes: Int) async throws {
+    func sweepStaleSessions(context: ServerContext, staleMinutes: Int) async throws {
         let store = context.store
         let staleIds = try store.findStaleSessions(excludingId: "__periodic__", minutes: staleMinutes)
         guard !staleIds.isEmpty else { return }
@@ -233,7 +233,7 @@ public struct StaleSessionSweepService: BackgroundService {
     /// Step 2: scan every active session's transcript for new compaction
     /// markers via the SAME `TranscriptCache` the hook-ingestion path uses
     /// (P3.1's entry point — no duplicate reads).
-    private func scanActiveSessionsForCompactions(context: ServerContext) async throws {
+    func scanActiveSessionsForCompactions(context: ServerContext) async throws {
         let store = context.store
         let activeSessions = try store.activeSessionTranscriptPaths()
         for row in activeSessions {
@@ -280,7 +280,7 @@ public struct WatchdogService: BackgroundService {
         }
     }
 
-    private func tick(context: ServerContext) async throws {
+    func tick(context: ServerContext) async throws {
         let store = context.store
         let cutoff = PodiumDate.format(Date().addingTimeInterval(-Double(Self.staleThresholdSeconds)))
         let candidates = try store.watchdogCandidates(cutoff: cutoff)
@@ -369,7 +369,7 @@ public struct StuckAgentCheckService: BackgroundService {
         }
     }
 
-    private func tick(context: ServerContext, alertedAt: inout [String: String]) async throws {
+    func tick(context: ServerContext, alertedAt: inout [String: String]) async throws {
         let cutoff = PodiumDate.format(Date().addingTimeInterval(-Double(Self.thresholdMinutes * 60)))
         let candidates = try context.store.stuckSessionCandidates(cutoff: cutoff)
         let candidateIds = Set(candidates.map(\.id))
