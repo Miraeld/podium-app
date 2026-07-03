@@ -1,7 +1,8 @@
 # Handover prompt — paste this into a fresh Claude session to continue
 
 > Keep this file updated: the orchestrator refreshes the "Live state" section
-> after every task completion. Last update: 2026-07-03 ~21:20 CEST (Fable 5).
+> after every task completion. Last update: 2026-07-03 ~21:35 CEST (Fable 5,
+> session 2 — post-handover).
 
 ## Paste-ready prompt
 
@@ -26,9 +27,12 @@ gate between phases.
 - **Done (8/22):** P0.1, P1.1, P1.2, P2.1, P2.2, P2.3, P2.4, P5.2. Phase 2
   E2E-gate passed (real binary ingested live production hook traffic).
 - **In flight right now:** P3.1 (transcript engine) and P3.4 (workflows API) —
-  dispatched ~21:15 CEST 2026-07-03. If you're reading this cold, they are dead:
-  reconcile via §0 step 2 (their fences: P3.1 owns Transcripts/, Discovery/
-  ClaudeHome.swift, SessionsRouter 501 stubs; P3.4 owns Workflows/,
+  RE-dispatched ~21:35 CEST 2026-07-03 by session 2 after reconciling the first
+  dispatch (dead with old session; P3.4 partial work committed as c909bcb +
+  stopgap fixes, P3.1 had nothing). If you're reading this cold, they are dead
+  again: reconcile via §0 step 2 (fences: P3.1 owns Transcripts/, Discovery/
+  ClaudeHome.swift, SessionsRouter 501 stubs, HooksRouter seam wiring,
+  PodiumStore+Transcripts.swift; P3.4 owns Workflows/, PodiumStore+Workflows.swift,
   WorkflowsRouter.swift, main.swift mounts).
 - **Next unblocked after those:** P3.3 (needs P3.1's ClaudeHome/ConfigFile —
   do not run concurrently with P3.1), P3.2 (needs P3.1+P2.3 — includes the
