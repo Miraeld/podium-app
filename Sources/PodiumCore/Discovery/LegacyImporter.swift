@@ -392,7 +392,7 @@ public enum LegacyImporter {
             if added > 0 { backfilled = true }
         }
 
-        if updateBackfilledMetadata(store: store, session: session, meta: meta) {
+        if try updateBackfilledMetadata(store: store, session: session, meta: meta) {
             backfilled = true
         }
 
@@ -413,7 +413,7 @@ public enum LegacyImporter {
         return SessionImportResult(skipped: !backfilled, backfilled: backfilled)
     }
 
-    private static func updateBackfilledMetadata(store: PodiumStore, session: ParsedSession, meta: JSONValue) -> Bool {
+    private static func updateBackfilledMetadata(store: PodiumStore, session: ParsedSession, meta: JSONValue) throws -> Bool {
         let metaChanged = (meta["user_messages"]?.asInt != session.userMessages)
             || (meta["assistant_messages"]?.asInt != session.assistantMessages)
             || (meta.nonEmptyString("entrypoint") == nil && (session.entrypoint != nil || !session.turnDurations.isEmpty))
@@ -429,7 +429,7 @@ public enum LegacyImporter {
         newMeta["total_turn_duration_ms"] = .number(Double(session.turnDurations.reduce(0) { $0 + $1.durationMs }))
 
         guard let metaJSON = jsonString(.object(newMeta)) else { return false }
-        try? store.updateSession(id: session.sessionId, metadata: metaJSON)
+        try store.updateSession(id: session.sessionId, metadata: metaJSON)
         return true
     }
 
