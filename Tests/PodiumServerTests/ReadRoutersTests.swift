@@ -130,17 +130,26 @@ final class ReadRoutersTests: XCTestCase {
         XCTAssertEqual(body["error"]?["code"], "NOT_FOUND")
     }
 
-    func testSessionTranscriptEndpointsReturn501NotStubbed() async throws {
+    // P3.1 landed real transcript endpoints — a session with no cwd (so no
+    // `~/.claude/projects` path can be resolved) and no on-disk JSONL files
+    // returns the same empty-result shape Node returns when nothing is
+    // found, not a 404/501. Full JSONL-parsing coverage lives in
+    // TranscriptRouterTests.swift (fixture files under a fake CLAUDE_HOME).
+    func testSessionTranscriptEndpointsReturnEmptyResultsWhenNoFilesResolve() async throws {
         try store.insertSession(id: "s1", name: nil, status: .active, cwd: nil, model: nil, metadata: nil)
         try await bootServer()
 
         let (data1, response1) = try await get("/api/sessions/s1/transcript")
-        XCTAssertEqual(response1.statusCode, 501)
-        let body1 = try JSONDecoder().decode([String: String].self, from: data1)
-        XCTAssertEqual(body1["error"], "transcript parsing lands in P3.1")
+        XCTAssertEqual(response1.statusCode, 200)
+        let body1 = try PodiumJSON.decoder.decode(TranscriptResult.self, from: data1)
+        XCTAssertEqual(body1.messages, [])
+        XCTAssertEqual(body1.total, 0)
+        XCTAssertFalse(body1.hasMore)
 
-        let (_, response2) = try await get("/api/sessions/s1/transcripts")
-        XCTAssertEqual(response2.statusCode, 501)
+        let (data2, response2) = try await get("/api/sessions/s1/transcripts")
+        XCTAssertEqual(response2.statusCode, 200)
+        let body2 = try PodiumJSON.decoder.decode(TranscriptListResult.self, from: data2)
+        XCTAssertEqual(body2.transcripts, [])
     }
 
     // MARK: - Sessions: PATCH broadcasts session_updated
