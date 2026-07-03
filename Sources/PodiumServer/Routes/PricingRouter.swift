@@ -66,12 +66,15 @@ public enum PricingRouterMount: RouterMount {
 
     // MARK: - DELETE /:pattern
 
-    /// pricing.js lines 101–110: 404 if the pattern doesn't exist. Hummingbird
-    /// already percent-decodes path parameters, matching Node's explicit
-    /// `decodeURIComponent(req.params.pattern)`.
+    /// pricing.js lines 101–110: 404 if the pattern doesn't exist.
+    /// Hummingbird's route parameters are NOT percent-decoded (unlike
+    /// Express's `req.params`) — a pattern containing `%` (every real
+    /// `model_pattern` does, since `%` is the SQL LIKE wildcard) arrives as
+    /// literal `%25` unless decoded explicitly here, matching Node's
+    /// explicit `decodeURIComponent(req.params.pattern)`.
     private static func delete(_ req: Request, _ ctx: ServerRequestContext, context: ServerContext) async throws -> JSONResponse {
-        let pattern = try ctx.parameters.require("pattern")
-        FileHandle.standardError.write("DEBUG pattern=\(pattern)\n".data(using: .utf8)!)
+        let rawPattern = try ctx.parameters.require("pattern")
+        let pattern = rawPattern.removingPercentEncoding ?? rawPattern
         guard try context.store.getPricing(pattern: pattern) != nil else {
             return try JSONResponse(status: .notFound, CodedErrorResponse(code: "NOT_FOUND", message: "Pricing rule not found"))
         }
