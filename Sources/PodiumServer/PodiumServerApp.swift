@@ -41,6 +41,14 @@ public struct PodiumServerApp: Sendable {
     ///   respond `503 NOT_IMPLEMENTED` until the orchestrator wires a
     ///   concrete adapter over P3.2's `LegacyImporter`. See
     ///   `Routes/ReimportRunner.swift`.
+    /// - Parameter pushService: Injectable (P4.2) — backs `PushRouter` and
+    ///   the `IngestEngine` `Notifier` seam (`HooksRouterMount` wraps it in
+    ///   a `PushNotifier`). `nil` (the default) builds a production
+    ///   `PushService(store:)`, which defers all VAPID-key disk I/O and
+    ///   native-notifier dispatch to first actual use — constructing it
+    ///   here has no side effects. Tests that exercise push endpoints
+    ///   should pass one pointed at a temp `keysPath` and a fake
+    ///   `WebPushTransport` (see `PushRouterTests`).
     public init(
         store: PodiumStore,
         port: Int,
@@ -51,6 +59,7 @@ public struct PodiumServerApp: Sendable {
         mounts: [any RouterMount.Type] = [],
         runSpawner: RunSpawner? = nil,
         reimportRunner: ReimportRunner? = nil,
+        pushService: PushService? = nil,
         logger: Logger = Logger(label: "podium-server"),
         onListening: @escaping @Sendable () async -> Void = {}
     ) {
@@ -60,7 +69,14 @@ public struct PodiumServerApp: Sendable {
         self.servicesRunner = ServicesRunner()
         let resolvedRunSpawner = runSpawner ?? RunSpawner(store: store, broadcaster: broadcaster)
         self.runSpawner = resolvedRunSpawner
-        let context = ServerContext(store: store, broadcaster: broadcaster, runSpawner: resolvedRunSpawner, reimportRunner: reimportRunner)
+        let resolvedPushService = pushService ?? PushService(store: store)
+        let context = ServerContext(
+            store: store,
+            broadcaster: broadcaster,
+            runSpawner: resolvedRunSpawner,
+            reimportRunner: reimportRunner,
+            pushService: resolvedPushService
+        )
         self.serverContext = context
 
         let router = Router(context: ServerRequestContext.self)

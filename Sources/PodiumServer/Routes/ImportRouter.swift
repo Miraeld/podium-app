@@ -329,7 +329,7 @@ enum MultipartParser {
         var parts: [Data] = []
         var cursor = body.startIndex
         var first = true
-        while let delimiterRange = body.range(of: delimiter, in: cursor..<body.endIndex) {
+        while let delimiterRange = findSubrange(delimiter, in: body, from: cursor) {
             if !first {
                 parts.append(body.subdata(in: cursor..<delimiterRange.lowerBound))
             }
@@ -341,7 +341,7 @@ enum MultipartParser {
         for rawPart in parts {
             var part = rawPart
             if part.starts(with: crlf) { part.removeFirst(2) }
-            guard let headerBodySeparator = part.range(of: crlfcrlf) else { continue }
+            guard let headerBodySeparator = findSubrange(crlfcrlf, in: part, from: part.startIndex) else { continue }
             let headerData = part.subdata(in: part.startIndex..<headerBodySeparator.lowerBound)
             var content = part.subdata(in: headerBodySeparator.upperBound..<part.endIndex)
             if content.count >= 2, content.suffix(2).elementsEqual(crlf) { content.removeLast(2) }
@@ -350,6 +350,25 @@ enum MultipartParser {
             files.append(File(filename: filename, data: content))
         }
         return files
+    }
+
+    /// Manual byte-subsequence search — used instead of `Data.range(of:)`
+    /// (an NSData-bridged API whose Linux/corelibs-Foundation behavior this
+    /// task didn't want to depend on for a target that must build on Linux).
+    /// Naive O(n·m) scan; fine for multipart bodies at the sizes this router
+    /// handles (transcripts, not video).
+    private static func findSubrange(_ needle: Data, in haystack: Data, from start: Data.Index) -> Range<Data.Index>? {
+        guard !needle.isEmpty else { return nil }
+        let needleBytes = Array(needle)
+        var index = start
+        while index < haystack.endIndex {
+            guard let matchEnd = haystack.index(index, offsetBy: needleBytes.count, limitedBy: haystack.endIndex) else { return nil }
+            if haystack[index..<matchEnd].elementsEqual(needleBytes) {
+                return index..<matchEnd
+            }
+            index = haystack.index(after: index)
+        }
+        return nil
     }
 
     private static func extractFilename(fromHeaders headers: String) -> String? {

@@ -40,12 +40,29 @@ public struct ServerContext: Sendable {
     /// see `Routes/ReimportRunner.swift` for the seam contract and why this
     /// router can't implement it directly.
     public let reimportRunner: ReimportRunner?
+    /// P4.2: VAPID web-push + native-notification fan-out, backing
+    /// `PushRouter` and (via `PushNotifier`) the `IngestEngine` `Notifier`
+    /// seam. See `Sources/PodiumCore/Push/PushService.swift`.
+    public let pushService: PushService
 
-    public init(store: PodiumStore, broadcaster: Broadcaster, runSpawner: RunSpawner, reimportRunner: ReimportRunner? = nil) {
+    /// `pushService` defaults to `nil` (resolved to a plain
+    /// `PushService(store:)` below) rather than requiring every existing
+    /// call site to pass one — same pattern as `reimportRunner`.
+    /// Constructing the default has no side effects (see
+    /// `PushService`'s doc comment): no disk I/O happens until a push
+    /// endpoint is actually hit.
+    public init(
+        store: PodiumStore,
+        broadcaster: Broadcaster,
+        runSpawner: RunSpawner,
+        reimportRunner: ReimportRunner? = nil,
+        pushService: PushService? = nil
+    ) {
         self.store = store
         self.broadcaster = broadcaster
         self.runSpawner = runSpawner
         self.reimportRunner = reimportRunner
+        self.pushService = pushService ?? PushService(store: store)
     }
 }
 

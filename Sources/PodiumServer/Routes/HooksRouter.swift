@@ -19,6 +19,12 @@
 // own tool calls never fire hooks on the parent session; this sweep is the
 // only path that attributes them to the subagent's own agent_id without
 // waiting for the periodic sweep.
+//
+// P4.2: `IngestEngine`'s `Notifier` seam is wired to a real `PushNotifier`
+// (VAPID web-push + native OS notification) instead of the P2.3-era
+// `NoOpNotifier` default — session end/error, agent-stuck, and cost-spike
+// transitions now actually alert the user. See
+// `Sources/PodiumCore/Push/PushNotifier.swift`.
 
 import Foundation
 import Hummingbird
@@ -27,7 +33,11 @@ import PodiumCore
 
 public enum HooksRouterMount: RouterMount {
     public static func mount(on router: PodiumRouter, context: ServerContext) {
-        let engine = IngestEngine(store: context.store, transcriptSource: TranscriptCacheTokenSource())
+        let engine = IngestEngine(
+            store: context.store,
+            transcriptSource: TranscriptCacheTokenSource(),
+            notifier: PushNotifier(service: context.pushService)
+        )
         let group = router.group("/api/hooks")
 
         group.post("/event") { request, requestContext -> JSONResponse in
