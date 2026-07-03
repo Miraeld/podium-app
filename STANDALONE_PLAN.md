@@ -255,6 +255,7 @@ Legend: ⬜ todo · 🟦 in progress · ✅ done · ⚠️ done with caveats (se
 | **P5.2** | macOS app: brand re-theme (black/gold), fix refresh-spinner annoyance | P0.1 | ✅ |
 | **P5.3** | macOS app: transcript viewer + search + session actions | P3.1 | ⬜ |
 | **P5.4** | macOS app: workflows graphs, analytics upgrade, run page, cc-config, import/export UI | P3.4, P4.1, P4.3 | ⬜ |
+| **P5.5** | First-run onboarding tour (macOS app; web dashboard gets a lighter variant) | P5.4 | ⬜ |
 | **P6.1** | Packaging: macOS .app/DMG script, Linux static-ish binary + systemd unit + install.sh | P5.1 | ⬜ |
 | **P6.2** | E2E verification: React client vs Swift server contract test; docs (README, MIGRATION) | all | ⬜ |
 
@@ -796,6 +797,35 @@ TASK P5.4 — Bring the remaining web features native.
 4. ImportExport: Import page (rescan, scan path, upload JSONL via file picker),
    Analytics upgrades to match web (daily charts w/ tz offset, cost spike info).
 5. Sidebar gains: Workflows, Run, Config, Import sections; keep glass design.
+```
+
+### P5.5 — First-run onboarding tour
+
+```
+TASK P5.5 — First-run onboarding, in-app.
+
+Product frame (plan §6b): this app must kill the "too complicated" objection —
+the tour is the moment that either proves simplicity or destroys it. Curated,
+glanceable, skippable. Target: a colleague who has never heard of Podium
+understands what they're looking at in under a minute.
+
+1. macOS app: on first launch (AppStorage flag), after the server is up and
+   hooks are installed, show a glass-styled overlay tour (4–6 steps max):
+   what Podium is (one sentence), the live dashboard, sessions & the detail
+   view, notifications/awaiting-input, where Settings lives. Spotlight-style
+   highlight on the real UI, not screenshots. Every step skippable; "Skip tour"
+   always visible; re-runnable from Help menu → "Show tour".
+2. If legacy import ran on this launch, the first step says "importing your
+   history — N sessions found so far" with live count (poll /api/stats).
+3. Keep copy short and human — no jargon, no walls of text (the "not bloated"
+   rule applies to words too).
+4. Web dashboard variant: do NOT rebuild the tour in React — add a dismissible
+   first-visit welcome card on the Dashboard page pointing at the three main
+   nav areas, stored in localStorage. (Check whether the client already has a
+   Tip/UpdateNotifier pattern to reuse — client/src/components/Tip.tsx.)
+   NOTE: this requires editing the vendored client — see WebClient/SYNC.md for
+   the rebuild flow; keep the diff minimal and upstream-friendly.
+5. Verify visually via run.sh in both light and dark; screenshots in the report.
 ```
 
 ### P6.1 — Packaging
