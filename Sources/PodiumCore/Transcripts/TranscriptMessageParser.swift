@@ -37,7 +37,11 @@ public enum TranscriptMessageParser {
 
         // Split on "\n" only, matching Node's readline (which treats a lone
         // "\r\n" as one line break too — strip a trailing CR per line below).
-        let rawLines = content.split(separator: "\n", omittingEmptySubsequences: false)
+        // A trailing "\n" at EOF must NOT produce a synthetic extra empty
+        // line — readline doesn't emit one for that final delimiter, only
+        // for genuine blank lines that occur mid-file.
+        var rawLines = content.split(separator: "\n", omittingEmptySubsequences: false)
+        if content.hasSuffix("\n") { rawLines.removeLast() }
 
         var lineNum = 0
         var total = 0
