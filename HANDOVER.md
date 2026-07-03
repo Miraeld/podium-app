@@ -25,23 +25,26 @@ gate between phases.
 
 ## Live state (refresh me on every board change)
 
-- **Done (10/22):** P0.1, P1.1, P1.2, P2.1, P2.2, P2.3, P2.4, P3.1, P3.4, P5.2.
-  Phase 2 E2E-gate passed. Baseline before the current dispatches: 220/220
-  green at commit b2ea121.
+- **Done (11/22):** P0.1, P1.1, P1.2, P2.1, P2.2, P2.3, P2.4, P3.1, P3.4, P4.1,
+  P5.2. Phase 2 E2E-gate passed. P4.1 green at 86e12cb (295/295 at that point;
+  suite grows as P3.2/P3.3 land WIP tests).
+- **main.swift is now ORCHESTRATOR-OWNED** (P4.1 released it): every active/
+  future agent reports mount lines instead of editing it; orchestrator wires
+  P3.3 + P3.2 + P4.2 mounts and the ReimportRunner→LegacyImporter seam once
+  their reports arrive.
 - **In flight right now (3 lanes, all dispatched by session 2).** If you're
   reading this cold they died with the session — reconcile each via §0 step 2
   (partial work lands in `Auto-commit:` commits; `swift build && swift test`;
   complete → ✅, else re-dispatch §6 prompt + "audit your predecessor's partial
   work in your owned paths and continue"):
-  1. **P4.1 run-spawner** (~21:55 CEST): owns Sources/PodiumCore/Runs/,
-     Routes/RunRouter.swift, Database/PodiumStore+Runs.swift,
-     PodiumServerCLI/main.swift (mounts + orphan-reconciliation boot hook),
-     new tests. Deliverables: RunSpawner (headless + conversation modes, fake
-     claude binary in tests), run router (incl. /files path-traversal guard),
-     run_status/run_stream/run_input_ack broadcasts. Extra requirement given:
-     envelope parser must pass unknown stream-json types through verbatim
-     (feeds §6b №2 answer-from-popup).
-  2. **P3.3 pricing/settings** (~22:10 CEST): owns Sources/PodiumCore/Pricing/,
+  1. **P4.2 web-push** (~01:05 CEST 2026-07-04): owns Sources/PodiumCore/Push/,
+     Routes/PushRouter.swift, PodiumStore+Push.swift, HooksRouter.swift
+     (Notifier seam injection), new tests. NO main.swift (reports mount line).
+     Must: keep Node vapid-keys.json format working (real file exists at
+     ~/.claude/podium/data/vapid-keys.json), pass RFC 8291 §5 test vectors,
+     NativeNotifier (macOS #if) + LinuxDesktopNotifier (notify-send) for §6b
+     Linux parity.
+  2. **P3.3 pricing/settings** (~00:35 CEST, resumed): owns Sources/PodiumCore/Pricing/,
      Routes/PricingRouter.swift, Routes/SettingsRouter.swift,
      Database/PodiumStore+Pricing.swift, new tests. NO main.swift. POST
      /reimport implemented against a ReimportRunner seam (503 default) — NOT
