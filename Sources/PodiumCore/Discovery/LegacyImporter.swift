@@ -509,8 +509,11 @@ public enum LegacyImporter {
     // MARK: - Compactions / Agent-tool subagents / API errors
 
     /// Port of `importCompactions` — dedup by `<sessionId>-compact-<uuid>`.
+    /// Public: `ServicesRunner`'s periodic sweep calls this directly (via
+    /// `TranscriptCache.shared.extractCompactions`) to backfill compaction
+    /// agents/events for active sessions between hook events.
     @discardableResult
-    static func importCompactions(store: PodiumStore, sessionId: String, mainAgentId: String, compactions: [TranscriptCompactionEntry]) throws -> Int {
+    public static func importCompactions(store: PodiumStore, sessionId: String, mainAgentId: String, compactions: [TranscriptCompactionEntry]) throws -> Int {
         guard !compactions.isEmpty else { return 0 }
         var created = 0
         for (index, compaction) in compactions.enumerated() {
