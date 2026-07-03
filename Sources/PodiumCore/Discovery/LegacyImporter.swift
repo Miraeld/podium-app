@@ -789,7 +789,7 @@ public enum LegacyImporter {
         if idx - 1 >= 0 { candidates.append(parts[idx - 1]) }
         if idx + 1 < parts.count { candidates.append(parts[idx + 1]) }
         for candidate in candidates {
-            if (try? store.getSession(id: candidate)) != nil, (try? store.getSession(id: candidate) ?? nil) != nil {
+            if let session = try? store.getSession(id: candidate), session != nil {
                 return candidate
             }
         }
