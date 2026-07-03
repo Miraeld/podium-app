@@ -58,6 +58,7 @@ let package = Package(
             name: "PodiumServerCLI",
             dependencies: [
                 "PodiumServer",
+                "PodiumCore",
                 .product(name: "ArgumentParser", package: "swift-argument-parser")
             ],
             path: "Sources/PodiumServerCLI"
