@@ -54,6 +54,16 @@ struct PodiumServerCLI: AsyncParsableCommand {
             throw ExitCode.failure
         }
 
+        // P4.1 orphan reconciliation: any `dashboard_runs` row still
+        // `running`/`spawning` belonged to a process from before this
+        // restart — the in-memory RunSpawner handle map was just wiped, so
+        // mark them `abandoned` rather than showing them as live forever
+        // (port of dashboard-runs.js's `reconcileOrphans`, called once here
+        // matching index.js's boot-time call).
+        if let reconciled = try? store.reconcileOrphanRuns(), reconciled > 0 {
+            logger.info("Reconciled orphaned runs from a previous instance.", metadata: ["count": "\(reconciled)"])
+        }
+
         if !noHooks {
             installHooksNonFatal(logger: logger)
         }
@@ -75,6 +85,7 @@ struct PodiumServerCLI: AsyncParsableCommand {
                     SearchRouterMount.self,
                     HooksRouterMount.self,
                     WorkflowsRouterMount.self,
+                    RunRouterMount.self,
                 ],
                 logger: logger
             )

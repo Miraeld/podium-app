@@ -25,11 +25,17 @@ public struct PodiumServerApp: Sendable {
     public let application: Application<RouterResponder<ServerRequestContext>>
     public let servicesRunner: ServicesRunner
     public let serverContext: ServerContext
+    public let runSpawner: RunSpawner
 
     /// Default `/api/health` route + whatever mounts are registered.
     /// `mounts` defaults to empty — dependent tasks (P2.2, P2.3, …) pass
     /// their `RouterMount` types once they exist; PodiumServerCLI is the
     /// single place that lists every mount for the production binary.
+    ///
+    /// - Parameter runSpawner: Injectable (P4.1) so tests can point
+    ///   `RunRouter` at a fixture "claude" binary instead of spawning the
+    ///   real CLI. `nil` (the default) builds a production
+    ///   `RunSpawner(store:broadcaster:)` that resolves `claude` off `PATH`.
     public init(
         store: PodiumStore,
         port: Int,
@@ -38,6 +44,7 @@ public struct PodiumServerApp: Sendable {
             fallback: PodiumServerApp.defaultDevDistPath()
         ),
         mounts: [any RouterMount.Type] = [],
+        runSpawner: RunSpawner? = nil,
         logger: Logger = Logger(label: "podium-server"),
         onListening: @escaping @Sendable () async -> Void = {}
     ) {
@@ -45,7 +52,9 @@ public struct PodiumServerApp: Sendable {
         self.broadcaster = Broadcaster()
         self.webDistDirectory = webDistDirectory
         self.servicesRunner = ServicesRunner()
-        let context = ServerContext(store: store, broadcaster: broadcaster)
+        let resolvedRunSpawner = runSpawner ?? RunSpawner(store: store, broadcaster: broadcaster)
+        self.runSpawner = resolvedRunSpawner
+        let context = ServerContext(store: store, broadcaster: broadcaster, runSpawner: resolvedRunSpawner)
         self.serverContext = context
 
         let router = Router(context: ServerRequestContext.self)

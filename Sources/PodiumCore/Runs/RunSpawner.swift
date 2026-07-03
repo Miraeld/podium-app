@@ -100,8 +100,13 @@ public enum RunSpawnerError: Error, Equatable, Sendable {
 }
 
 /// One entry of the `running` array attached to a 429 `ECONCURRENCY`
-/// response (run-spawner.js `spawnRun`'s `err.running`).
-public struct RunConcurrencyEntry: Equatable, Sendable {
+/// response (run-spawner.js `spawnRun`'s `err.running`). Fields are already
+/// camelCase Swift property names matching the real (camelCase) Node wire
+/// shape verbatim — `Encodable` is declared here (not via an extension in
+/// another module) so the compiler can synthesize `encode(to:)` with no
+/// `CodingKeys` needed. Always encode with a plain `JSONEncoder` — see
+/// RunSpawner's header comment.
+public struct RunConcurrencyEntry: Equatable, Encodable, Sendable {
     public let id: String
     public let pid: Int?
     public let startedAt: Double

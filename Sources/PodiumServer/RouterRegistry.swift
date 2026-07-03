@@ -32,10 +32,14 @@ public typealias PodiumRouter = Router<ServerRequestContext>
 public struct ServerContext: Sendable {
     public let store: PodiumStore
     public let broadcaster: Broadcaster
+    /// P4.1: supervises `claude` subprocesses spawned via `POST /api/run`.
+    /// See `Sources/PodiumCore/Runs/RunSpawner.swift`.
+    public let runSpawner: RunSpawner
 
-    public init(store: PodiumStore, broadcaster: Broadcaster) {
+    public init(store: PodiumStore, broadcaster: Broadcaster, runSpawner: RunSpawner) {
         self.store = store
         self.broadcaster = broadcaster
+        self.runSpawner = runSpawner
     }
 }
 
