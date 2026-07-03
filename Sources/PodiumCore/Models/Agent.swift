@@ -174,22 +174,30 @@ public struct AgentCreateRequest: Codable, Equatable, Sendable {
     }
 }
 
-/// `PATCH /api/agents/:id` request body (routes/agents.js).
+/// `PATCH /api/agents/:id` request body (routes/agents.js line 71:
+/// `const { name, status, task, current_tool, ended_at, metadata } =
+/// req.body`). All fields optional/partial-update.
 public struct AgentPatchRequest: Codable, Equatable, Sendable {
+    public var name: String?
     public var status: AgentStatus?
     public var task: String?
     public var currentTool: String?
     public var endedAt: String?
+    public var metadata: String?
 
     public init(
+        name: String? = nil,
         status: AgentStatus? = nil,
         task: String? = nil,
         currentTool: String? = nil,
-        endedAt: String? = nil
+        endedAt: String? = nil,
+        metadata: String? = nil
     ) {
+        self.name = name
         self.status = status
         self.task = task
         self.currentTool = currentTool
         self.endedAt = endedAt
+        self.metadata = metadata
     }
 }

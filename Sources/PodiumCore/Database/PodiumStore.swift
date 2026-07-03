@@ -76,7 +76,11 @@ public final class PodiumStore: @unchecked Sendable {
         )
     }
 
-    private func mapTokenUsage(_ row: SQLiteRow) -> TokenUsage {
+    /// `internal` (not `private`) so `PodiumStore+Filters.swift` — kept as a
+    /// separate file per the P2.2 concurrency fence to avoid contending with
+    /// P1.1's edits to this file — can reuse the same row mapping for
+    /// `listAllTokenUsage()`.
+    func mapTokenUsage(_ row: SQLiteRow) -> TokenUsage {
         TokenUsage(
             sessionId: row.stringValue("session_id"),
             model: row.string("model") ?? "unknown",
@@ -388,12 +392,21 @@ public final class PodiumStore: @unchecked Sendable {
         } ?? 0
     }
 
-    /// countEventsToday: accepts a tz modifier (e.g. "-420 minutes") to
-    /// compute local midnight in UTC.
-    public func countEventsToday(tzModifier: String) throws -> Int {
+    /// countEventsToday: db.js's SQL binds TWO distinct modifiers —
+    /// `datetime('now', toLocal, 'start of day', toUTC)` — first shifting
+    /// UTC "now" into the caller's local time, truncating to local midnight,
+    /// then shifting that boundary back to UTC for comparison against
+    /// `created_at` (which is always stored in UTC). `toLocal` and `toUTC`
+    /// are the *negation* of one another (stats.js lines 15–17:
+    /// `toLocal = ${-offsetMin} minutes`, `toUTC = ${offsetMin} minutes`) —
+    /// NOT the same value, so both must be passed explicitly. (P1.1 had
+    /// bound the same single `tzModifier` to both `?`s, which only produced
+    /// the correct UTC boundary when the offset was exactly zero; fixed
+    /// here as part of P2.2's stats router parity check.)
+    public func countEventsToday(toLocal: String, toUTC: String) throws -> Int {
         try db.queryOne(
             "SELECT COUNT(*) as count FROM events WHERE created_at >= datetime('now', ?, 'start of day', ?)",
-            [.text(tzModifier), .text(tzModifier)]
+            [.text(toLocal), .text(toUTC)]
         ) { $0.intValue("count") } ?? 0
     }
 

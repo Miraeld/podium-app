@@ -342,6 +342,31 @@ extension PodiumStore {
         )
     }
 
+    // MARK: - Analytics support
+
+    /// `SELECT * FROM token_usage` (analytics.js line 33) — every raw row,
+    /// current counters only (baselines NOT pre-folded, matching the Node
+    /// query exactly, which selects the table as-is). Callers that need the
+    /// *effective* total should fold `baseline_*` in themselves; analytics.js
+    /// costs each row independently via `calculateCost([usage], rules)` using
+    /// the raw `input_tokens`/etc. columns as stored.
+    public func listAllTokenUsage() throws -> [TokenUsage] {
+        try db.query("SELECT * FROM token_usage", [], mapTokenUsage)
+    }
+
+    // MARK: - Session stats support
+
+    /// sessions.js lines 233–239: `SELECT type, COUNT(*) FROM agents WHERE
+    /// session_id = ? GROUP BY type` — main-vs-subagent counts, keyed by
+    /// the `type` column value (`"main"` / `"subagent"`).
+    public func sessionAgentTypeCountsByType(sessionId: String) throws -> [String: Int] {
+        let rows = try db.query(
+            "SELECT type, COUNT(*) as count FROM agents WHERE session_id = ? GROUP BY type",
+            [.text(sessionId)]
+        ) { row in (row.stringValue("type"), row.intValue("count")) }
+        return Dictionary(uniqueKeysWithValues: rows)
+    }
+
     // MARK: - Search
 
     /// search.js session search (lines 50–65): name/cwd LIKE match, newest

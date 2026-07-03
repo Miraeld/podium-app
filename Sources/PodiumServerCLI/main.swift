@@ -66,7 +66,15 @@ struct PodiumServerCLI: AsyncParsableCommand {
             let boundPort = try await PodiumServerLifecycle.run(
                 store: store,
                 startPort: startPort,
-                mounts: [],
+                mounts: [
+                    SessionsRouterMount.self,
+                    AgentsRouterMount.self,
+                    EventsRouterMount.self,
+                    StatsRouterMount.self,
+                    AnalyticsRouterMount.self,
+                    SearchRouterMount.self,
+                    HooksRouterMount.self,
+                ],
                 logger: logger
             )
             print("Podium server running on http://localhost:\(boundPort) (production)")
