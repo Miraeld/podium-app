@@ -63,7 +63,10 @@ public final class PodiumStore: @unchecked Sendable {
         )
     }
 
-    private func mapEvent(_ row: SQLiteRow) -> DashboardEvent {
+    /// `internal` (not `private`) so `PodiumStore+Workflows.swift` (P3.4) can
+    /// reuse the same row mapping for its ascending-order session event
+    /// query, same rationale as `mapTokenUsage` above.
+    func mapEvent(_ row: SQLiteRow) -> DashboardEvent {
         DashboardEvent(
             id: row.int("id"),
             sessionId: row.stringValue("session_id"),
