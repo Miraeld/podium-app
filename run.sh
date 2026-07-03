@@ -23,7 +23,16 @@ mkdir -p "$MACOS_DIR" "$RESOURCES_DIR"
 
 cp "$BUILD_DIR/PodiumApp" "$MACOS_DIR/PodiumApp"
 
-cat > "$INFO_PLIST" << 'PLIST'
+# App icon: bundle AppIcon.icns from the repo root if present (same brand
+# icon install.sh ships in the release build — see AppIcon.icns generated
+# from dashboard/client/public/logo-mark.svg).
+ICON_KEY=""
+if [ -f "$SCRIPT_DIR/AppIcon.icns" ]; then
+  cp "$SCRIPT_DIR/AppIcon.icns" "$RESOURCES_DIR/AppIcon.icns"
+  ICON_KEY='  <key>CFBundleIconFile</key>        <string>AppIcon</string>'
+fi
+
+cat > "$INFO_PLIST" << PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
   "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -51,9 +60,15 @@ cat > "$INFO_PLIST" << 'PLIST'
   <array>
     <string>com.gaelrobin.PodiumApp.viewSession</string>
   </array>
+$ICON_KEY
 </dict>
 </plist>
 PLIST
+
+# Nudge LaunchServices so a refreshed icon is picked up immediately instead
+# of showing a stale cached generic-executable icon.
+/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister \
+  -f "$APP_BUNDLE" 2>/dev/null || true
 
 echo "▶ Launching…"
 open "$APP_BUNDLE"
