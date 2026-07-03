@@ -35,11 +35,17 @@ public struct ServerContext: Sendable {
     /// P4.1: supervises `claude` subprocesses spawned via `POST /api/run`.
     /// See `Sources/PodiumCore/Runs/RunSpawner.swift`.
     public let runSpawner: RunSpawner
+    /// P3.3: backs `POST /api/settings/reimport`. `nil` until the
+    /// orchestrator wires a concrete adapter over P3.2's `LegacyImporter` —
+    /// see `Routes/ReimportRunner.swift` for the seam contract and why this
+    /// router can't implement it directly.
+    public let reimportRunner: ReimportRunner?
 
-    public init(store: PodiumStore, broadcaster: Broadcaster, runSpawner: RunSpawner) {
+    public init(store: PodiumStore, broadcaster: Broadcaster, runSpawner: RunSpawner, reimportRunner: ReimportRunner? = nil) {
         self.store = store
         self.broadcaster = broadcaster
         self.runSpawner = runSpawner
+        self.reimportRunner = reimportRunner
     }
 }
 

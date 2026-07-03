@@ -129,7 +129,7 @@ public protocol Broadcasting: Sendable {
 
 public actor RunSpawner {
     static let maxConcurrentDefault = 10_000
-    static let reapAfterNanoseconds: UInt64 = 5 * 60 * 1_000_000_000
+    public static let reapAfterNanoseconds: UInt64 = 5 * 60 * 1_000_000_000
     static let stdoutTailChars = 4096
     static let stderrTailChars = 4096
     static let maxEnvelopesPerHandle = 500
@@ -141,6 +141,7 @@ public actor RunSpawner {
     private let store: PodiumStore?
     private let broadcaster: Broadcasting
     private let claudeBinary: String
+    private let reapDelayNanoseconds: UInt64
 
     /// - Parameters:
     ///   - store: Persistence target for `dashboard_runs`. Optional and
@@ -153,10 +154,15 @@ public actor RunSpawner {
     ///     (resolved via `PATH` through `/usr/bin/env`, matching Node's
     ///     `spawn("claude", …)`). Tests inject an absolute path to a fixture
     ///     script here instead of spawning the real CLI.
-    public init(store: PodiumStore?, broadcaster: Broadcasting, claudeBinary: String = "claude") {
+    ///   - reapDelayNanoseconds: How long a finished handle stays queryable
+    ///     before `reap` drops it (run-spawner.js's `REAP_AFTER_MS`, 5 min).
+    ///     Overridable so tests can exercise reap behavior without an
+    ///     actual 5-minute wait; production always uses the default.
+    public init(store: PodiumStore?, broadcaster: Broadcasting, claudeBinary: String = "claude", reapDelayNanoseconds: UInt64 = RunSpawner.reapAfterNanoseconds) {
         self.store = store
         self.broadcaster = broadcaster
         self.claudeBinary = claudeBinary
+        self.reapDelayNanoseconds = reapDelayNanoseconds
         // Subprocess stdin writes (sendInput) can hit a broken pipe if the
         // child already exited; without this the default SIGPIPE action
         // (terminate the whole server process) would take Podium down.
@@ -467,8 +473,9 @@ public actor RunSpawner {
 
     private func scheduleReap(id: String) {
         reapTasks[id]?.cancel()
+        let delay = reapDelayNanoseconds
         reapTasks[id] = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: Self.reapAfterNanoseconds)
+            try? await Task.sleep(nanoseconds: delay)
             guard !Task.isCancelled else { return }
             await self?.reap(id: id)
         }

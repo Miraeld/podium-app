@@ -18,23 +18,34 @@ import PodiumCore
 public struct JSONResponse: ResponseGenerator {
     public let status: HTTPResponse.Status
     private let body: Data
+    private let extraHeaders: [HTTPField.Name: String]
 
-    public init<Payload: Encodable>(status: HTTPResponse.Status = .ok, _ payload: Payload) throws {
+    public init<Payload: Encodable>(
+        status: HTTPResponse.Status = .ok,
+        _ payload: Payload,
+        extraHeaders: [HTTPField.Name: String] = [:]
+    ) throws {
         self.status = status
         self.body = try PodiumJSON.encoder.encode(payload)
+        self.extraHeaders = extraHeaders
     }
 
     /// Convenience for handlers that already have raw encoded JSON bytes
     /// (e.g. proxying an `openapi.json`-style static document).
-    public init(status: HTTPResponse.Status = .ok, rawJSON: Data) {
+    public init(status: HTTPResponse.Status = .ok, rawJSON: Data, extraHeaders: [HTTPField.Name: String] = [:]) {
         self.status = status
         self.body = rawJSON
+        self.extraHeaders = extraHeaders
     }
 
     public func response(from request: Request, context: some RequestContext) throws -> Response {
-        Response(
+        var headers: HTTPFields = [.contentType: "application/json; charset=utf-8"]
+        for (name, value) in extraHeaders {
+            headers[name] = value
+        }
+        return Response(
             status: status,
-            headers: [.contentType: "application/json; charset=utf-8"],
+            headers: headers,
             body: .init(byteBuffer: ByteBuffer(data: body))
         )
     }
