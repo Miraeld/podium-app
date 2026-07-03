@@ -212,6 +212,7 @@ Legend: ⬜ todo · 🟦 in progress · ✅ done · ⚠️ done with caveats (se
 | **P4.1** | Run-spawner: spawn claude CLI, stream-json, run router, WS run_* messages | P2.1 | ⬜ |
 | **P4.2** | Web-push (VAPID via swift-crypto) + push router + notify-on-end | P2.1 | ⬜ |
 | **P4.3** | cc-config explorer + FS watcher + updates router + session export/import bundles | P2.2 | ⬜ |
+| **P4.4** | Diagnostics: /api/diagnostics (hook latency, last event, log ring buffer) + native panel + web note | P2.3 | ⬜ |
 | **P5.1** | macOS app: embed server in-process, lifecycle, single-instance, menu-bar status | P2.1–P2.4 | ⬜ |
 | **P5.2** | macOS app: brand re-theme (black/gold), fix refresh-spinner annoyance | P0.1 | ✅ |
 | **P5.3** | macOS app: transcript viewer + search + session actions | P3.1 | ⬜ |
@@ -640,6 +641,10 @@ TASK P4.2 — Port lib/push.js + routes/push.js using swift-crypto.
    end/error like the Node server; prune 404/410 subscriptions.
 3. On macOS, ALSO provide a NativeNotifier (UNUserNotificationCenter) behind
    #if os(macOS), used by the app when it hosts the server (P5.1 wires it).
+   On Linux, provide a LinuxDesktopNotifier that shells out to notify-send when
+   available (silently no-op otherwise) so the headless daemon gives the same
+   "session ended / awaiting input" toasts as macOS — Linux parity is a product
+   requirement (plan §6b).
 4. Tests: RFC 8291 test vectors MUST pass; subscription CRUD; JWT header/claims
    shape.
 ```
@@ -798,25 +803,32 @@ TASK P6.2 — Prove the React client runs unmodified on the Swift server + docs.
 
 ---
 
-## 6b. Backlog — nice-to-haves, parked until parity is solid
+## 6b. Backlog — reviewed with Gaël 2026-07-03
 
-Not scheduled. Do NOT start these before P6.2 passes, per the quality-over-breadth
-principle — except №1 which is small, protective, and recommended early.
+Product frame (binding for all UI/UX tasks): Podium will be advertised inside
+GroupOne as a standalone product — **useful, easy to use, not info-bloated, sexy**.
+Linux must get the macOS niceties wherever possible (see №2).
 
-1. **Pre-migration DB backup** (recommended — awaiting Gaël's go): before opening
-   a dashboard.db whose schema version is older, copy it to
-   `dashboard.db.backup-<ISO date>` in the data dir, keep the 3 most recent.
-   Fits in PodiumStore(path:) init. Converts "migration bug" into a non-event.
-2. **Actionable awaiting-input notifications**: native notification on
-   awaiting_input_since with a click-through that focuses the right terminal.
-3. **Diagnostics panel**: hook latency, last-event-received, dropped events,
-   server log tail, "test my hooks" button — in SettingsView and/or web Settings.
-4. **Cost budget alert**: user-set daily/weekly $ threshold; menu-bar tint +
-   notification (server already has cost_spike heuristics to build on).
-5. **Quick Look extension** for exported session bundles (macOS).
+1. **Pre-migration DB backup** — parked, low priority (single user today; still
+   cheap insurance for Gaël's own plugin-era dashboard.db — revisit before first
+   GroupOne distribution).
+2. **Awaiting-input notification + ANSWER-FROM-POPUP** — approved, ambitious
+   version: notification with a popup that can answer the prompt directly.
+   Feasibility split (verified against Claude Code's interfaces):
+   - Podium-spawned runs (P4.1): fully possible — stream-json control protocol
+     carries permission request/response envelopes; wire the popup answer back
+     via the run's stdin. First-class citizen in P4.1 + P5.x scope.
+   - External terminal sessions: no clean remote-answer API; do notification +
+     jump-to-terminal (focus the right window). Keystroke injection rejected
+     (fragile).
+   - Linux: daemon sends desktop notifications via notify-send/DBus; web-push +
+     browser notification click-through opens the session in the web dashboard.
+3. **Diagnostics panel** — APPROVED → scheduled as task P4.4 below.
+4. ~~Cost budget alert~~ — dropped (team subscription; cost is not a pain point;
+   keep cost UI de-emphasized per earlier feedback).
+5. **Quick Look extension** — parked, revisit after P6.2.
 
-Explicitly rejected for now: iOS companion, Raycast/Alfred extensions,
-session-diff views — wide + shallow, steal polish time from parity.
+Explicitly rejected: iOS companion, Raycast/Alfred, session-diff views.
 
 ## 7. Run log
 
