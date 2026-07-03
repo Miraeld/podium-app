@@ -1,61 +1,79 @@
 import Foundation
 
-/// `GET /api/search` response (dashboard/server/routes/search.js) —
-/// cross-entity search results. Matches client/src/lib/types.ts
-/// `SearchResult` naming (the React client's `SearchResult` interface
-/// covers sessions + events; see client/src/pages/Search.tsx for how
-/// agent hits, if any, are folded into session hits).
-public struct SearchResult: Codable, Equatable, Sendable {
-    public var sessions: [SessionSearchHit]
-    public var events: [EventSearchHit]
+/// `GET /api/search` response (dashboard/server/routes/search.js lines
+/// 39–172) — a single combined, recency-sorted array mixing session and
+/// event hits, NOT the `{sessions: [...], events: [...]}` shape the naming
+/// might suggest. Each element is tagged with `type` so the client can
+/// discriminate. Matches the exact JSON `res.json({ results, total })` the
+/// Node router sends (the React client does not yet consume this endpoint —
+/// see client/src/lib/types.ts, which has no `SearchResult` entry — so this
+/// is modeled directly from the server source, not types.ts).
+public struct SearchResponse: Codable, Equatable, Sendable {
+    public var results: [SearchHit]
+    public var total: Int
 
-    public init(sessions: [SessionSearchHit], events: [EventSearchHit]) {
-        self.sessions = sessions
-        self.events = events
+    public init(results: [SearchHit], total: Int) {
+        self.results = results
+        self.total = total
     }
 }
 
-/// A session search hit. `highlight` carries `<mark>...</mark>` tags the
-/// server wraps around matched substrings — passed through as-is for the
-/// client to render.
-public struct SessionSearchHit: Codable, Identifiable, Equatable, Sendable {
-    public var id: String
-    public var name: String?
-    public var status: String
-    public var cwd: String?
-    public var highlight: String?
-
-    public init(id: String, name: String? = nil, status: String, cwd: String? = nil, highlight: String? = nil) {
-        self.id = id
-        self.name = name
-        self.status = status
-        self.cwd = cwd
-        self.highlight = highlight
-    }
-}
-
-/// An event search hit.
-public struct EventSearchHit: Codable, Identifiable, Equatable, Sendable {
-    public var id: Int
+/// One row of `GET /api/search` — a session or event hit. Both shapes are
+/// folded into one flat JSON object by the Node router (session hits omit
+/// `event_id`/`event_type`/`tool_name`/`summary`/`created_at`; event hits
+/// omit `cwd`/`cost`/`started_at`), so this type carries the union of both
+/// with the irrelevant fields `nil`, discriminated by `type`.
+public struct SearchHit: Codable, Equatable, Sendable {
+    /// `"session"` or `"event"`.
+    public var type: String
     public var sessionId: String
     public var sessionName: String?
-    public var eventType: String
+
+    // Session-hit-only fields.
+    public var cwd: String?
+    public var status: String?
+    public var cost: Double?
+    public var startedAt: String?
+
+    // Event-hit-only fields.
+    public var eventId: Int?
+    public var eventType: String?
     public var toolName: String?
+    public var summary: String?
+    public var createdAt: String?
+
+    /// Present on both — `<mark>...</mark>`-wrapped snippet around the
+    /// matched substring, or `nil`/the raw field when no exact substring
+    /// match was found (search.js `buildHighlight` semantics).
     public var highlight: String?
 
     public init(
-        id: Int,
+        type: String,
         sessionId: String,
         sessionName: String? = nil,
-        eventType: String,
+        cwd: String? = nil,
+        status: String? = nil,
+        cost: Double? = nil,
+        startedAt: String? = nil,
+        eventId: Int? = nil,
+        eventType: String? = nil,
         toolName: String? = nil,
+        summary: String? = nil,
+        createdAt: String? = nil,
         highlight: String? = nil
     ) {
-        self.id = id
+        self.type = type
         self.sessionId = sessionId
         self.sessionName = sessionName
+        self.cwd = cwd
+        self.status = status
+        self.cost = cost
+        self.startedAt = startedAt
+        self.eventId = eventId
         self.eventType = eventType
         self.toolName = toolName
+        self.summary = summary
+        self.createdAt = createdAt
         self.highlight = highlight
     }
 }
