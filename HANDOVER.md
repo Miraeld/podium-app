@@ -25,13 +25,16 @@ gate between phases.
 
 ## Live state (refresh me on every board change)
 
-- **Done (11/22):** P0.1, P1.1, P1.2, P2.1, P2.2, P2.3, P2.4, P3.1, P3.4, P4.1,
-  P5.2. Phase 2 E2E-gate passed. P4.1 green at 86e12cb (295/295 at that point;
-  suite grows as P3.2/P3.3 land WIP tests).
-- **main.swift is now ORCHESTRATOR-OWNED** (P4.1 released it): every active/
-  future agent reports mount lines instead of editing it; orchestrator wires
-  P3.3 + P3.2 + P4.2 mounts and the ReimportRunner→LegacyImporter seam once
-  their reports arrive.
+- **Done (12/22):** P0.1, P1.1, P1.2, P2.1, P2.2, P2.3, P2.4, P3.1, P3.3, P3.4,
+  P4.1, P5.2. Phase 2 E2E-gate passed. P3.3 green at e0aa2c0 (303/303 at that
+  point; suite in flux while P3.2/P4.2 work).
+- **main.swift is ORCHESTRATOR-OWNED:** Pricing+Settings mounts added by the
+  orchestrator (build-verify pending — P3.2's WIP broke compilation at the
+  time). Remaining wiring debt: ImportRouter + PushRouter mounts, the
+  ReimportRunner→LegacyImporter adapter (protocol: run() async throws ->
+  ReimportResult{imported,skipped,errors}; pass adapter as
+  PodiumServerApp(reimportRunner:) — currently nil → 503), and P3.2's
+  ServicesRunner activation if its report asks for a call-site change.
 - **In flight right now (3 lanes, all dispatched by session 2).** If you're
   reading this cold they died with the session — reconcile each via §0 step 2
   (partial work lands in `Auto-commit:` commits; `swift build && swift test`;
