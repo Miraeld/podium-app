@@ -79,7 +79,10 @@ final class AppState {
 
     func refresh() async {
         isLoading = true
-        defer { isLoading = false }
+        defer {
+            isLoading = false
+            isInitialLoad = false
+        }
         do {
             isServerReachable = try await api.health()
             async let s = api.stats()
@@ -87,7 +90,10 @@ final class AppState {
             async let cost = api.totalCost()
             stats = try await s
             let sessResp = try await sess
-            sessions = sessResp.sessions
+            // Update in place rather than a destructive replace, so SwiftUI
+            // diffs by identity and rows that haven't changed don't flicker
+            // or lose transient UI state (e.g. hover, expansion).
+            mergeSessions(sessResp.sessions)
             sessionTotal = sessResp.total
             totalCost = try? await cost
             lastError = nil
@@ -98,14 +104,43 @@ final class AppState {
             updateWidgetSnapshot()
         } catch {
             isServerReachable = false
+            // Keep stale data on screen; only surface the error, don't wipe state.
             lastError = error.localizedDescription
         }
     }
 
+    /// Reconciles the freshly-fetched session list into `sessions` without a
+    /// full destructive replace: existing rows are updated in place (keeping
+    /// their array position stable when the underlying id already existed),
+    /// new rows are appended, and rows no longer present server-side are
+    /// removed. This keeps SwiftUI's List diffing calm across refreshes.
+    private func mergeSessions(_ fresh: [Session]) {
+        var byId: [String: Session] = [:]
+        byId.reserveCapacity(fresh.count)
+        for s in fresh { byId[s.id] = s }
+
+        var seen = Set<String>()
+        for idx in sessions.indices {
+            let id = sessions[idx].id
+            if let updated = byId[id] {
+                sessions[idx] = updated
+                seen.insert(id)
+            }
+        }
+        sessions.removeAll { !seen.contains($0.id) && byId[$0.id] == nil }
+
+        let newOnes = fresh.filter { !seen.contains($0.id) }
+        if !newOnes.isEmpty {
+            sessions.insert(contentsOf: newOnes, at: 0)
+        }
+    }
+
     func loadAnalytics() async {
+        defer { isAnalyticsInitialLoad = false }
         do {
             analytics = try await api.analytics()
         } catch {
+            // Keep any previously-loaded analytics visible; just surface the error.
             lastError = error.localizedDescription
         }
     }

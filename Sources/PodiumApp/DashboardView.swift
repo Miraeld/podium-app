@@ -10,7 +10,7 @@ struct DashboardView: View {
                 // Stat cards row
                 if let stats = state.stats {
                     StatsRow(stats: stats, cost: state.totalCost?.totalCost)
-                } else if state.isLoading && state.stats == nil {
+                } else if state.isInitialLoad {
                     ProgressView().tint(.cyan).frame(maxWidth: .infinity)
                 }
 
@@ -25,7 +25,7 @@ struct DashboardView: View {
                             ForEach(state.sessions.prefix(8)) { session in
                                 SessionRow(session: session)
                             }
-                            if state.sessions.isEmpty && !state.isLoading {
+                            if state.sessions.isEmpty && !state.isInitialLoad {
                                 EmptyStateView(
                                     icon: "clock",
                                     title: "No Sessions",

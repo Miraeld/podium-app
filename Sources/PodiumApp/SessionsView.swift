@@ -128,7 +128,7 @@ struct SessionsView: View {
                             .font(.caption).foregroundStyle(.secondary)
                     }
                     Spacer()
-                    if state.isLoading { ProgressView().scaleEffect(0.7).tint(.cyan) }
+                    if state.isInitialLoad { ProgressView().scaleEffect(0.7).tint(.cyan) }
                     Menu {
                         Picker("Sort", selection: $sortOrder) {
                             ForEach(SortOrder.allCases, id: \.self) { order in

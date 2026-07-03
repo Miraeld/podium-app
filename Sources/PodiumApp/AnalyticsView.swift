@@ -96,7 +96,7 @@ struct AnalyticsView: View {
                     }
                 }
                 .padding(24)
-            } else if state.isLoading {
+            } else if state.isAnalyticsInitialLoad {
                 LoadingView().frame(maxWidth: .infinity, minHeight: 400)
             } else {
                 EmptyStateView(
