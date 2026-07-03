@@ -688,19 +688,25 @@ final class ModelTests: XCTestCase {
     // MARK: - Search
 
     func testSearchResultRoundTrip() throws {
+        // Matches the ACTUAL Node search.js response shape: a single flat
+        // `results` array mixing session and event hits (not a
+        // `{sessions, events}` split) — see routes/search.js lines 106–171.
         let json = """
         {
-          "sessions": [
-            { "id": "sess_1", "name": "Test", "status": "active", "cwd": "/tmp", "highlight": "<mark>Test</mark>" }
+          "results": [
+            { "type": "session", "session_id": "sess_1", "session_name": "Test", "cwd": "/tmp", "status": "active", "cost": 0.42, "started_at": "2024-01-01T00:00:00.000Z", "highlight": "<mark>Test</mark>" },
+            { "type": "event", "session_id": "sess_1", "session_name": "Test", "event_id": 1, "event_type": "PostToolUse", "tool_name": "Bash", "summary": "ran ls", "created_at": "2024-01-01T00:00:01.000Z", "highlight": null }
           ],
-          "events": [
-            { "id": 1, "session_id": "sess_1", "session_name": "Test", "event_type": "PostToolUse", "tool_name": "Bash", "highlight": null }
-          ]
+          "total": 2
         }
         """
-        let result = try decode(SearchResult.self, json)
-        XCTAssertEqual(result.sessions.first?.highlight, "<mark>Test</mark>")
-        XCTAssertEqual(result.events.first?.sessionId, "sess_1")
+        let result = try decode(SearchResponse.self, json)
+        XCTAssertEqual(result.total, 2)
+        XCTAssertEqual(result.results.first?.type, "session")
+        XCTAssertEqual(result.results.first?.highlight, "<mark>Test</mark>")
+        XCTAssertEqual(result.results.last?.type, "event")
+        XCTAssertEqual(result.results.last?.sessionId, "sess_1")
+        XCTAssertEqual(result.results.last?.eventId, 1)
     }
 
     // MARK: - Transcript
