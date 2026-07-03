@@ -108,7 +108,7 @@ public final class SQLiteStatement {
     private let db: OpaquePointer
     private var columnIndexByName: [String: Int32] = [:]
 
-    fileprivate init(db: OpaquePointer, sql: String) throws {
+    init(db: OpaquePointer, sql: String) throws {
         self.db = db
         var handle: OpaquePointer?
         let rc = sqlite3_prepare_v2(db, sql, -1, &handle, nil)
