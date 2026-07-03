@@ -301,6 +301,26 @@ extension PodiumStore {
     public func exportEvents() throws -> [DashboardEvent] {
         try db.query("SELECT * FROM events ORDER BY created_at DESC", [], mapEvent)
     }
+
+    /// `SELECT * FROM token_usage` (settings.js line 188) — the raw current
+    /// + baseline columns, unlike `getTokensBySession`'s pre-added
+    /// `current + baseline` projection used for cost math.
+    public func exportTokenUsage() throws -> [TokenUsage] {
+        try db.query("SELECT * FROM token_usage", []) { row in
+            TokenUsage(
+                sessionId: row.stringValue("session_id"),
+                model: row.string("model") ?? "unknown",
+                inputTokens: row.intValue("input_tokens"),
+                outputTokens: row.intValue("output_tokens"),
+                cacheReadTokens: row.intValue("cache_read_tokens"),
+                cacheWriteTokens: row.intValue("cache_write_tokens"),
+                baselineInput: row.intValue("baseline_input"),
+                baselineOutput: row.intValue("baseline_output"),
+                baselineCacheRead: row.intValue("baseline_cache_read"),
+                baselineCacheWrite: row.intValue("baseline_cache_write")
+            )
+        }
+    }
 }
 
 /// One (date, per-model token row) pair feeding `CostCalculator.dailyCosts`
