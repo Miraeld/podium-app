@@ -1,20 +1,14 @@
 // SessionsRouter — port of dashboard/server/routes/sessions.js.
 //
 // Endpoints: GET / · GET /facets · GET /:id · GET /:id/stats · POST / ·
-// PATCH /:id · GET /:id/transcripts (501 — see below) · GET /:id/transcript
-// (501, explicitly required by the task spec).
+// PATCH /:id · GET /:id/transcripts · GET /:id/transcript.
 //
-// DEVIATION from a full 1:1 port (see final task report): `/:id/transcripts`
-// (the transcript *listing* endpoint, sessions.js lines 300–489) walks
-// `~/.claude/projects/**` via `lib/claude-home.js`'s `getTranscriptPath` /
-// `findSubagentTranscriptPath` / snapshot-fallback helpers. None of that
-// filesystem-discovery machinery exists yet in PodiumCore (P3.1 "Transcript
-// engine" — plan §5 — is still ⬜, and P2.2's fence is Routes/ + Database/
-// only). Stubbing `/:id/transcripts` with 501 rather than a shallow partial
-// port keeps this router's *other* endpoints fully correct instead of
-// half-porting a filesystem walk with no backing engine. `/:id/transcript`
-// (singular, full JSONL parse) was already explicitly scoped to 501 by the
-// task prompt for the same reason (P3.1 dependency).
+// `/:id/transcripts` (listing, sessions.js lines 300–489) and
+// `/:id/transcript` (JSONL parse + pagination, lines 491–761) landed in P3.1
+// — see PodiumCore/Discovery/ClaudeHome.swift (path resolution, port of
+// lib/claude-home.js) and PodiumCore/Transcripts/TranscriptMessageParser.swift
+// (JSONL → message parsing/pagination). Both were previously 501 stubs
+// pending that work.
 //
 // SQL/filter logic lives in PodiumCore/Database/PodiumStore+Filters.swift
 // (`SessionFilter`, `listSessionsFiltered`, `countSessions`,
@@ -32,17 +26,8 @@ public enum SessionsRouterMount: RouterMount {
         group.get("/facets") { req, ctx in try await facets(req, ctx, context: context) }
         group.get("/:id") { req, ctx in try await detail(req, ctx, context: context) }
         group.get("/:id/stats") { req, ctx in try await stats(req, ctx, context: context) }
-        // Task spec (P2.2) mandates this EXACT flat-string error body —
-        // `{"error": "transcript parsing lands in P3.1"}` — not the
-        // `{code, message}` object shape used by every other error response
-        // in this file, so `ErrorResponse` (not `CodedErrorResponse`) is
-        // deliberate here.
-        group.get("/:id/transcripts") { _, _ in
-            try JSONResponse(status: .notImplemented, ErrorResponse("transcript parsing lands in P3.1"))
-        }
-        group.get("/:id/transcript") { _, _ in
-            try JSONResponse(status: .notImplemented, ErrorResponse("transcript parsing lands in P3.1"))
-        }
+        group.get("/:id/transcripts") { req, ctx in try await transcripts(req, ctx, context: context) }
+        group.get("/:id/transcript") { req, ctx in try await transcript(req, ctx, context: context) }
         group.post { req, ctx in try await create(req, ctx, context: context) }
         group.patch("/:id") { req, ctx in try await patch(req, ctx, context: context) }
     }
@@ -147,6 +132,217 @@ public enum SessionsRouterMount: RouterMount {
             )
         )
         return try JSONResponse(sessionStats)
+    }
+
+    // MARK: - GET /:id/transcripts
+
+    /// sessions.js lines 300–489: lists the main transcript plus every
+    /// sub-agent/compaction JSONL file under `~/.claude/projects/**` for this
+    /// session, best-effort-matched to `agents` rows by (subagent_type, time
+    /// order within that group).
+    private static func transcripts(_ req: Request, _ ctx: ServerRequestContext, context: ServerContext) async throws -> JSONResponse {
+        let id = try ctx.parameters.require("id")
+        guard let session = try context.store.getSession(id: id) else {
+            return try JSONResponse(status: .notFound, CodedErrorResponse(code: "NOT_FOUND", message: "Session not found"))
+        }
+
+        let dbAgents = try context.store.listAgentsBySession(sessionId: id)
+        var mainEntry: TranscriptInfo?
+
+        let mainPath = ClaudeHome.transcriptPath(sessionId: id, cwd: session.cwd)
+            ?? ClaudeHome.findTranscriptPath(sessionId: id)
+            ?? ClaudeHome.snapshotTranscriptPath(sessionId: id)
+        if let mainPath, FileManager.default.fileExists(atPath: mainPath) {
+            let mainAgent = dbAgents.first { $0.type.knownValue == .main }
+            mainEntry = TranscriptInfo(id: "main", name: "Main Agent", type: "main", hasTranscript: true, dbAgentId: mainAgent?.id)
+        }
+
+        // Sub-agent transcript files: direct cwd-derived subagents dir, else
+        // scan every project directory for `<dir>/<sessionId>/subagents`.
+        var subagentDirs: [String] = []
+        if let cwd = session.cwd, !cwd.isEmpty {
+            let encoded = ClaudeHome.encodeCwd(cwd)
+            let directDir = ((ClaudeHome.projectsDir() as NSString).appendingPathComponent(encoded) as NSString)
+                .appendingPathComponent(id) as NSString
+            let candidate = directDir.appendingPathComponent("subagents")
+            if isDirectory(candidate) { subagentDirs.append(candidate) }
+        }
+        if subagentDirs.isEmpty {
+            let projectsDir = ClaudeHome.projectsDir()
+            if let entries = try? FileManager.default.contentsOfDirectory(atPath: projectsDir) {
+                for entry in entries.sorted() {
+                    let entryPath = (projectsDir as NSString).appendingPathComponent(entry)
+                    guard isDirectory(entryPath) else { continue }
+                    let candidate = ((entryPath as NSString).appendingPathComponent(id) as NSString)
+                        .appendingPathComponent("subagents")
+                    if isDirectory(candidate) { subagentDirs.append(candidate) }
+                }
+            }
+        }
+
+        struct SubEntry {
+            var id: String
+            var name: String
+            var type: String
+            var subagentType: String?
+            var dbAgentId: String?
+            var sortTime: Double
+        }
+        var subEntries: [SubEntry] = []
+
+        for dir in subagentDirs {
+            guard let files = try? FileManager.default.contentsOfDirectory(atPath: dir) else { continue }
+            for file in files.sorted() where file.hasSuffix(".jsonl") {
+                // File name format: agent-<shortId>.jsonl
+                let strippedPrefix = file.hasPrefix("agent-") ? String(file.dropFirst("agent-".count)) : file
+                let idNoExt = strippedPrefix.hasSuffix(".jsonl") ? String(strippedPrefix.dropLast(".jsonl".count)) : strippedPrefix
+
+                let metaPath = (dir as NSString).appendingPathComponent(String(file.dropLast(".jsonl".count)) + ".meta.json")
+                var metaDescription: String?
+                var metaAgentType: String?
+                if let metaData = FileManager.default.contents(atPath: metaPath),
+                   let meta = try? JSONDecoder().decode(JSONValue.self, from: metaData) {
+                    metaDescription = meta.nonEmptyString("description")
+                    metaAgentType = meta.nonEmptyString("agentType")
+                }
+
+                let isCompact = idNoExt.hasPrefix("acompact-")
+                let name = isCompact ? "Context Compaction" : (metaDescription ?? metaAgentType ?? idNoExt)
+                let subagentType = isCompact ? nil : metaAgentType
+
+                var sortTime = Double.infinity
+                let jsonlPath = (dir as NSString).appendingPathComponent(file)
+                if let firstLine = firstNonEmptyLine(of: jsonlPath),
+                   let data = firstLine.data(using: .utf8),
+                   let entry = try? JSONDecoder().decode(JSONValue.self, from: data),
+                   let ts = entry.string("timestamp"),
+                   let date = PodiumDate.parse(ts) {
+                    sortTime = date.timeIntervalSince1970
+                }
+
+                subEntries.append(SubEntry(
+                    id: idNoExt, name: name, type: isCompact ? "compaction" : "subagent",
+                    subagentType: subagentType, dbAgentId: nil, sortTime: sortTime
+                ))
+            }
+        }
+
+        // Match DB agents to transcripts: group both by (subagent_type ||
+        // type) key, sort each group by time ascending, match positionally.
+        var transcriptsByType: [String: [Int]] = [:]
+        for (idx, entry) in subEntries.enumerated() {
+            transcriptsByType[entry.subagentType ?? entry.type, default: []].append(idx)
+        }
+        for key in transcriptsByType.keys {
+            transcriptsByType[key]!.sort { subEntries[$0].sortTime < subEntries[$1].sortTime }
+        }
+
+        var agentsByType: [String: [Agent]] = [:]
+        for agent in dbAgents {
+            agentsByType[agent.subagentType ?? agent.type.rawValue, default: []].append(agent)
+        }
+        for key in agentsByType.keys {
+            agentsByType[key]!.sort { $0.startedAt < $1.startedAt }
+        }
+
+        for (key, indices) in transcriptsByType {
+            let aGroup = agentsByType[key] ?? []
+            var usedAgentIds = Set<String>()
+            for (position, idx) in indices.enumerated() where position < aGroup.count {
+                let candidateAgentId = aGroup[position].id
+                guard !usedAgentIds.contains(candidateAgentId) else { continue }
+                subEntries[idx].dbAgentId = candidateAgentId
+                usedAgentIds.insert(candidateAgentId)
+            }
+        }
+
+        var result: [TranscriptInfo] = []
+        if let mainEntry { result.append(mainEntry) }
+        result.append(contentsOf: subEntries.map {
+            TranscriptInfo(id: $0.id, name: $0.name, type: $0.type, subagentType: $0.subagentType, hasTranscript: true, dbAgentId: $0.dbAgentId)
+        })
+
+        result.sort { a, b in
+            if a.type == "main" { return true }
+            if b.type == "main" { return false }
+            let aAgent = dbAgents.first { $0.id == a.dbAgentId }
+            let bAgent = dbAgents.first { $0.id == b.dbAgentId }
+            let aTime = aAgent.flatMap { PodiumDate.parse($0.startedAt)?.timeIntervalSince1970 } ?? 0
+            let bTime = bAgent.flatMap { PodiumDate.parse($0.startedAt)?.timeIntervalSince1970 } ?? 0
+            if aTime != 0 && bTime != 0 { return aTime < bTime }
+            if aTime != 0 { return true }
+            if bTime != 0 { return false }
+            return a.name < b.name
+        }
+
+        return try JSONResponse(TranscriptListResult(transcripts: result))
+    }
+
+    // MARK: - GET /:id/transcript
+
+    /// sessions.js lines 491–761: reads the resolved JSONL file (live
+    /// `~/.claude/projects` path, else the durable import-time snapshot) and
+    /// returns a page of parsed messages per `agent_id`/`limit`/`after`/
+    /// `before`/`offset`. Never 404s on a missing/unreadable file — mirrors
+    /// Node returning the empty-result shape from its `catch` block.
+    private static func transcript(_ req: Request, _ ctx: ServerRequestContext, context: ServerContext) async throws -> JSONResponse {
+        let id = try ctx.parameters.require("id")
+        guard let session = try context.store.getSession(id: id) else {
+            return try JSONResponse(status: .notFound, CodedErrorResponse(code: "NOT_FOUND", message: "Session not found"))
+        }
+
+        let agentId = req.uri.queryTrimmed("agent_id")
+        let limit = min(req.uri.queryInt("limit", fallback: 50, min: 0), 200)
+        let after = req.uri.queryIntOrNil("after")
+        let before = req.uri.queryIntOrNil("before")
+        let offset = req.uri.queryInt("offset", fallback: 0, min: 0)
+
+        let jsonlPath: String?
+        if let agentId, agentId != "main" {
+            jsonlPath = ClaudeHome.subagentTranscriptPath(sessionId: id, cwd: session.cwd, agentId: agentId)
+                ?? ClaudeHome.findSubagentTranscriptPath(sessionId: id, agentId: agentId)
+                ?? ClaudeHome.snapshotSubagentTranscriptPath(sessionId: id, agentId: agentId)
+        } else {
+            jsonlPath = ClaudeHome.transcriptPath(sessionId: id, cwd: session.cwd)
+                ?? ClaudeHome.findTranscriptPath(sessionId: id)
+                ?? ClaudeHome.snapshotTranscriptPath(sessionId: id)
+        }
+
+        guard let jsonlPath else {
+            return try JSONResponse(TranscriptResult(messages: [], total: 0, hasMore: false, lastLine: 0, firstLine: 0))
+        }
+
+        let result = TranscriptMessageParser.page(path: jsonlPath, agentId: agentId, limit: limit, after: after, before: before, offset: offset)
+        return try JSONResponse(result)
+    }
+
+    private static func isDirectory(_ path: String) -> Bool {
+        var flag: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: path, isDirectory: &flag) else { return false }
+        return flag.boolValue
+    }
+
+    /// Streams only the first non-empty line of a JSONL file — avoids
+    /// loading the whole file just to read its opening timestamp (parity
+    /// with sessions.js's `readFirstLine`).
+    private static func firstNonEmptyLine(of path: String) -> String? {
+        guard let handle = FileHandle(forReadingAtPath: path) else { return nil }
+        defer { try? handle.close() }
+        var buffer = Data()
+        let chunkSize = 4096
+        while true {
+            guard let chunk = try? handle.read(upToCount: chunkSize), !chunk.isEmpty else { break }
+            buffer.append(chunk)
+            if let newlineIndex = buffer.firstIndex(of: 0x0A) {
+                let lineData = buffer.subdata(in: buffer.startIndex..<newlineIndex)
+                guard let line = String(data: lineData, encoding: .utf8) else { return nil }
+                let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+                return trimmed.isEmpty ? nil : trimmed
+            }
+        }
+        guard let line = String(data: buffer, encoding: .utf8) else { return nil }
+        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     // MARK: - POST /
