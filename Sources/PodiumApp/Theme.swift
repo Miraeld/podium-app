@@ -150,10 +150,9 @@ extension View {
         modifier(GlassCardModifier(radius: radius))
     }
 
-    @available(macOS 26.0, *)
-    func glassSurface() -> some View {
-        glassEffect()
-    }
+    // glassSurface()/glassEffect() (macOS 26 API, zero callers) removed:
+    // @available can't guard a symbol absent from older SDKs — CI's
+    // macos-latest SDK failed to compile it even though local Xcode has it.
 }
 
 #endif
