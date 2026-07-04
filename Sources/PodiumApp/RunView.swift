@@ -297,7 +297,9 @@ private struct NewRunForm: View {
                                 prompt: prompt,
                                 mode: mode,
                                 cwd: cwd,
-                                model: m.isEmpty ? nil : m
+                                model: m.isEmpty ? nil : m,
+                                permissionMode: permissionMode,
+                                effort: effort.isEmpty ? nil : effort
                             )
                             isRunning = false
                             if runState.errorMessage == nil {
@@ -466,28 +468,38 @@ private struct RunOutputPanel: View {
             // Follow-up field (conversation mode, terminal status)
             if handle.mode == "conversation" && !isActive {
                 Divider()
-                HStack(spacing: 10) {
-                    TextField("Follow-up message…", text: $followupText)
-                        .textFieldStyle(.plain)
-                        .font(.callout)
-                        .padding(10)
-                        .glassCard()
-                        .onSubmit {
-                            sendFollowup()
-                        }
-                    Button {
-                        sendFollowup()
-                    } label: {
-                        Image(systemName: isSending ? "hourglass" : "paperplane.fill")
-                            .padding(10)
+                VStack(alignment: .leading, spacing: 4) {
+                    if let ackAt = runState.lastInputAckAt, Date().timeIntervalSince(ackAt) < 4 {
+                        Label("Message delivered", systemImage: "checkmark.circle.fill")
+                            .font(.caption2.weight(.medium))
+                            .foregroundStyle(.green)
+                            .padding(.horizontal, 12)
                     }
-                    .buttonStyle(.plain)
-                    .background(followupText.isEmpty ? Color.secondary.opacity(0.15) : Color.cyan.opacity(0.8))
-                    .foregroundStyle(followupText.isEmpty ? Color.secondary : Color.white)
-                    .clipShape(Circle())
-                    .disabled(followupText.isEmpty || isSending)
+                    HStack(spacing: 10) {
+                        TextField("Follow-up message…", text: $followupText)
+                            .textFieldStyle(.plain)
+                            .font(.callout)
+                            .padding(10)
+                            .glassCard()
+                            .onSubmit {
+                                sendFollowup()
+                            }
+                        Button {
+                            sendFollowup()
+                        } label: {
+                            Image(systemName: isSending ? "hourglass" : "paperplane.fill")
+                                .padding(10)
+                        }
+                        .buttonStyle(.plain)
+                        .background(followupText.isEmpty ? Color.secondary.opacity(0.15) : Color.cyan.opacity(0.8))
+                        .foregroundStyle(followupText.isEmpty ? Color.secondary : Color.white)
+                        .clipShape(Circle())
+                        .disabled(followupText.isEmpty || isSending)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 12)
                 }
-                .padding(12)
+                .padding(.top, 12)
             }
         }
     }
