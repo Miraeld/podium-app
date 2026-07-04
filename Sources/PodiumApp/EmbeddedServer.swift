@@ -238,6 +238,7 @@ final class EmbeddedServer {
             SettingsRouterMount.self,
             ImportRouterMount.self,
             PushRouterMount.self,
+            DiagnosticsRouterMount.self,
         ]
     }
 

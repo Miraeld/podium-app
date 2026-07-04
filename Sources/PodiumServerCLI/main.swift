@@ -90,6 +90,7 @@ struct PodiumServerCLI: AsyncParsableCommand {
                     SettingsRouterMount.self,
                     ImportRouterMount.self,
                     PushRouterMount.self,
+                    DiagnosticsRouterMount.self,
                 ],
                 reimportRunner: LegacyImporterReimportRunner(store: store),
                 logger: logger
