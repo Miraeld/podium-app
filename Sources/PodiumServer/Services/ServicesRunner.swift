@@ -80,11 +80,14 @@ public enum PlaceholderServices {
     /// threshold — P3.2 (hooks.js lines 1180–1208).
     public static var stuckAgentCheck: any BackgroundService { StuckAgentCheckService() }
 
-    /// `~/.claude` config filesystem watcher -> `cc_config_changed` broadcast — P4.3.
-    public static var ccWatcher: any BackgroundService { NoOpService(name: "ccWatcher") }
+    /// `~/.claude` config filesystem watcher -> `cc_config_changed` broadcast.
+    /// P4.3: real `CcConfigWatcherService` (DispatchSource on macOS, 2s
+    /// mtime-poll on Linux) — see `Services/CcConfigWatcherService.swift`.
+    public static var ccWatcher: any BackgroundService { CcConfigWatcherService() }
 
-    /// Upstream version-check scheduler -> `update_status` broadcast — P4.3.
-    public static var updateScheduler: any BackgroundService { NoOpService(name: "updateScheduler") }
+    /// Upstream version-check scheduler -> `update_status` broadcast.
+    /// P4.3: real `UpdateSchedulerService` — see `Routes/UpdatesRouter.swift`.
+    public static var updateScheduler: any BackgroundService { UpdateSchedulerService() }
 }
 
 /// Starts and supervises a fixed set of `BackgroundService`s as independent
