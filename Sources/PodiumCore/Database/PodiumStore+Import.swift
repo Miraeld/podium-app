@@ -194,6 +194,69 @@ extension PodiumStore {
         ) { $0.stringValue("id") }
     }
 
+    // MARK: - F1: import-time file skip cache
+
+    /// One row of `import_file_cache` — the (mtime, size) fingerprint
+    /// recorded the last time `LegacyImporter` actually parsed this file.
+    public struct ImportFileCacheEntry: Sendable, Equatable {
+        public let mtimeMs: Double
+        public let size: Int64
+    }
+
+    /// Batch fetch so `importFromDirectory`/`backfillCompactions` do ONE
+    /// query for the whole corpus instead of one per file — the file-level
+    /// skip check itself must stay cheap even when nothing changed.
+    public func importFileCacheEntries(paths: [String]) throws -> [String: ImportFileCacheEntry] {
+        guard !paths.isEmpty else { return [:] }
+        let placeholders = paths.map { _ in "?" }.joined(separator: ",")
+        let rows = try db.query(
+            "SELECT path, mtime_ms, size FROM import_file_cache WHERE path IN (\(placeholders))",
+            paths.map { .text($0) }
+        ) { row in
+            (row.stringValue("path"), ImportFileCacheEntry(mtimeMs: row.doubleValue("mtime_ms"), size: Int64(row.intValue("size"))))
+        }
+        return Dictionary(uniqueKeysWithValues: rows)
+    }
+
+    /// Records that `path` was fully parsed/imported at this (mtime, size) —
+    /// called only after a file's import succeeded (no thrown error), so a
+    /// failed parse/import is retried on every subsequent run rather than
+    /// silently cached as "done".
+    @discardableResult
+    public func upsertImportFileCache(path: String, mtimeMs: Double, size: Int64) throws -> Int {
+        try db.run(
+            """
+            INSERT INTO import_file_cache (path, mtime_ms, size, imported_at)
+            VALUES (?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+            ON CONFLICT(path) DO UPDATE SET
+              mtime_ms = excluded.mtime_ms, size = excluded.size, imported_at = excluded.imported_at
+            """,
+            [.text(path), .double(mtimeMs), .integer(size)]
+        )
+    }
+
+    // MARK: - F1: batched import transactions
+
+    /// Opens a plain `BEGIN` as its own top-level `db.exec` call — NOT
+    /// `Database.transaction(_:)`, for the same reentrancy reason documented
+    /// in `PodiumStore+Ingest.swift`: every `PodiumStore` method re-enters
+    /// `Database.sync` (a serial `DispatchQueue.sync`), which deadlocks if
+    /// called from inside another `sync` closure. Plain top-level
+    /// `BEGIN`/`COMMIT` calls let each store method in between stay its own
+    /// serialized hop on the same queue while still sharing one SQLite
+    /// transaction. Callers MUST keep the window between `beginImportBatch`
+    /// and `commitImportBatch` short (see `LegacyImporter.ImportBatch`) —
+    /// the DB queue is shared with live hook ingestion, and any write that
+    /// gets interleaved onto the queue while a batch is open becomes part of
+    /// THAT transaction (and would be rolled back with it on failure).
+    public func beginImportBatch() throws { try db.exec("BEGIN;") }
+
+    public func commitImportBatch() throws { try db.exec("COMMIT;") }
+
+    /// Best-effort rollback; ignores a "no transaction active" error so
+    /// callers can call this unconditionally in a cleanup path.
+    public func rollbackImportBatch() { try? db.exec("ROLLBACK;") }
+
     // MARK: - Periodic sweep (stale sessions + compaction scan)
 
     /// Batch-completes every non-terminal agent belonging to the given
