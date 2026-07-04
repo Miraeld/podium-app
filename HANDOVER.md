@@ -59,11 +59,19 @@ that a remote exists.
   error states, light/dark pass on new views (tour, diagnostics, config
   editor); (2) README/MIGRATION docs (part of P6.2 scope); (3) create main
   branch + set default; (4) HUMAN items below.
-- **HUMAN (Gaël) checklist — pending his eyes:**
-  - Visual pass: onboarding tour light+dark (P5.5 couldn't launch — his app
-    was running); live-transcript append click-through (P5.3).
-  - `docker rm -f wizardly_golick` — stalled swift:6.1 build container from
-    P6.1's first attempt (orchestrator not permitted to remove it).
+- **CI update (2026-07-05 ~02:00):** first runs FAILED on two timing flakes
+  (not product bugs): Linux DiagnosticsRouterTests 5s health-wait too tight
+  for CI containers → 30s; macOS reap test's 50ms reap delay outlasted by
+  the completion-poll on shared runners → 2s + 10s poll. Fixed at 07340c0,
+  pushed, CI re-running — CHECK THE VERDICT (`gh run list`); green closes
+  P6.1 ⚠️→✅.
+- **HUMAN (Gaël) checklist:**
+  - DONE ✓: tour light/dark + live-transcript click-through (verified by
+    Gaël 2026-07-05). wizardly_golick container: already auto-cleaned.
+  - Prod `podium` Docker container (plugin-era): Gaël wants it REMOVED —
+    orchestrator advice: defer to the switchover session; it is currently
+    his only live dashboard, and its DB bind-mount is the data the app
+    takes over. Remove it AS PART OF the switchover, not before.
   - His prod `podium` container reports UNHEALTHY since ~2026-07-04 (was
     healthy before; nobody here touched it — read-only observations only).
   - The supervised switchover: stop Docker → app hosts against a COPY of
