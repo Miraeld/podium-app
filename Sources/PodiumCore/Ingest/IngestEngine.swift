@@ -44,7 +44,12 @@
 // nested-sync deadlock. Broadcasts are collected and returned only after
 // COMMIT succeeds, so nothing is ever broadcast for a write that then rolled
 // back (Node broadcasts mid-transaction since better-sqlite3 is fully
-// synchronous; queuing until commit here is strictly safer).
+// synchronous; queuing until commit here is strictly safer). Notifier events
+// (push notifications) follow the exact same discipline: `process(...)`
+// collects them into `pendingNotifications` inside `processTransactionBody`
+// and only spawns the actual `notifier.notify(...)` `Task`s after `COMMIT`
+// succeeds — a rolled-back transaction must never cause a real, irreversible
+// OS push notification to fire.
 
 import Foundation
 
@@ -139,8 +144,18 @@ public final class IngestEngine: @unchecked Sendable {
         }
 
         do {
-            let broadcasts = try processTransactionBody(hookType: hookType, sessionId: sessionId, data: data)
+            var pendingNotifications: [NotifierEvent] = []
+            let broadcasts = try processTransactionBody(hookType: hookType, sessionId: sessionId, data: data, pendingNotifications: &pendingNotifications)
             try store.db.exec("COMMIT;")
+            // Only fire notifier events once COMMIT has actually succeeded —
+            // mirrors the broadcasts discipline above (see file header
+            // comment): nothing observable outside the DB should escape for
+            // a write that later rolled back, including OS push
+            // notifications, which are irreversible once sent.
+            let notifier = self.notifier
+            for event in pendingNotifications {
+                Task { await notifier.notify(event) }
+            }
             return broadcasts
         } catch {
             try? store.db.exec("ROLLBACK;")
@@ -150,7 +165,7 @@ public final class IngestEngine: @unchecked Sendable {
 
     // MARK: - Transaction body
 
-    private func processTransactionBody(hookType: String, sessionId: String, data: JSONValue) throws -> [Broadcast] {
+    private func processTransactionBody(hookType: String, sessionId: String, data: JSONValue, pendingNotifications: inout [NotifierEvent]) throws -> [Broadcast] {
         var broadcasts: [Broadcast] = []
 
         // ── ensureSession (hooks.js lines 216–261) ──────────────────────
@@ -220,7 +235,7 @@ public final class IngestEngine: @unchecked Sendable {
             )
 
         case "SessionEnd":
-            try handleSessionEnd(sessionId: sessionId, mainAgentId: mainAgentId, summary: &summary, broadcasts: &broadcasts)
+            try handleSessionEnd(sessionId: sessionId, mainAgentId: mainAgentId, summary: &summary, broadcasts: &broadcasts, pendingNotifications: &pendingNotifications)
 
         case "UserPromptSubmit":
             try handleUserPromptSubmit(
@@ -239,7 +254,7 @@ public final class IngestEngine: @unchecked Sendable {
         if let transcriptPath = mutableData.nonEmptyString("transcript_path") {
             try extractTranscriptSignals(
                 sessionId: sessionId, mainAgentId: mainAgentId, mainAgent: mainAgent,
-                transcriptPath: transcriptPath, broadcasts: &broadcasts
+                transcriptPath: transcriptPath, broadcasts: &broadcasts, pendingNotifications: &pendingNotifications
             )
         }
 
@@ -593,7 +608,8 @@ public final class IngestEngine: @unchecked Sendable {
     // MARK: - SessionEnd (hooks.js lines 643–673)
 
     private func handleSessionEnd(
-        sessionId: String, mainAgentId: String?, summary: inout String?, broadcasts: inout [Broadcast]
+        sessionId: String, mainAgentId: String?, summary: inout String?, broadcasts: inout [Broadcast],
+        pendingNotifications: inout [NotifierEvent]
     ) throws {
         let endSession = try store.getSession(id: sessionId)
         let endLabel = endSession?.name ?? "Session \(String(sessionId.prefix(8)))"
@@ -618,11 +634,10 @@ public final class IngestEngine: @unchecked Sendable {
             broadcasts.append(Broadcast(type: "session_updated", session: refreshed))
         }
 
-        let notifier = self.notifier
         if finalStatus == .error {
-            Task { await notifier.notify(.sessionError(sessionId: sessionId, sessionName: endSession?.name)) }
+            pendingNotifications.append(.sessionError(sessionId: sessionId, sessionName: endSession?.name))
         } else {
-            Task { await notifier.notify(.sessionCompleted(sessionId: sessionId, sessionName: endSession?.name)) }
+            pendingNotifications.append(.sessionCompleted(sessionId: sessionId, sessionName: endSession?.name))
         }
     }
 
@@ -713,7 +728,7 @@ public final class IngestEngine: @unchecked Sendable {
 
     private func extractTranscriptSignals(
         sessionId: String, mainAgentId: String?, mainAgent: Agent?,
-        transcriptPath: String, broadcasts: inout [Broadcast]
+        transcriptPath: String, broadcasts: inout [Broadcast], pendingNotifications: inout [NotifierEvent]
     ) throws {
         guard let result = transcriptSource.extract(path: transcriptPath) else { return }
 
@@ -779,8 +794,7 @@ public final class IngestEngine: @unchecked Sendable {
                         "session_id": .string(sessionId),
                         "cost": .number(cost),
                     ])))
-                    let notifier = self.notifier
-                    Task { await notifier.notify(.costSpike(sessionId: sessionId, cost: cost)) }
+                    pendingNotifications.append(.costSpike(sessionId: sessionId, cost: cost))
                 }
             }
         }

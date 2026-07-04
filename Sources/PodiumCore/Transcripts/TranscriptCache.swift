@@ -355,8 +355,15 @@ public final class TranscriptCache: @unchecked Sendable {
         return result.isEmpty ? nil : result
     }
 
+    /// Amortized O(1) trim, matching transcript-cache.js's `_consumeLine`
+    /// (`PARSE_TRIM_WATERMARK` usage): only actually shift the array back
+    /// down to `maxArrayLen` once it has grown to the 2x watermark, not on
+    /// every single append past `maxArrayLen`. Trimming unconditionally at
+    /// cap would make every subsequent line on a long transcript pay an
+    /// O(maxArrayLen) `removeFirst` shift; gating on the watermark means that
+    /// cost is paid once per `maxArrayLen` new entries instead.
     private func trimIfNeeded<T>(_ array: inout [T]) {
-        guard array.count > maxArrayLen else { return }
+        guard array.count >= parseTrimWatermark else { return }
         array.removeFirst(array.count - maxArrayLen)
     }
 
