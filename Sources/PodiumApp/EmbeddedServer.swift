@@ -239,6 +239,9 @@ final class EmbeddedServer {
             ImportRouterMount.self,
             PushRouterMount.self,
             DiagnosticsRouterMount.self,
+            CcConfigRouterMount.self,
+            UpdatesRouterMount.self,
+            ExportRouterMount.self,
         ]
     }
 
