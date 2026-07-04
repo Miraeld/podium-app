@@ -98,18 +98,6 @@ public enum Schema {
       ended_at TEXT
     );
 
-    -- F1: mtime+size fingerprint of the last JSONL a legacy-import pass
-    -- actually parsed for a given source path, so `LegacyImporter` can skip
-    -- re-reading/re-parsing files unchanged since their last successful
-    -- import instead of rescanning the whole corpus on every reimport call
-    -- (new, additive table — no migration needed, safe on existing DBs).
-    CREATE TABLE IF NOT EXISTS import_file_cache (
-      path TEXT PRIMARY KEY,
-      mtime_ms REAL NOT NULL,
-      size INTEGER NOT NULL,
-      imported_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-    );
-
     CREATE INDEX IF NOT EXISTS idx_agents_session ON agents(session_id);
     CREATE INDEX IF NOT EXISTS idx_agents_status ON agents(status);
     CREATE INDEX IF NOT EXISTS idx_events_session ON events(session_id);

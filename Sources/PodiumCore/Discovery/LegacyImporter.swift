@@ -161,14 +161,6 @@ public enum LegacyImporter {
     /// Port of `importFromDirectory(dbModule, rootDir, options)` — the
     /// generalized importer any directory (default projects dir, an
     /// arbitrary `scan-path`, or an `/upload` staging dir) funnels through.
-    ///
-    /// F1 perf fix: before parsing anything, every session file's current
-    /// (mtime, size) is checked in one batch query against
-    /// `import_file_cache` — files unchanged since their last successful
-    /// import/backfill are skipped WITHOUT reading or JSON-decoding them at
-    /// all (see `PodiumStore+Import.swift`'s `ImportFileCacheEntry`). Real
-    /// DB writes are then batched into short transactions via `ImportBatch`
-    /// rather than one commit per statement.
     @discardableResult
     public static func importFromDirectory(store: PodiumStore, rootDir: String, snapshotTranscripts: Bool = true) throws -> ImportCounters {
         var counters = ImportCounters()
@@ -187,11 +179,8 @@ public enum LegacyImporter {
             }
         }
 
-        let unchanged = try unchangedFileFilter(store: store, files: sessionFiles)
-        counters.skipped += unchanged.skippedCount
-
         var parsedSessions: [ParsedSession] = []
-        for file in unchanged.toParse {
+        for file in sessionFiles {
             guard var session = parseSessionFile(file) else {
                 counters.skipped += 1
                 continue
@@ -204,10 +193,7 @@ public enum LegacyImporter {
             counters.sessionsSeen += 1
         }
 
-        let batch = ImportBatch(store: store)
-        try batch.begin()
         for session in parsedSessions {
-            var succeeded = true
             do {
                 let result = try importSession(store: store, session: session)
                 if result.backfilled {
@@ -219,18 +205,10 @@ public enum LegacyImporter {
                 }
             } catch {
                 counters.errors += 1
-                succeeded = false
             }
             if snapshotTranscripts {
                 snapshotTranscript(sourcePath: session.sourcePath, sessionId: session.sessionId)
             }
-            // Only cache a file as "fully processed" once its import didn't
-            // throw — a failure must be retried on the next run, never
-            // silently treated as done.
-            if succeeded, let stat = unchanged.stats[session.sourcePath] {
-                _ = try? store.upsertImportFileCache(path: session.sourcePath, mtimeMs: stat.mtimeMs, size: stat.size)
-            }
-            try batch.checkpoint()
         }
 
         // Orphan subagent JSONLs whose parent session lives outside this
@@ -248,9 +226,7 @@ public enum LegacyImporter {
             } catch {
                 counters.errors += 1
             }
-            try batch.checkpoint()
         }
-        try batch.commit()
 
         return counters
     }
@@ -258,135 +234,29 @@ public enum LegacyImporter {
     /// Port of `backfillCompactions(dbModule)` — scans EVERY session's JSONL
     /// (regardless of import status) for `isCompactSummary` entries and
     /// creates whatever compaction agents/events are missing.
-    ///
-    /// F1 perf fix: shares `import_file_cache` with `importFromDirectory` —
-    /// a file whose (mtime, size) still matches the fingerprint recorded the
-    /// last time IT was parsed is skipped entirely. In the normal calling
-    /// pattern (`importAllSessions` immediately followed by
-    /// `backfillCompactions`, in `LegacyImportService`/
-    /// `LegacyImporterReimportRunner`), this also kills the double-parse:
-    /// any file `importFromDirectory` just reparsed already had its
-    /// compactions handled via `session.compactions` -> `importCompactions`
-    /// inside `importSession`, and its cache entry was updated moments ago,
-    /// so this pass skips it rather than reading the same bytes again.
     @discardableResult
     public static func backfillCompactions(store: PodiumStore) throws -> Int {
         let projectsDir = ClaudeHome.projectsDir()
         guard isDirectoryPath(projectsDir) else { return 0 }
         guard let projectDirs = try? FileManager.default.contentsOfDirectory(atPath: projectsDir) else { return 0 }
 
-        var candidates: [(sessionId: String, filePath: String)] = []
+        var backfilled = 0
         for projDir in projectDirs {
             let projPath = (projectsDir as NSString).appendingPathComponent(projDir)
             guard isDirectoryPath(projPath) else { continue }
             guard let files = try? FileManager.default.contentsOfDirectory(atPath: projPath) else { continue }
+
             for file in files where file.hasSuffix(".jsonl") {
                 let sessionId = (file as NSString).deletingPathExtension
-                candidates.append((sessionId, (projPath as NSString).appendingPathComponent(file)))
+                guard let existing = try? store.getSession(id: sessionId), existing != nil else { continue }
+                let filePath = (projPath as NSString).appendingPathComponent(file)
+                let compactions = findCompactionsInFile(filePath)
+                guard !compactions.isEmpty else { continue }
+                let mainAgentId = "\(sessionId)-main"
+                backfilled += (try? importCompactions(store: store, sessionId: sessionId, mainAgentId: mainAgentId, compactions: compactions)) ?? 0
             }
         }
-        guard !candidates.isEmpty else { return 0 }
-
-        let unchanged = try unchangedFileFilter(store: store, files: candidates.map(\.filePath))
-
-        var backfilled = 0
-        let batch = ImportBatch(store: store)
-        try batch.begin()
-        for (sessionId, filePath) in candidates {
-            guard !unchanged.unchangedSet.contains(filePath) else { continue }
-            guard let existing = try? store.getSession(id: sessionId), existing != nil else { continue }
-            let compactions = findCompactionsInFile(filePath)
-            guard !compactions.isEmpty else { continue }
-            let mainAgentId = "\(sessionId)-main"
-            backfilled += (try? importCompactions(store: store, sessionId: sessionId, mainAgentId: mainAgentId, compactions: compactions)) ?? 0
-            try batch.checkpoint()
-        }
-        try batch.commit()
         return backfilled
-    }
-
-    // MARK: - F1: shared import-file skip cache + batched writes
-
-    struct UnchangedFileFilter {
-        var toParse: [String]
-        var stats: [String: (mtimeMs: Double, size: Int64)]
-        var unchangedSet: Set<String>
-        var skippedCount: Int { unchangedSet.count }
-    }
-
-    /// Stats every candidate file once, batch-fetches their recorded
-    /// fingerprints from `import_file_cache` in a single query, and
-    /// partitions them into "still needs a real parse" vs. "unchanged since
-    /// last time it was successfully processed".
-    static func unchangedFileFilter(store: PodiumStore, files: [String]) throws -> UnchangedFileFilter {
-        var stats: [String: (mtimeMs: Double, size: Int64)] = [:]
-        for file in files {
-            if let stat = fileStat(file) { stats[file] = stat }
-        }
-        let cached = try store.importFileCacheEntries(paths: Array(stats.keys))
-
-        var toParse: [String] = []
-        var unchangedSet = Set<String>()
-        for file in files {
-            guard let stat = stats[file] else {
-                toParse.append(file) // unreadable/missing — let the real parse path handle & report it
-                continue
-            }
-            if let entry = cached[file], entry.mtimeMs == stat.mtimeMs, entry.size == stat.size {
-                unchangedSet.insert(file)
-            } else {
-                toParse.append(file)
-            }
-        }
-        return UnchangedFileFilter(toParse: toParse, stats: stats, unchangedSet: unchangedSet)
-    }
-
-    private static func fileStat(_ path: String) -> (mtimeMs: Double, size: Int64)? {
-        guard let attrs = try? FileManager.default.attributesOfItem(atPath: path) else { return nil }
-        guard let mtime = attrs[.modificationDate] as? Date else { return nil }
-        guard let size = (attrs[.size] as? NSNumber)?.int64Value else { return nil }
-        return (mtimeMs: mtime.timeIntervalSince1970 * 1000, size: size)
-    }
-
-    /// Batches DB writes into short `BEGIN`/`COMMIT` windows (a few dozen
-    /// sessions/files at a time) instead of either one implicit transaction
-    /// per statement (slow: a separate commit/fsync per INSERT on large
-    /// corpora) or one transaction spanning the entire import (unsafe: the
-    /// DB queue is shared with live hook ingestion — see
-    /// `PodiumStore.beginImportBatch`'s doc comment — so a multi-minute open
-    /// transaction risks folding an interleaved live write into, and rolling
-    /// it back with, the import's own transaction).
-    final class ImportBatch {
-        private let store: PodiumStore
-        private let flushEvery: Int
-        private var opsSinceFlush = 0
-        private var isOpen = false
-
-        init(store: PodiumStore, flushEvery: Int = 25) {
-            self.store = store
-            self.flushEvery = flushEvery
-        }
-
-        func begin() throws {
-            try store.beginImportBatch()
-            isOpen = true
-        }
-
-        func checkpoint() throws {
-            opsSinceFlush += 1
-            guard opsSinceFlush >= flushEvery else { return }
-            try store.commitImportBatch()
-            isOpen = false
-            try store.beginImportBatch()
-            isOpen = true
-            opsSinceFlush = 0
-        }
-
-        func commit() throws {
-            guard isOpen else { return }
-            try store.commitImportBatch()
-            isOpen = false
-        }
     }
 
     /// Port of `scanAndImportSubagents(dbModule, sessionId, transcriptPath)`

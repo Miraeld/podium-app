@@ -1,0 +1,74 @@
+diff --git a/src/pages/Dashboard.tsx b/src/pages/Dashboard.tsx
+index 919b7f3..9fc9062 100644
+--- a/src/pages/Dashboard.tsx
++++ b/src/pages/Dashboard.tsx
+@@ -1086,6 +1086,18 @@ export function Dashboard() {
+     setNotifBannerVisible(false);
+   }
+ 
++  // First-visit welcome card — lighter web counterpart to the native app's
++  // onboarding tour (see PodiumSwiftApp OnboardingTour.swift / P5.5). Same
++  // "shown once, dismissed to localStorage" pattern as the notif banner
++  // above, kept as its own key so dismissing one doesn't dismiss the other.
++  const [welcomeCardVisible, setWelcomeCardVisible] = useState(
++    () => localStorage.getItem("podium-welcome-card-dismissed") === null
++  );
++  function dismissWelcomeCard() {
++    localStorage.setItem("podium-welcome-card-dismissed", "1");
++    setWelcomeCardVisible(false);
++  }
++
+   // Dynamic item counts based on available container height
+   const agentsContainerRef = useRef<HTMLDivElement>(null);
+   const activityContainerRef = useRef<HTMLDivElement>(null);
+@@ -1316,6 +1328,50 @@ export function Dashboard() {
+         </div>
+       </div>
+ 
++      {/* First-visit welcome card — dismissed to localStorage, points at the
++          three primary nav areas a new user should know about. */}
++      {welcomeCardVisible && (
++        <div className="flex items-start justify-between gap-3 px-4 py-3 rounded-xl bg-accent/10 border border-accent/25 text-sm">
++          <div className="flex items-start gap-3 min-w-0">
++            <LayoutDashboard className="w-4 h-4 flex-shrink-0 mt-0.5 text-accent" />
++            <div className="min-w-0">
++              <p className="text-gray-900 dark:text-white font-medium">Welcome to Podium</p>
++              <p className="text-gray-700 dark:text-gray-300 mt-0.5">
++                You're looking at your agents live. Open{" "}
++                <button
++                  onClick={() => navigate("/sessions")}
++                  className="font-medium text-accent hover:underline underline-offset-2 cursor-pointer"
++                >
++                  Sessions
++                </button>{" "}
++                for the full timeline of any run,{" "}
++                <button
++                  onClick={() => navigate("/analytics")}
++                  className="font-medium text-accent hover:underline underline-offset-2 cursor-pointer"
++                >
++                  Analytics
++                </button>{" "}
++                for usage over time, and{" "}
++                <button
++                  onClick={() => navigate("/settings")}
++                  className="font-medium text-accent hover:underline underline-offset-2 cursor-pointer"
++                >
++                  Settings
++                </button>{" "}
++                for connection and notification options.
++              </p>
++            </div>
++          </div>
++          <button
++            onClick={dismissWelcomeCard}
++            aria-label="Dismiss"
++            className="p-0.5 flex-shrink-0 text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition-colors cursor-pointer"
++          >
++            <X className="w-3.5 h-3.5" />
++          </button>
++        </div>
++      )}
++
+       {/* Notification discoverability banner — shown once, dismissed to localStorage */}
+       {notifBannerVisible && (
+         <div className="flex items-center justify-between gap-3 px-4 py-2.5 rounded-xl bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/20 text-sm">
