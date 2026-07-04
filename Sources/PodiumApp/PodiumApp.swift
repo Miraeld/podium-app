@@ -24,6 +24,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
+
+    // P5.1 task 5: if this launch is hosting the embedded server, stop it
+    // gracefully (server-info file cleanup) before the process actually
+    // exits. `applicationWillTerminate` fires for both Cmd+Q and the Dock
+    // "Quit" menu item; `applicationShouldTerminateAfterLastWindowClosed`
+    // returning true means closing the last window alone does NOT quit the
+    // app (MenuBarExtra keeps it alive), so this is the one reliable place a
+    // real process exit is imminent.
+    func applicationWillTerminate(_ notification: Notification) {
+        EmbeddedServer.shared.shutdown()
+    }
 }
 
 @main

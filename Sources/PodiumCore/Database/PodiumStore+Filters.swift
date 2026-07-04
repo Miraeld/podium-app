@@ -111,7 +111,16 @@ extension PodiumStore {
             }
             withCost.sort { filter.sortDesc ? $0.cost > $1.cost : $0.cost < $1.cost }
 
-            let page = withCost.dropFirst(offset).prefix(limit)
+            // sessions.js line 123: `allRows.slice(offset, offset + limit)`.
+            // JS `Array.prototype.slice` treats a negative end index as
+            // "count back from the end" (NOT "unlimited") — this differs
+            // from the SQL `LIMIT`-based sort branches below, where a
+            // negative limit reaching SQLite's `LIMIT ?` really does mean
+            // unbounded. Bug-3 hardening (removing the `min: 0` router
+            // clamp) must not make a negative `limit` crash here (Swift's
+            // `Collection.prefix(_:)` traps on a negative count) — replicate
+            // the exact JS `slice` semantics instead of assuming "unlimited".
+            let page = jsSlice(withCost, start: offset, end: offset + limit)
             rows = page.map { pair in
                 var s = pair.session
                 s.cost = pair.cost
@@ -464,4 +473,20 @@ extension PodiumStore {
         }
         return result
     }
+}
+
+/// JS `Array.prototype.slice(start, end)`-equivalent: negative indices count
+/// back from the end of the collection, both bounds clamp to `[0, count]`,
+/// and `end < start` (after clamping) yields an empty slice — NOT an
+/// "unbounded" result. Used by `listSessionsFiltered`'s price-sort branch to
+/// exactly replicate sessions.js line 123's `allRows.slice(offset, offset +
+/// limit)`, including its behavior for a negative `limit` (which is a
+/// distinct quirk from the SQL `LIMIT`-based sort branches, where negative
+/// really does mean "no limit" via SQLite semantics).
+func jsSlice<T>(_ array: [T], start: Int, end: Int) -> [T] {
+    let count = array.count
+    let s = start < 0 ? Swift.max(count + start, 0) : Swift.min(start, count)
+    var e = end < 0 ? Swift.max(count + end, 0) : Swift.min(end, count)
+    if e < s { e = s }
+    return Array(array[s..<e])
 }

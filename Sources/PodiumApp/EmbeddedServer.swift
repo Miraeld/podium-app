@@ -165,7 +165,7 @@ final class EmbeddedServer {
                 _ = try await PodiumServerLifecycle.run(
                     store: store,
                     startPort: startPort,
-                    mounts: EmbeddedServer.serverMounts,
+                    mounts: EmbeddedServer.makeServerMounts(),
                     reimportRunner: LegacyImporterReimportRunner(store: store),
                     pushService: pushService,
                     logger: logger
@@ -200,22 +200,27 @@ final class EmbeddedServer {
 
     /// Exact same mounts list as `PodiumServerCLI/main.swift` — every REST
     /// router the standalone server exposes. Kept in sync manually; if a
-    /// future router lands there, add it here too.
-    static let serverMounts: [any RouterMount.Type] = [
-        SessionsRouterMount.self,
-        AgentsRouterMount.self,
-        EventsRouterMount.self,
-        StatsRouterMount.self,
-        AnalyticsRouterMount.self,
-        SearchRouterMount.self,
-        HooksRouterMount.self,
-        WorkflowsRouterMount.self,
-        RunRouterMount.self,
-        PricingRouterMount.self,
-        SettingsRouterMount.self,
-        ImportRouterMount.self,
-        PushRouterMount.self,
-    ]
+    /// future router lands there, add it here too. A plain function (not a
+    /// stored property) so it can be called from the `Task.detached` closure
+    /// below without capturing a `MainActor`-isolated static across an
+    /// isolation boundary (router mount types are non-`Sendable` metatypes).
+    nonisolated static func makeServerMounts() -> [any RouterMount.Type] {
+        [
+            SessionsRouterMount.self,
+            AgentsRouterMount.self,
+            EventsRouterMount.self,
+            StatsRouterMount.self,
+            AnalyticsRouterMount.self,
+            SearchRouterMount.self,
+            HooksRouterMount.self,
+            WorkflowsRouterMount.self,
+            RunRouterMount.self,
+            PricingRouterMount.self,
+            SettingsRouterMount.self,
+            ImportRouterMount.self,
+            PushRouterMount.self,
+        ]
+    }
 
     /// Same non-fatal pattern as `PodiumServerCLI.installHooksNonFatal`:
     /// copy `podium-hook` next to the app's own executable (bundled into

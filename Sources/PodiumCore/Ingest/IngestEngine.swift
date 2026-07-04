@@ -102,6 +102,16 @@ public final class IngestEngine: @unchecked Sendable {
     private let notifier: Notifier
     private let alerts = AlertTracker()
 
+    /// Test-only fault injection: when set, invoked once at the very end of
+    /// `processTransactionBody` (after every state-machine branch has run,
+    /// right before the final `insertEvent`/return). Throwing here lets
+    /// tests simulate "some later statement in this transaction throws,
+    /// triggering ROLLBACK" without needing to contrive a real SQL
+    /// constraint violation past this engine's normal guards — see
+    /// IngestEngineTests' notifier-vs-commit-ordering coverage. `nil`
+    /// (the default) makes this a complete no-op in production.
+    var testFailurePoint: (@Sendable () throws -> Void)?
+
     /// Stale-session threshold for SessionStart cleanup + the periodic sweep
     /// (hooks.js lines 180–186): `DASHBOARD_STALE_MINUTES` env, default 180.
     public let staleMinutes: Int

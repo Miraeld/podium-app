@@ -3,6 +3,7 @@ import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
 import UserNotifications
+import PodiumCore
 
 struct SettingsView: View {
     @Environment(AppState.self) var state
@@ -59,11 +60,19 @@ struct ConnectionTab: View {
     @Environment(AppState.self) var state
     @AppStorage("podium_host") var host = "localhost"
     @AppStorage("podium_port") var portStr = "4820"
+    @AppStorage(EmbeddedServer.embeddedServerEnabledKey) var embeddedServerEnabled = true
     @State private var testing = false
     @State private var testResult: String? = nil
 
     var body: some View {
         Form {
+            Section("Embedded Server") {
+                Toggle("Host Podium automatically on launch", isOn: $embeddedServerEnabled)
+                Text("When on (default), Podium starts its own server in the background the moment the app opens — nothing else to install or run. When off, the app only connects to whatever server is already running at the host/port below (restart to apply).")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                embeddedStatusRow
+            }
             Section("Server") {
                 TextField("Host", text: $host)
                 TextField("Port", text: $portStr)
@@ -99,6 +108,32 @@ struct ConnectionTab: View {
             }
         }
         .formStyle(.grouped)
+    }
+
+    @ViewBuilder
+    private var embeddedStatusRow: some View {
+        switch EmbeddedServer.shared.mode {
+        case .embedded(let port):
+            LabeledContent("Mode") {
+                Label("Embedded \u{00b7} port \(port)", systemImage: "bolt.fill")
+                    .foregroundStyle(.green)
+            }
+            LabeledContent("Database", value: PodiumPaths.databasePath())
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        case .externalClient(let port):
+            LabeledContent("Mode") {
+                Label("Connected to external server \u{00b7} port \(port)", systemImage: "antenna.radiowaves.left.and.right")
+                    .foregroundStyle(.cyan)
+            }
+        case .disabledByUser(let port):
+            LabeledContent("Mode") {
+                Label("Client only (embedding disabled) \u{00b7} port \(port)", systemImage: "network")
+                    .foregroundStyle(.secondary)
+            }
+        case nil:
+            LabeledContent("Mode", value: "Resolving\u{2026}")
+        }
     }
 }
 
