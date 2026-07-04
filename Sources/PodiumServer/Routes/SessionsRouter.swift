@@ -38,7 +38,7 @@ public enum SessionsRouterMount: RouterMount {
     /// filters, three sort modes (`time` default, `duration`, `price`), and
     /// per-row cost attached from `token_usage` + `model_pricing`.
     private static func list(_ req: Request, _ ctx: ServerRequestContext, context: ServerContext) async throws -> JSONResponse {
-        let limit = min(req.uri.queryInt("limit", fallback: 50, min: 0), 10000)
+        let limit = min(req.uri.queryInt("limit", fallback: 50), 10000)
         let offset = req.uri.queryInt("offset", fallback: 0, min: 0)
         let filter = PodiumStore.SessionFilter(
             q: req.uri.queryTrimmed("q"),
@@ -292,7 +292,7 @@ public enum SessionsRouterMount: RouterMount {
         }
 
         let agentId = req.uri.queryTrimmed("agent_id")
-        let limit = min(req.uri.queryInt("limit", fallback: 50, min: 0), 200)
+        let limit = min(req.uri.queryInt("limit", fallback: 50), 200)
         let after = req.uri.queryIntOrNil("after")
         let before = req.uri.queryIntOrNil("before")
         let offset = req.uri.queryInt("offset", fallback: 0, min: 0)
