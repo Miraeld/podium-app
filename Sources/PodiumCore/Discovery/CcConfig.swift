@@ -330,6 +330,24 @@ public enum CcConfig {
         public var outputStyles: Int
         public var hooks: Int
         public var pluginJson: JSONValue?
+
+        // skillItems/agentItems/commandItems/outputStyles/pluginJson must
+        // stay literal camelCase (client's `CcPluginContributions`) — see
+        // `AnyEncodable`'s doc comment.
+        public func encode(to encoder: Encoder) throws {
+            var container = encoder.singleValueContainer()
+            try container.encode([
+                "skills": AnyEncodable(skills),
+                "skillItems": AnyEncodable(skillItems),
+                "agents": AnyEncodable(agents),
+                "agentItems": AnyEncodable(agentItems),
+                "commands": AnyEncodable(commands),
+                "commandItems": AnyEncodable(commandItems),
+                "outputStyles": AnyEncodable(outputStyles),
+                "hooks": AnyEncodable(hooks),
+                "pluginJson": AnyEncodable(pluginJson),
+            ])
+        }
     }
 
     static func readPluginContributions(installPath: String?) -> PluginContributions? {
@@ -377,12 +395,44 @@ public enum CcConfig {
         public var installPathExists: Bool
         public var enabled: Bool?
         public var contributes: PluginContributions?
+
+        // installPath/installedAt/lastUpdated/gitCommitSha/installPathExists
+        // must stay literal camelCase (client's `CcPlugin`) — see
+        // `AnyEncodable`'s doc comment.
+        public func encode(to encoder: Encoder) throws {
+            var container = encoder.singleValueContainer()
+            try container.encode([
+                "key": AnyEncodable(key),
+                "name": AnyEncodable(name),
+                "marketplace": AnyEncodable(marketplace),
+                "scope": AnyEncodable(scope),
+                "version": AnyEncodable(version),
+                "installPath": AnyEncodable(installPath),
+                "installedAt": AnyEncodable(installedAt),
+                "lastUpdated": AnyEncodable(lastUpdated),
+                "gitCommitSha": AnyEncodable(gitCommitSha),
+                "installPathExists": AnyEncodable(installPathExists),
+                "enabled": AnyEncodable(enabled),
+                "contributes": AnyEncodable(contributes),
+            ])
+        }
     }
 
     public struct PluginsResponse: Codable, Equatable, Sendable {
         public var manifestPath: String
         public var manifestExists: Bool
         public var plugins: [PluginInfo]
+
+        // manifestPath/manifestExists must stay literal camelCase (client's
+        // `CcPluginsResponse`) — see `AnyEncodable`'s doc comment.
+        public func encode(to encoder: Encoder) throws {
+            var container = encoder.singleValueContainer()
+            try container.encode([
+                "manifestPath": AnyEncodable(manifestPath),
+                "manifestExists": AnyEncodable(manifestExists),
+                "plugins": AnyEncodable(plugins),
+            ])
+        }
     }
 
     public static func readPlugins() -> PluginsResponse {
@@ -629,12 +679,41 @@ public enum CcConfig {
         public var marketplaceName: String?
         public var marketplaceDescription: String?
         public var marketplaceOwner: JSONValue?
+
+        // installLocation/lastUpdated/pluginCount/marketplaceName/
+        // marketplaceDescription/marketplaceOwner must stay literal
+        // camelCase (client's `CcMarketplace`) — see `AnyEncodable`'s doc
+        // comment.
+        public func encode(to encoder: Encoder) throws {
+            var container = encoder.singleValueContainer()
+            try container.encode([
+                "name": AnyEncodable(name),
+                "source": AnyEncodable(source),
+                "installLocation": AnyEncodable(installLocation),
+                "lastUpdated": AnyEncodable(lastUpdated),
+                "pluginCount": AnyEncodable(pluginCount),
+                "marketplaceName": AnyEncodable(marketplaceName),
+                "marketplaceDescription": AnyEncodable(marketplaceDescription),
+                "marketplaceOwner": AnyEncodable(marketplaceOwner),
+            ])
+        }
     }
 
     public struct MarketplacesResponse: Codable, Equatable, Sendable {
         public var knownPath: String
         public var knownExists: Bool
         public var items: [MarketplaceInfo]
+
+        // knownPath/knownExists must stay literal camelCase (client's
+        // `CcMarketplacesResponse`) — see `AnyEncodable`'s doc comment.
+        public func encode(to encoder: Encoder) throws {
+            var container = encoder.singleValueContainer()
+            try container.encode([
+                "knownPath": AnyEncodable(knownPath),
+                "knownExists": AnyEncodable(knownExists),
+                "items": AnyEncodable(items),
+            ])
+        }
     }
 
     public static func readMarketplaces() -> MarketplacesResponse {
