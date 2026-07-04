@@ -1,188 +1,98 @@
 # Handover prompt — paste this into a fresh Claude session to continue
 
 > Keep this file updated: the orchestrator refreshes the "Live state" section
-> after every task completion. Last update: 2026-07-04 ~12:55 CEST (Sonnet 5,
-> scheduled morning pickup #4 — Phase 4 CLOSED (432/432), P5.4 re-dispatched
-> in background after previous attempt died with zero commits).
+> after every task completion. Last update: 2026-07-05 ~01:30 CEST (Fable 5,
+> interactive session — endgame; repo now on GitHub with live CI).
 
 ## Paste-ready prompt
 
 ```
 You are taking over as orchestrator of the "Podium Standalone" project in
-/Users/gaelrobin/Desktop/PodiumSwiftApp (branch develop).
+/Users/gaelrobin/Desktop/PodiumSwiftApp (branch develop, remote
+github.com/Miraeld/podium-app — public, CI live on push/PR).
 
 Read STANDALONE_PLAN.md — start with §0 (resume protocol, binding), then §5
 (task board), §7 (run log, bottom-up), §4 + §6b (working agreements + product
-decisions). Then HANDOVER.md "Live state" for what was in flight when the
-previous session ended.
+decisions). Then HANDOVER.md "Live state" below.
 
-Your job: reconcile P5.4 (🟦, see Live state below — an agent named
-p5-4-native-ui was dispatched in background ~12:55 CEST; check whether it
-finished, verify with `swift build && swift test`, merge/commit if good),
-then keep dispatching Sonnet dev agents per §0 step 3 (P5.5 → P6.1 → P6.2)
-until the board is done, updating the board + run log + this file as you go.
-Quality over breadth (agreement #8).
+Your job: verify/close the open items below (P6.2a is the other session's
+lane — coordinate via the board, don't re-dispatch it), finish P6.1's
+remaining verification, then the v1 close-out list. Quality over breadth
+(agreement #8). Pull before every board edit; push after every commit now
+that a remote exists.
 ```
 
 ## Live state (refresh me on every board change)
 
-- **⚠️ COORDINATION NOTE for the scheduled-pickup session (updated 22:55 CEST
-  2026-07-04 by the Fable interactive session):** P5.4 is VERIFIED DONE (all
-  four gaps landed via your background p5-4-native-ui agent's commits through
-  eadd7ff; orchestrator verified by grep + build + 432/432 — board flipped ✅
-  at ec979a7). **P5.5 and P6.1 are claimed 🟦@F by the Fable session** (board
-  is the lock per §0 step 4) — DO NOT re-dispatch them. If you are the
-  scheduled pickup reading this: stand down / disable the scheduled task;
-  the interactive session is driving the endgame (P5.5 ∥ P6.1 → P6.2).
-- **In flight RIGHT NOW (~12:55 CEST, scheduled morning pickup #4):** Phase 4
-  is CLOSED (432/432, both hardening-gate blockers fixed — see plan §7). The
-  previous session's P5.4 dispatch (logged at commit 01e7245, ~10:26 CEST)
-  died with **zero commits** — re-verified clean tree + exactly 432/432 tests
-  before re-dispatching. Re-dispatched `p5-4-native-ui` in the background
-  (general-purpose, sonnet) against the known gap list from the pre-P5.3/P5.4
-  inventory audit: (1) ConfigExplorerView reads local FS directly instead of
-  `/api/cc-config` — highest value, now unblocked since the gate's camelCase
-  fix landed; (2) WorkflowsView never calls `GET /api/workflows`; (3)
-  AnalyticsView passes no tzOffset; (4) RunView missing permission-mode/effort
-  pickers + `run_input_ack` WS handling. Fenced to Sources/PodiumApp/
-  {ConfigExplorerView,WorkflowsView,AnalyticsView,RunView,PodiumAPI,Models,
-  WebSocketClient,AppState}.swift only — no server-side files. Next when this
-  lands: P5.5 (onboarding tour) → P6.1 (packaging) → P6.2 (contract E2E+docs).
-- **Previously in flight (2 parallel agents, RE-dispatched ~09:45 CEST by
-  Fable session after session-3's agents died unreachable):**
-  `p4-3-ccconfig-r2` (P4.3, resuming: Discovery/{CcConfig,CcMutate,CcWatcher,
-  UpdateCheck} + CcConfigRouter/UpdatesRouter + watcher/update services +
-  ZIPFoundation dep all committed by predecessor; missing SessionExportBundle
-  model, ExportRouter, tests; predecessor's broken half-file parked at
-  .agent-stash/PodiumStore+SessionBundle.swift for it to restore),
-  **P4.3 and P4.4 are both DONE — Phase 4 complete (18/22), 419/419 green.**
-  All mounts merged into BOTH arrays (main.swift + EmbeddedServer.
-  makeServerMounts()): Diagnostics, CcConfig, Updates, Export. ZIPFoundation
-  dep dropped (unused — export.js never zipped; §6 P4.3 prompt was wrong).
-  Negative-uptime flake fixed (Date non-monotonic → clamp). Next: Phase-4
-  mini hardening gate over the P4.3+P4.4 diff + PodiumApp re-audit, then
-  P5.3 → P5.4 → P5.5 → P6.1 → P6.2.
-- **Phase-3 hardening gate + all 8 fixes: ✅ done.** Gate found 8 confirmed,
-  non-blocking bugs (see STANDALONE_PLAN.md §7 "Phase-3 hardening gate" +
-  "Phase-3 hardening fixes" entries for full detail); two parallel fix-it
-  agents fixed all 8 and added regression tests, 377/377 green (orchestrator
-  re-verified `swift build && swift test` clean after both landed). Highest-
-  priority fix was Workflows API's top-level JSON key casing (`toolFlow` etc.
-  were being wrongly snake_cased — fixed via a new `JSONResponse(fields:)`
-  raw-fragment assembler in JSONResponse.swift, since Swift's
-  `.convertToSnakeCase` can't be bypassed per-key via CodingKeys). Others:
-  Ingest notifier-before-COMMIT race, transcript cache trim watermark,
-  lenient int query parsing, negative `limit` clamp, unknown agent status
-  filter, empty-string PATCH collapse, SearchRouter's own cost-match
-  algorithm (found a genuinely distinct JS `Array.slice` negative-offset
-  quirk here too, different from SQL's negative-LIMIT-means-unbounded rule —
-  see the fix-routes run-log entry).
-- **P5.1 (app embeds server): ✅ done, live-verified both directions**
-  without touching Gaël's real data — see the full P5.1 run-log entry.
-  `EmbeddedServer.swift` is the whole feature; single-instance check
-  correctly detects his live Docker container and falls back to pure-client
-  mode; hosts+hooks+notifications all confirmed working end-to-end in an
-  isolated sandbox with a real piped hook payload showing up live in the app.
-- **Done (16/22):** P0.1, P1.1, P1.2, P2.1, P2.2, P2.3, P2.4, P3.1, P3.2,
-  P3.3, P3.4, P4.1, P4.2, P5.1, P5.2. Phase 2 E2E-gate + Phase-3 hardening
-  gate both passed. 377/377 green as of this handover.
-- **P3.2 (legacy import + sweeps): audited clean, nothing needed fixing.**
-  LegacyImporter.swift (1165 lines: importAllSessions/backfillCompactions/
-  importCompactions/scanAndImportSubagents), ImportRouter.swift (guide/
-  rescan/scan-path/upload incl. a hand-rolled multipart parser — no new
-  dependency added), ServicesRunner.swift's 4 real services (legacyImport
-  w/ `.legacy-import.done` marker written only post-success, periodicSweep
-  w/ session_updated/agent_updated broadcasts, watchdog 15s API-error loop,
-  stuckAgentCheck 60s loop — both P2.3-deferred timers present and tested).
-  `scanAndImportSubagents` is wired live from HooksRouter post-SubagentStop,
-  not deferred (better than the original plan expected). All pre-existing
-  tests (LegacyImporterTests/ImportRouterTests/ServicesRunnerTests) verified
-  passing.
-- **P4.2 (web-push): test suite written from zero, all passing.**
-  `WebPushEncryptorTests` — byte-exact RFC 8291 §5 worked example (fixed
-  sender key + fixed salt), header layout assertions, an independent
-  receiver-side decrypt round trip. `VAPIDKeysTests` — P-256 key validity,
-  Node web-push `vapid-keys.json` camelCase format round trip (temp dirs
-  only), malformed-file error path, VAPID JWT header/payload/compact-
-  signature (r||s, not DER) shape. `PushRouterTests` — 12 HTTP tests:
-  vapid-public-key, subscribe upsert + validation, unsubscribe, send fan-out
-  over multiple subscriptions with header assertions, 404/410 pruning, 5xx
-  non-pruning — all via a `StubWebPushTransport` (zero real network calls).
-  `PushNotifierTests` — 7 tests: all 4 `NotifierEvent` cases fire correct
-  title/body (incl. session-name-missing fallback), payload decrypted
-  end-to-end via a capturing transport + the subscription's own keys,
-  matches `sw.js`'s `NotificationOptions` spread contract. **Real, harmless
-  finding:** `PushNotifier`'s additive `data.sessionId`/`url` fields go
-  through `PodiumJSON.encoder` (`.convertToSnakeCase`) so the wire key is
-  `session_id` — no client JS reads it yet (click-through isn't wired into
-  `push.ts`/`sw.js`), but note this before any future click-through UI work.
-- **Wiring debt CLOSED:** `ImportRouterMount` + `PushRouterMount` added to
-  `PodiumServerCLI/main.swift`'s mounts array. `reimportRunner`/`pushService`
-  params were being silently dropped between `main.swift` and
-  `PodiumServerApp` (missing from `PodiumServerLifecycle.makeApp`/`.run`) —
-  fixed, now threaded all the way through. `LegacyImporterReimportRunner`
-  adapter (wraps `LegacyImporter.importAllSessions` + `backfillCompactions`
-  into the `ReimportResult{imported,skipped,errors}` shape) built and passed
-  at the CLI call site — `POST /api/settings/reimport` no longer 503s.
-  `PushService`/`PushNotifier` construction was already correctly defaulted
-  by P4.2 itself (`PodiumServerApp`/`RouterRegistry` build a real
-  `PushService(store:)` when `nil` is passed, no side effects until first
-  use) — no extra work needed there.
-- **Manually smoke-tested the real `podium-server` binary** (temp data dir,
-  `--no-hooks`, random port, backgrounded + killed after): `/api/health`,
-  `/api/import/guide`, `/api/push/vapid-public-key` all respond correctly.
-  `POST /api/settings/reimport` against an isolated empty fixture dir (via
-  `CLAUDE_HOME` override, NOT the user's real `~/.claude`) returns
-  `{ok:true,imported:0,skipped:0,errors:0}` in ~10ms, confirming the wiring
-  end-to-end. **Follow-up flagged (task_6163054d), not fixed in this pass:**
-  the SAME endpoint against the user's real `~/.claude/projects` (294 real
-  files) pinned one core at 100% CPU for 2+ minutes without finishing before
-  being killed — `backfillCompactions` re-scans every session's full JSONL
-  on every call and `snapshotTranscript` copies every file unconditionally
-  per import; likely culprits, needs profiling against large real
-  transcripts (not fixture-scale ones) to confirm and fix.
-- **After P3.2 + P4.2 + wiring (now closed): Phase-3 hardening gate**
-  (working agreement #8): code review over the phases 2+3 diff (everything
-  since 38b08ba) + contract sanity check against WebClient/dist's React
-  client. THEN P4.3 ∥ P4.4 (P4.4 can build on P3.3's
-  Diagnostics/ServerRuntimeInfo.swift), then P5.1 → P5.3 → P5.4 → P5.5
-  (re-audit Sources/PodiumApp first — see §7 "Notes for future runs": the P5
-  prompts were written against a stale inventory), then P6.
-- **PO decision (Fable 5, 2026-07-04 ~02:00):** after the Phase-3 gate, P5.1
-  jumps the queue (app embeds server = the zero-setup demo moment); P4.3/P4.4
-  trail behind it. Gaël's live data (Docker `podium` container, port 4820,
-  ~/.claude/podium/data/) stays untouched until he's awake and watching the
-  switchover, verified against a COPY of his real DB first.
-- **Dependent-task notes live in the run log (§7):** P5.4 response models +
-  camelCase-live/snake_case-history wire split (P4.1 entry); P5.3 drop-in
-  transcript endpoints (P3.1); pattern-mining double-count parity quirk (P3.4);
-  Hummingbird does NOT percent-decode path params (P3.3 — check any router
-  with encodable path params); §6b №2 answer-from-popup needs a stdin
-  control-response framing extension in RunSpawner.sendInput (P4.1).
+- **Board: 21 ✅ + P6.1 ⚠️→closing + P6.2a 🟦@P.** All of phases 0–5 and F1
+  done. Tests: 433/433 in our scope (the 83 failures visible in a full run
+  are ALL in the @P session's untracked WIP Tests/PodiumServerTests/
+  ContractTests.swift — do not "fix" them, that lane is theirs).
+- **NEW: GitHub remote + CI.** `github.com/Miraeld/podium-app` (public),
+  created by Gaël 2026-07-05 ~01:20 CEST, develop pushed. CI (.github/
+  workflows/ci.yml: macOS + Linux swift:6.1 container) triggered on the
+  push — first-ever CI run; check `gh run list` for the verdict. From now
+  on: push after committing; watch CI. Suggested once the board is done:
+  create `main` from develop and make it the GitHub default (plan convention
+  expects PRs → main).
+- **P6.1 status:** macOS fully verified earlier (dist/Podium-1.0.dmg built,
+  ad-hoc signed, sandbox-launched clean). Linux: after 4 rounds of real
+  verification the tarball now BUILDS — dist-linux/podium-linux-ba5d107.tar.gz
+  (25MB, aarch64). Four real bugs found+fixed on the way (run log has
+  details): missing Crypto dep on PodiumCore, Glibc getloadavg signature,
+  CFGetTypeID absent on corelibs-foundation, and `swift build --product A
+  --product B` silently building only the last product (script + §6 prompt
+  both had this wrong). REMAINING to close ⚠️→✅: the in-container binary
+  smoke test (background task was running at handover: extract tarball, boot
+  ./bin/podium-server --no-hooks on 48111, /dev/tcp health check — re-run it
+  if lost) + first green Linux CI run. NOTE: the Linux docker build re-points
+  the shared .build/release symlink to the Linux triple — package-macos.sh
+  re-runs swift build itself so it self-heals, but don't be surprised by it.
+- **P6.2a (contract E2E) — the @P session's lane (scheduled-pickup session,
+  tag @P on the board).** Its WIP ContractTests.swift is untracked in the
+  tree with 83 failing asserts (in-progress, expected). Coordinate via the
+  board; don't dispatch P6.2 work yourself unless @P's lane is confirmed
+  dead AND its board entry is reconciled per §0 step 2.
+- **v1 close-out list (after P6.2a lands):** (1) final v1 QA sweep — empty/
+  error states, light/dark pass on new views (tour, diagnostics, config
+  editor); (2) README/MIGRATION docs (part of P6.2 scope); (3) create main
+  branch + set default; (4) HUMAN items below.
+- **HUMAN (Gaël) checklist — pending his eyes:**
+  - Visual pass: onboarding tour light+dark (P5.5 couldn't launch — his app
+    was running); live-transcript append click-through (P5.3).
+  - `docker rm -f wizardly_golick` — stalled swift:6.1 build container from
+    P6.1's first attempt (orchestrator not permitted to remove it).
+  - His prod `podium` container reports UNHEALTHY since ~2026-07-04 (was
+    healthy before; nobody here touched it — read-only observations only).
+  - The supervised switchover: stop Docker → app hosts against a COPY of
+    ~/.claude/podium/data/dashboard.db first → verify → real thing. DMG is
+    ready at dist/Podium-1.0.dmg.
+- **Open minor debts (documented, non-blocking):** PushNotifier Sendable
+  closure warning (Swift-6 mode); cold-cache first import still CPU-bound
+  seconds-per-hundred-files (async reimport endpoint = Routes change,
+  revisit if real-corpus UX warrants); symlink-following gap in cc-config
+  file API (EXACT Node parity — joint ticket both codebases); web push
+  click-through fields are snake_case on the wire while future client JS
+  may expect camelCase (no consumer yet).
+- **Dependent-task notes live in the run log (§7):** camelCase run
+  live-handle wire family vs snake_case history (P4.1); Hummingbird does NOT
+  percent-decode path params (P3.3); JSONResponse(fields:) for intentionally
+  camelCase top-level keys; PodiumJSON CodingKeys footgun; PodiumJSON.
+  AnyEncodable dictionary-encode pattern for camelCase field names (gate
+  fix); §6b №2 answer-from-popup needs a stdin control-response framing
+  extension in RunSpawner.sendInput.
 - **Standing corrections:** error responses are CodedErrorResponse
-  {"error":{"code","message"}} — some §6 prompts still show the flat shape;
-  route responses must go through JSONResponse; never mix snake_case
-  CodingKeys with .convertFromSnakeCase (PodiumJSON.swift footgun). These
-  constraint blocks must be re-attached verbatim on any re-dispatch.
-- **Test count:** 355/355 as of this handover (324 baseline + 31 new P4.2
-  tests). `swift build` clean.
-- **Environment quirks:** repo has an auto-commit hook that commits the WHOLE
-  dirty tree on any agent save — commit file-lists misattribute parallel work;
-  real authorship = `git show <commit> -- <file>`. Agents habitually finish
-  then go idle WITHOUT sending their report — ping them via SendMessage before
-  assuming death or re-dispatching. /Applications/Podium.app (old install) can
-  shadow the dev bundle when UI-testing — check `ps` first. Session-limit
-  errors can kill an Agent spawn with 0 tokens used — just re-dispatch. A USER
-  INTERRUPT of the main conversation also kills running background agents
-  (SendMessage answers "stopped by the user, won't be resumed") — relaunch via
-  a fresh Agent call. Liveness check: stat the RESOLVED transcript path twice
-  ~20s apart (tasks/*.output is a symlink whose own 150-byte size is
-  meaningless); flat mtime + no new commits = dead/stalled → ping, then
-  relaunch. The user's live plugin data (Docker `podium` container, port
-  4820) bind-mounts ~/.claude/podium/data/dashboard.db + vapid-keys.json —
-  NEVER point tests at it; the Swift server is schema-compatible and will
-  take over that DB at switchover (planned after P5.1). `ClaudeHome.current()`
-  defaults to the REAL `~/.claude` regardless of `--data-dir` — only
-  `CLAUDE_HOME` env or the settings-file override redirect it; smoke tests
-  that must not touch real history need `CLAUDE_HOME` pointed at a fixture
-  dir, not just `--data-dir`.
+  {"error":{"code","message"}}; route responses must go through
+  JSONResponse; never mix snake_case CodingKeys with .convertFromSnakeCase.
+  Re-attach the fence/constraint blocks verbatim on any re-dispatch.
+- **Environment quirks:** auto-commit hook commits the WHOLE dirty tree on
+  any agent save — commit file-lists misattribute parallel work; real
+  authorship = `git show <commit> -- <file>`. Agents habitually finish then
+  go idle WITHOUT reporting — ping via SendMessage before assuming death.
+  A USER INTERRUPT of the main conversation kills running background agents.
+  /Applications/Podium.app (old install) can shadow the dev bundle.
+  Session-limit errors can kill an Agent spawn with 0 tokens — re-dispatch.
+  `ClaudeHome.current()` defaults to the REAL ~/.claude regardless of
+  --data-dir — smoke tests need CLAUDE_HOME pointed at a fixture.
+  NEVER touch: Gaël's ~/.claude/podium/data (live Docker bind-mount), his
+  running PodiumApp process, his prod `podium` container.
