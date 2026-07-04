@@ -59,7 +59,9 @@ if [ "$MODE" = "docker" ]; then
     -v "$SCRIPT_DIR:/src" \
     -w /src \
     "$DOCKER_IMAGE" \
-    bash -c "apt-get update -qq && apt-get install -y -qq libsqlite3-dev >/dev/null && swift build -c release --product podium-server --product podium-hook"
+    bash -c "apt-get update -qq && apt-get install -y -qq libsqlite3-dev >/dev/null && swift build -c release --product podium-server && swift build -c release --product podium-hook"
+    # NOTE: one `swift build` per product — passing --product twice silently
+    # honors only the last flag and builds a single product.
 else
   echo "▶ Building with the host Swift toolchain…"
   if [ "$(uname -s)" != "Linux" ]; then
@@ -67,7 +69,8 @@ else
     exit 1
   fi
   command -v swift >/dev/null 2>&1 || { echo "✗ swift not found on PATH"; exit 1; }
-  swift build -c release --product podium-server --product podium-hook
+  swift build -c release --product podium-server
+  swift build -c release --product podium-hook
 fi
 
 BUILD_DIR="$SCRIPT_DIR/.build/release"
