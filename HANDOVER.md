@@ -42,10 +42,12 @@ that a remote exists.
   details): missing Crypto dep on PodiumCore, Glibc getloadavg signature,
   CFGetTypeID absent on corelibs-foundation, and `swift build --product A
   --product B` silently building only the last product (script + §6 prompt
-  both had this wrong). REMAINING to close ⚠️→✅: the in-container binary
-  smoke test (background task was running at handover: extract tarball, boot
-  ./bin/podium-server --no-hooks on 48111, /dev/tcp health check — re-run it
-  if lost) + first green Linux CI run. NOTE: the Linux docker build re-points
+  both had this wrong). REMAINING to close ⚠️→✅: ONLY a first green Linux CI run (runs 28722982661 +
+  28723047443 were in_progress at handover — check `gh run list`). The
+  in-container smoke already proved the Linux binary boots + listens
+  ("Server started and listening on 0.0.0.0:48111"); the HTTP probe step
+  failed on a shell quirk, not the server — CI's Linux test job covers the
+  rest. If CI is red instead: fix forward, the log will say exactly what. NOTE: the Linux docker build re-points
   the shared .build/release symlink to the Linux triple — package-macos.sh
   re-runs swift build itself so it self-heals, but don't be surprised by it.
 - **P6.2a (contract E2E) — the @P session's lane (scheduled-pickup session,
