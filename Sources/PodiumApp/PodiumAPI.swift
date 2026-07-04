@@ -282,9 +282,22 @@ struct WorkflowSessionRaw: Codable {
 
 enum APIError: LocalizedError {
     case badStatus(Int)
+    /// Like `badStatus`, but carries the server's `{"error":{"message"}}`
+    /// text when available (`CodedErrorResponse` shape) — used by the
+    /// cc-config endpoints so mutation failures (bad name, out-of-root,
+    /// too-large, not-found, …) surface a human-readable reason instead of
+    /// a bare HTTP status.
+    case badStatusWithMessage(Int, String?)
+
+    static func badStatus(_ code: Int, message: String?) -> APIError {
+        .badStatusWithMessage(code, message)
+    }
+
     var errorDescription: String? {
         switch self {
         case .badStatus(let c): return "HTTP \(c)"
+        case .badStatusWithMessage(let c, let message):
+            return message ?? "HTTP \(c)"
         }
     }
 }
