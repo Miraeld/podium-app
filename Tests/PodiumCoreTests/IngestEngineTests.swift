@@ -27,6 +27,33 @@ final class StubTranscriptTokenSource: TranscriptTokenSource, @unchecked Sendabl
     }
 }
 
+/// Test-double `Notifier` — captures every event actually delivered via
+/// `notify(_:)` so tests can assert on push-notification firing (or, more
+/// importantly for the COMMIT-ordering bug, non-firing) without touching the
+/// real VAPID/push stack. Actor-isolated because `IngestEngine.process`
+/// invokes `notifier.notify(...)` from a detached `Task` after COMMIT, so
+/// captures can race the test's own assertions — `waitForCount` polls with a
+/// short timeout instead of assuming synchronous delivery.
+actor SpyNotifier: Notifier {
+    private(set) var events: [NotifierEvent] = []
+
+    func notify(_ event: NotifierEvent) async {
+        events.append(event)
+    }
+
+    /// Polls briefly for `events.count` to reach `count`, then returns the
+    /// current snapshot — used both to assert an event DID arrive (poll
+    /// until present) and, after a bounded grace period, that one did NOT
+    /// (see `testRolledBackSessionEndDoesNotFireNotifier`).
+    func waitForCount(_ count: Int, timeout: TimeInterval = 1.0) async -> [NotifierEvent] {
+        let deadline = Date().addingTimeInterval(timeout)
+        while events.count < count, Date() < deadline {
+            try? await Task.sleep(nanoseconds: 5_000_000)
+        }
+        return events
+    }
+}
+
 /// Builds `JSONValue` hook payloads shaped like hook.mjs's raw `p` object
 /// (the same object it posts verbatim as `data` — see hook.mjs `run()`
 /// returning `{ hookType: hook_event_name, data: p }`). Field names below
@@ -107,10 +134,13 @@ final class IngestEngineTests: XCTestCase {
         try? FileManager.default.removeItem(at: tempDir)
     }
 
-    private func makeEngine(transcriptSource: TranscriptTokenSource = NoOpTranscriptTokenSource()) throws -> IngestEngine {
+    private func makeEngine(
+        transcriptSource: TranscriptTokenSource = NoOpTranscriptTokenSource(),
+        notifier: Notifier = NoOpNotifier()
+    ) throws -> IngestEngine {
         let path = tempDir.appendingPathComponent("dashboard-\(UUID().uuidString).db").path
         let store = try PodiumStore(path: path)
-        return IngestEngine(store: store, transcriptSource: transcriptSource)
+        return IngestEngine(store: store, transcriptSource: transcriptSource, notifier: notifier)
     }
 
     // MARK: - Session created -> active, main agent synthesized and working
@@ -404,6 +434,89 @@ final class IngestEngineTests: XCTestCase {
         engine.process(hookType: "SessionEnd", data: HookFixture.sessionEnd(sessionId: sessionId))
         let final = try engine.store.getSession(id: sessionId)
         XCTAssertEqual(final?.status.knownValue, .error, "SessionEnd must preserve error status rather than force-completing")
+    }
+
+    // MARK: - Notifier fires only after COMMIT (Phase-3 hardening gate bug 1)
+
+    /// A plain, successful SessionEnd must still fire the notifier — the fix
+    /// defers the `Task { notifier.notify(...) }` until after COMMIT, it
+    /// must not drop it entirely.
+    func testSessionEndFiresNotifierAfterSuccessfulCommit() async throws {
+        let spy = SpyNotifier()
+        let engine = try makeEngine(notifier: spy)
+        let sessionId = "sess-notify-commit"
+        engine.process(hookType: "SessionStart", data: HookFixture.sessionStart(sessionId: sessionId))
+        engine.process(hookType: "SessionEnd", data: HookFixture.sessionEnd(sessionId: sessionId))
+
+        let events = await spy.waitForCount(1)
+        // hooks.js session-name synthesis: no explicit `session_name` in the
+        // fixture, so the name falls back to the cwd basename
+        // (HookFixture.sessionStart defaults cwd to "/Users/dev/project").
+        XCTAssertEqual(events, [.sessionCompleted(sessionId: sessionId, sessionName: "project")])
+    }
+
+    /// The core regression test for the Phase-3 hardening gate finding:
+    /// `IngestEngine` used to schedule `Task { await notifier.notify(...) }`
+    /// synchronously inside `processTransactionBody`, BEFORE `COMMIT`. If a
+    /// later statement in the same transaction threw (ROLLBACK), the push
+    /// notification had already irreversibly fired for a DB write that never
+    /// persisted. This test drives a SessionEnd (which queues a
+    /// `.sessionCompleted` notifier event) and then forces the *next*
+    /// statement in the same transaction to throw via `testFailurePoint`,
+    /// simulating a downstream failure. Asserts: the session is NOT actually
+    /// completed (the transaction rolled back) AND the notifier was never
+    /// invoked — both must be true for the fix to be correct.
+    func testRolledBackSessionEndDoesNotFireNotifier() async throws {
+        let spy = SpyNotifier()
+        let engine = try makeEngine(notifier: spy)
+        let sessionId = "sess-notify-rollback"
+        engine.process(hookType: "SessionStart", data: HookFixture.sessionStart(sessionId: sessionId))
+
+        struct InjectedFailure: Error {}
+        engine.testFailurePoint = { throw InjectedFailure() }
+
+        let broadcasts = engine.process(hookType: "SessionEnd", data: HookFixture.sessionEnd(sessionId: sessionId))
+        XCTAssertTrue(broadcasts.isEmpty, "process() must return [] when the transaction rolls back")
+
+        // Confirm the transaction actually rolled back — session must still
+        // be in its pre-SessionEnd state, not completed.
+        let session = try engine.store.getSession(id: sessionId)
+        XCTAssertEqual(session?.status.knownValue, .active, "a rolled-back SessionEnd must not leave the session completed")
+
+        // Give any wrongly-scheduled notifier Task a moment to fire, then
+        // assert it never did.
+        try await Task.sleep(nanoseconds: 100_000_000)
+        let events = await spy.events
+        XCTAssertTrue(events.isEmpty, "a rolled-back transaction must never fire a real push notification")
+    }
+
+    /// Same rollback scenario but for the cost_spike notifier path
+    /// (IngestEngine.swift ~L782 before the fix) — drives token usage over
+    /// the $1 cost-spike threshold via the transcript-signal seam (same
+    /// setup as `testCostSpikeBroadcastFiresOnceWhenCrossingDollarThreshold`),
+    /// then forces a later statement in the same transaction to throw.
+    func testRolledBackCostSpikeDoesNotFireNotifier() async throws {
+        let spy = SpyNotifier()
+        let stub = StubTranscriptTokenSource()
+        let engine = try makeEngine(transcriptSource: stub, notifier: spy)
+        let sessionId = "sess-notify-costspike-rollback"
+        let transcriptPath = "/fake/cost-rollback.jsonl"
+
+        // claude-opus-4-5 pricing (seeded default): $5/mtok input. 1M tokens
+        // of input alone = $5.00, comfortably over the $1 threshold.
+        stub.enqueue(TranscriptExtractResult(tokensByModel: [
+            "claude-opus-4-5-20250101": TranscriptTokens(inputTokens: 1_000_000, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0),
+        ]), for: transcriptPath)
+
+        struct InjectedFailure: Error {}
+        engine.testFailurePoint = { throw InjectedFailure() }
+
+        let broadcasts = engine.process(hookType: "SessionStart", data: HookFixture.sessionStart(sessionId: sessionId, model: "claude-opus-4-5-20250101", transcriptPath: transcriptPath))
+        XCTAssertTrue(broadcasts.isEmpty, "process() must return [] when the transaction rolls back")
+
+        try await Task.sleep(nanoseconds: 100_000_000)
+        let events = await spy.events
+        XCTAssertTrue(events.isEmpty, "a rolled-back cost-spike transaction must never fire a real push notification")
     }
 
     func testEventsAfterSessionEndReactivateTheSession() throws {

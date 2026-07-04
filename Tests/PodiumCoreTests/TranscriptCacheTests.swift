@@ -197,6 +197,71 @@ final class TranscriptCacheTests: XCTestCase {
         XCTAssertEqual(cache.size, 0)
     }
 
+    // MARK: - Trim watermark (amortized trim, parity with transcript-cache.js
+    // PARSE_TRIM_WATERMARK / _consumeLine)
+
+    /// Appends well past the 2x watermark (`maxArrayLen * 2`) in a single
+    /// extract and asserts the array is trimmed down to exactly
+    /// `maxArrayLen`, keeping only the most recent entries — the correctness
+    /// half of the amortized-trim fix (`trimAtWatermarkIfNeeded`). Uses a
+    /// small `maxArrayLen` (via `TRANSCRIPT_CACHE_MAX_ARRAY_LEN`) so the test
+    /// doesn't need thousands of lines.
+    func testTurnDurationsTrimToMaxArrayLenWhenAppendedPastTripleCap() throws {
+        let smallCache = TranscriptCache(environment: ["TRANSCRIPT_CACHE_MAX_ARRAY_LEN": "5"])
+        // 3x the cap (15 lines) — well past the 2x (10) watermark, so at
+        // least one in-flight trim during _consumeLine must have fired.
+        let lines = (1...15).map { i in
+            #"{"type":"system","subtype":"turn_duration","durationMs":\#(i),"timestamp":"2026-07-03T09:\#(String(format: "%02d", i)):00.000Z"}"#
+        }
+        let path = try write(lines)
+
+        let result = try XCTUnwrap(smallCache.extract(path: path))
+        XCTAssertEqual(result.turnDurations.count, 5)
+        // Only the most recent 5 entries (durationMs 11...15) should survive
+        // — trimming always keeps the tail, matching Node's `arr.splice(0,
+        // arr.length - maxLen)`.
+        XCTAssertEqual(result.turnDurations.map(\.durationMs), [11, 12, 13, 14, 15])
+    }
+
+    /// Directly asserts the amortized-O(1) half of the fix via the
+    /// `watermarkTrimExecutionCount` instrumentation hook: while a single
+    /// `consumeLine` pass builds up its in-flight `ParseState`, the per-line
+    /// trim must stay a no-op until the array actually reaches the 2x
+    /// watermark (bug 2 was that it ran — and shifted the whole array — on
+    /// every single line once merely at cap, i.e. `parseTrimWatermark / 2`
+    /// lines too early and every line thereafter).
+    func testTrimAtWatermarkOnlyExecutesOnceArrayReachesWatermarkNotOnEveryLine() throws {
+        let smallCache = TranscriptCache(environment: ["TRANSCRIPT_CACHE_MAX_ARRAY_LEN": "5"])
+        // maxArrayLen=5 => parseTrimWatermark=10. A single full read that
+        // parses 9 turn-duration lines in one consumeLine loop must never
+        // trigger the per-line trim (it's over cap at line 6, but still
+        // under the watermark the whole time).
+        let underWatermark = (1...9).map { i in
+            #"{"type":"system","subtype":"turn_duration","durationMs":\#(i),"timestamp":"2026-07-03T09:\#(String(format: "%02d", i)):00.000Z"}"#
+        }
+        let path = try write(underWatermark)
+        let result = try XCTUnwrap(smallCache.extract(path: path))
+        XCTAssertEqual(smallCache.watermarkTrimExecutionCount, 0, "must not trim on every append before the array reaches the 2x watermark")
+        // finalize()'s unconditional trim still clamps the externally-visible
+        // result to maxArrayLen — this is expected and matches Node exactly
+        // (see _trimArray calls outside _consumeLine, as opposed to the
+        // gated call inside it).
+        XCTAssertEqual(result.turnDurations.count, 5)
+
+        // A second full read (force via `invalidate`, avoiding the
+        // incremental-read path which would start a fresh in-flight state
+        // and never reach the watermark from a single new line) with 10
+        // total lines — the in-flight state reaches exactly the watermark on
+        // the 10th line, firing the per-line trim exactly once.
+        smallCache.invalidate(path: path)
+        let atWatermark = (1...10).map { i in
+            #"{"type":"system","subtype":"turn_duration","durationMs":\#(i),"timestamp":"2026-07-03T09:\#(String(format: "%02d", i)):00.000Z"}"#
+        }
+        try (atWatermark.joined(separator: "\n") + "\n").write(to: URL(fileURLWithPath: path), atomically: true, encoding: .utf8)
+        _ = smallCache.extract(path: path)
+        XCTAssertEqual(smallCache.watermarkTrimExecutionCount, 1, "exactly one in-flight trim should fire once the in-progress array reaches the watermark")
+    }
+
     // MARK: - TranscriptCacheTokenSource adapter
 
     func testTokenSourceAdapterMapsCacheResultToSeamShape() throws {
