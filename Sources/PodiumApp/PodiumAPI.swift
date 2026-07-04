@@ -134,6 +134,24 @@ actor PodiumAPI {
 
     // MARK: Workflow
 
+    /// `GET /api/workflows` — cross-session aggregate workflow intelligence.
+    /// Optional `status` filter: active/completed/error/abandoned (omit or
+    /// "all" for no filter). See `WorkflowsRouter.swift`.
+    func workflowSummary(status: String? = nil) async throws -> WorkflowSummary {
+        guard let status, !status.isEmpty, status != "all" else {
+            return try await get("/api/workflows")
+        }
+        var comps = URLComponents(url: baseURL.appending(path: "/api/workflows"), resolvingAgainstBaseURL: false)!
+        comps.queryItems = [.init(name: "status", value: status)]
+        return try await get(url: comps.url!)
+    }
+
+    /// `GET /api/workflows/session/:id` — full per-session drill-in (agent
+    /// tree, tool timeline, swimlanes, first 500 events).
+    func workflowSessionDetail(_ id: String) async throws -> WorkflowDetail {
+        try await get("/api/workflows/session/\(id)")
+    }
+
     func workflowSession(_ id: String) async throws -> WorkflowSessionRaw {
         try await get("/api/workflows/session/\(id)")
     }

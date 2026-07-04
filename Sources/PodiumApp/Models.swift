@@ -79,6 +79,211 @@ struct AgentTreeNode: Codable, Identifiable {
     var children: [AgentTreeNode]
 }
 
+// MARK: - Workflows (GET /api/workflows, GET /api/workflows/session/:id)
+//
+// Top-level keys of both responses are literal camelCase (server's
+// `JSONResponse(fields:)` — see `WorkflowsRouter.swift`/`JSONResponse.swift`
+// header comments); nested fields are ordinary snake_case run through
+// `PodiumJSON.encoder`. `JSONDecoder.podium`'s `.convertFromSnakeCase`
+// leaves already-camelCase keys untouched, so plain `Codable` +
+// camelCase Swift property names round-trips correctly for both layers —
+// no custom `CodingKeys` needed here, matching `PodiumCore/Models/Workflow.swift`.
+
+struct WorkflowSummary: Codable {
+    struct TopFlow: Codable { let source: String; let target: String; let count: Int }
+    struct Stats: Codable {
+        let totalSessions: Int
+        let totalAgents: Int
+        let totalSubagents: Int
+        let avgSubagents: Double
+        let successRate: Double
+        let avgDepth: Double
+        let avgDurationSec: Double
+        let totalCompactions: Int
+        let avgCompactions: Double
+        let topFlow: TopFlow?
+    }
+
+    struct OrchestrationEdge: Codable { let source: String; let target: String; let weight: Int }
+    struct Orchestration: Codable {
+        struct SubagentTypeOutcome: Codable, Identifiable {
+            let subagentType: String
+            let count: Int
+            let completed: Int
+            let errors: Int
+            var id: String { subagentType }
+        }
+        struct StatusCount: Codable, Identifiable {
+            let status: String
+            let count: Int
+            var id: String { status }
+        }
+        struct Compactions: Codable { let total: Int; let sessions: Int }
+
+        let sessionCount: Int
+        let mainCount: Int
+        let subagentTypes: [SubagentTypeOutcome]
+        let edges: [OrchestrationEdge]
+        let outcomes: [StatusCount]
+        let compactions: Compactions
+    }
+
+    struct ToolFlow: Codable {
+        struct Transition: Codable { let source: String; let target: String; let value: Int }
+        struct ToolCount: Codable, Identifiable {
+            let toolName: String
+            let count: Int
+            var id: String { toolName }
+        }
+        let transitions: [Transition]
+        let toolCounts: [ToolCount]
+    }
+
+    struct Effectiveness: Codable, Identifiable {
+        let subagentType: String
+        let total: Int
+        let completed: Int
+        let errors: Int
+        let sessions: Int
+        let successRate: Double
+        let avgDuration: Double?
+        let trend: [Double]
+        var id: String { subagentType }
+    }
+
+    struct Patterns: Codable {
+        struct Pattern: Codable { let steps: [String]; let count: Int; let percentage: Double }
+        let patterns: [Pattern]
+        let soloSessionCount: Int
+        let soloPercentage: Double
+    }
+
+    struct ModelDelegation: Codable {
+        struct MainModelCount: Codable, Identifiable {
+            let model: String
+            let agentCount: Int
+            let sessionCount: Int
+            var id: String { model }
+        }
+        struct SubagentModelCount: Codable, Identifiable {
+            let model: String
+            let agentCount: Int
+            var id: String { model }
+        }
+        struct ModelTokens: Codable, Identifiable {
+            let model: String
+            let inputTokens: Int
+            let outputTokens: Int
+            let cacheReadTokens: Int
+            let cacheWriteTokens: Int
+            var id: String { model }
+        }
+        let mainModels: [MainModelCount]
+        let subagentModels: [SubagentModelCount]
+        let tokensByModel: [ModelTokens]
+    }
+
+    struct ErrorPropagation: Codable {
+        struct DepthCount: Codable, Identifiable { let depth: Int; let count: Int; var id: Int { depth } }
+        struct TypeCount: Codable, Identifiable {
+            let subagentType: String
+            let count: Int
+            var id: String { subagentType }
+        }
+        struct EventErrorCount: Codable, Identifiable {
+            let summary: String
+            let count: Int
+            var id: String { summary }
+        }
+        let byDepth: [DepthCount]
+        let byType: [TypeCount]
+        let eventErrors: [EventErrorCount]
+        let sessionsWithErrors: Int
+        let totalSessions: Int
+        let errorRate: Double
+    }
+
+    struct Concurrency: Codable {
+        struct Lane: Codable, Identifiable {
+            let name: String
+            let avgStart: Double
+            let avgEnd: Double
+            let count: Int
+            var id: String { name }
+        }
+        let aggregateLanes: [Lane]
+    }
+
+    struct ComplexityItem: Codable, Identifiable {
+        let id: String
+        let name: String?
+        let status: String
+        let duration: Double
+        let agentCount: Int
+        let subagentCount: Int
+        let totalTokens: Int
+        let model: String?
+    }
+
+    struct Compaction: Codable {
+        struct PerSession: Codable, Identifiable {
+            let sessionId: String
+            let compactions: Int
+            var id: String { sessionId }
+        }
+        let totalCompactions: Int
+        let tokensRecovered: Int
+        let perSession: [PerSession]
+        let sessionsWithCompactions: Int
+        let totalSessions: Int
+    }
+
+    struct CooccurrenceEdge: Codable { let source: String; let target: String; let weight: Int }
+
+    let stats: Stats
+    let orchestration: Orchestration
+    let toolFlow: ToolFlow
+    let effectiveness: [Effectiveness]
+    let patterns: Patterns
+    let modelDelegation: ModelDelegation
+    let errorPropagation: ErrorPropagation
+    let concurrency: Concurrency
+    let complexity: [ComplexityItem]
+    let compaction: Compaction
+    let cooccurrence: [CooccurrenceEdge]
+}
+
+/// `GET /api/workflows/session/:id` — full per-session drill-in (agent tree,
+/// tool timeline, swimlanes, first 500 events). Supersedes the old
+/// `WorkflowSessionRaw` (session + tree only) used by `PodiumAPI.workflowSession`.
+struct WorkflowDetail: Codable {
+    struct ToolTimelineEntry: Codable, Identifiable {
+        let id: Int
+        let toolName: String?
+        let eventType: String
+        let agentId: String?
+        let createdAt: String
+        let summary: String?
+    }
+
+    struct SwimLane: Codable, Identifiable {
+        let id: String
+        let name: String
+        let type: Agent.AgentType
+        let subagentType: String?
+        let status: Agent.AgentStatus
+        let startedAt: String
+        let endedAt: String?
+        let parentAgentId: String?
+    }
+
+    let session: Session
+    let tree: [AgentTreeNode]
+    let toolTimeline: [ToolTimelineEntry]
+    let swimLanes: [SwimLane]
+    let events: [DashboardEvent]
+}
+
 // MARK: - Event
 
 struct DashboardEvent: Codable, Identifiable, Equatable {
