@@ -25,6 +25,15 @@
 // `NoOpNotifier` default — session end/error, agent-stuck, and cost-spike
 // transitions now actually alert the user. See
 // `Sources/PodiumCore/Push/PushNotifier.swift`.
+//
+// P4.4: instrumented with `DiagnosticsRecorder.shared` — a single additive
+// call bracketing `engine.process(...)` on success (`recordHookEvent`) and
+// one on each router-level rejection (`recordHookFailure`). This is
+// intentionally the ONLY diagnostics touch point in the ingestion path:
+// `IngestEngine.swift` itself is untouched (off-limits this task — a
+// parallel agent just fixed its notifier-vs-COMMIT ordering). Recording
+// happens at the HTTP layer, after the engine has already returned, so it
+// can never affect ingestion semantics or transaction ordering.
 
 import Foundation
 import Hummingbird
@@ -52,25 +61,39 @@ public enum HooksRouterMount: RouterMount {
                     .readableBytesView
                     .withUnsafeBytes { Data($0) }
             } catch {
+                await DiagnosticsRecorder.shared.recordHookFailure(reason: "unreadable request body")
                 return try JSONResponse(status: .badRequest, ErrorResponse("Invalid request body"))
             }
 
             guard let (hookType, data) = Self.parsePayload(bodyData) else {
+                await DiagnosticsRecorder.shared.recordHookFailure(reason: "invalid payload (hook_type/data missing)")
                 return try JSONResponse(
                     status: .badRequest,
                     HookErrorResponse(error: HookErrorDetail(code: "INVALID_INPUT", message: "hook_type and data are required"))
                 )
             }
 
+            // P4.4: bracket the engine call to measure hook processing
+            // latency from the router's point of view — see
+            // DiagnosticsRecorder.swift's doc comment for why this is the
+            // chosen latency definition (and why it's measured here, not
+            // inside IngestEngine).
+            let processingStart = Date()
             let broadcasts = engine.process(hookType: hookType, data: data)
+            let latencySeconds = Date().timeIntervalSince(processingStart)
+
             guard let last = broadcasts.last, last.type == "new_event" else {
                 // Engine no-op'd (e.g. missing session_id in `data`) — mirrors
                 // hooks.js's `if (!result) return res.status(400)...`.
+                await DiagnosticsRecorder.shared.recordHookFailure(reason: "session_id missing from hook data (\(hookType))")
                 return try JSONResponse(
                     status: .badRequest,
                     HookErrorResponse(error: HookErrorDetail(code: "MISSING_SESSION", message: "session_id is required in data"))
                 )
             }
+
+            let recordedSessionId = data.nonEmptyString("session_id") ?? "unknown"
+            await DiagnosticsRecorder.shared.recordHookEvent(hookType: hookType, sessionId: recordedSessionId, latencySeconds: latencySeconds)
 
             // Fan broadcasts out over the WS hub AFTER we've decided the
             // response — mirrors hooks.js calling `res.json(...)` before the
