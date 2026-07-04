@@ -983,6 +983,30 @@ public enum CcConfig {
         public var hooks: HookCounts
         public var memory: Int
         public var settingsFiles: Int
+
+        // outputStyles/pluginsEnabled/pluginsDisabled/mcpServers/
+        // settingsFiles must stay literal camelCase (client's
+        // `CcOverview.counts`) — see `AnyEncodable`'s doc comment. All keys
+        // encoded literally here for consistency, even the single-word ones
+        // `.convertToSnakeCase` would leave alone anyway.
+        public func encode(to encoder: Encoder) throws {
+            var container = encoder.singleValueContainer()
+            try container.encode([
+                "skills": AnyEncodable(skills),
+                "agents": AnyEncodable(agents),
+                "commands": AnyEncodable(commands),
+                "outputStyles": AnyEncodable(outputStyles),
+                "plugins": AnyEncodable(plugins),
+                "pluginsEnabled": AnyEncodable(pluginsEnabled),
+                "pluginsDisabled": AnyEncodable(pluginsDisabled),
+                "marketplaces": AnyEncodable(marketplaces),
+                "keybindings": AnyEncodable(keybindings),
+                "mcpServers": AnyEncodable(mcpServers),
+                "hooks": AnyEncodable(hooks),
+                "memory": AnyEncodable(memory),
+                "settingsFiles": AnyEncodable(settingsFiles),
+            ])
+        }
     }
 
     public struct OverviewRoots: Codable, Equatable, Sendable {
@@ -990,6 +1014,18 @@ public enum CcConfig {
         public var projectClaudeDir: String
         public var projectRoot: String
         public var claudeJson: String
+
+        // Every field here must stay literal camelCase (client's
+        // `CcOverview.roots`) — see `AnyEncodable`'s doc comment.
+        public func encode(to encoder: Encoder) throws {
+            var container = encoder.singleValueContainer()
+            try container.encode([
+                "claudeHome": AnyEncodable(claudeHome),
+                "projectClaudeDir": AnyEncodable(projectClaudeDir),
+                "projectRoot": AnyEncodable(projectRoot),
+                "claudeJson": AnyEncodable(claudeJson),
+            ])
+        }
     }
 
     public struct OverviewResponse: Codable, Equatable, Sendable {

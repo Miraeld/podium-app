@@ -196,6 +196,21 @@ public enum CcMutate {
         public var target: String
         public var backupPath: String?
         public var created: Bool
+
+        // `backupPath` must stay literal camelCase (client's
+        // `CcMutationResult.backupPath`) — see `PodiumJSON.AnyEncodable`'s
+        // doc comment for why `CodingKeys` alone can't survive
+        // `PodiumJSON.encoder`'s `.convertToSnakeCase`.
+        public func encode(to encoder: Encoder) throws {
+            var container = encoder.singleValueContainer()
+            try container.encode([
+                "ok": AnyEncodable(ok),
+                "file": AnyEncodable(file),
+                "target": AnyEncodable(target),
+                "backupPath": AnyEncodable(backupPath),
+                "created": AnyEncodable(created),
+            ])
+        }
     }
 
     /// Create or overwrite a single text artifact. Port of `writeArtifact`.
@@ -231,6 +246,18 @@ public enum CcMutate {
         public var file: String
         public var target: String
         public var backupPath: String?
+
+        // `backupPath` must stay literal camelCase — see `WriteResult`'s
+        // `encode(to:)` above / `PodiumJSON.AnyEncodable`'s doc comment.
+        public func encode(to encoder: Encoder) throws {
+            var container = encoder.singleValueContainer()
+            try container.encode([
+                "ok": AnyEncodable(ok),
+                "file": AnyEncodable(file),
+                "target": AnyEncodable(target),
+                "backupPath": AnyEncodable(backupPath),
+            ])
+        }
     }
 
     /// Delete a single text artifact. Backup is mandatory and runs first;
