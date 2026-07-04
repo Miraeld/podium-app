@@ -22,7 +22,17 @@ import UserNotifications
 public final class NativeNotifier: NativeNotifying, @unchecked Sendable {
     public init() {}
 
+    // UNUserNotificationCenter.current() raises an Objective-C
+    // NSInternalInconsistencyException ("bundleProxyForCurrentProcess is
+    // nil") when the process is not a real .app bundle — Swift do/catch
+    // cannot intercept it, so a bare `podium-server` CLI would crash on the
+    // first notification (observed live at the Phase-3 gate). Only proceed
+    // when a bundle identity exists (PodiumApp.app has one; .build/debug
+    // executables do not).
+    private static let runningInAppBundle = Bundle.main.bundleIdentifier != nil
+
     public func show(title: String, body: String) async -> Bool {
+        guard Self.runningInAppBundle else { return false }
         let center = UNUserNotificationCenter.current()
         do {
             let granted = try await center.requestAuthorization(options: [.alert, .sound])
