@@ -307,4 +307,115 @@ final class ReadRoutersTests: XCTestCase {
         XCTAssertEqual(decoded.results.count, 0)
         XCTAssertEqual(decoded.total, 0)
     }
+
+    // MARK: - Bug 3: negative `limit` means unbounded, not zero rows
+
+    /// sessions.js line 44: `Math.min(parseInt(req.query.limit) || 50, 10000)`
+    /// has no lower clamp. A negative `limit` reaches SQLite's `LIMIT ?`
+    /// directly for the default "time" sort, where SQLite treats a negative
+    /// LIMIT as "no limit" — Swift's router-level `min: 0` clamp used to
+    /// force this to zero rows instead.
+    func testSessionsListWithNegativeLimitReturnsAllRowsNotZero() async throws {
+        for i in 0..<5 {
+            try store.insertSession(id: "s\(i)", name: nil, status: .active, cwd: nil, model: nil, metadata: nil)
+        }
+
+        try await bootServer()
+        let (data, response) = try await get("/api/sessions?limit=-1")
+        XCTAssertEqual(response.statusCode, 200)
+        let decoded = try PodiumJSON.decoder.decode(SessionsResponse.self, from: data)
+        XCTAssertGreaterThan(decoded.sessions.count, 0)
+        XCTAssertEqual(decoded.sessions.count, 5)
+    }
+
+    // MARK: - Bug 4: unknown ?status= returns [], not .waiting agents
+
+    /// agents.js line 23: `stmts.listAgentsByStatus.all(status, limit,
+    /// offset)` binds the raw literal string — a value with no matching rows
+    /// (typo'd/future status) returns `[]`. Swift used to silently
+    /// substitute `AgentStatus.waiting` via `?? .waiting`, wrongly returning
+    /// real waiting agents for a bogus filter value.
+    func testAgentsListWithUnknownStatusReturnsEmptyArrayNotWaitingAgents() async throws {
+        try store.insertSession(id: "s1", name: nil, status: .active, cwd: nil, model: nil, metadata: nil)
+        try store.insertAgent(id: "a1", sessionId: "s1", name: "Main", type: .main, subagentType: nil, status: .waiting, task: nil, parentAgentId: nil, metadata: nil)
+
+        try await bootServer()
+        let (data, response) = try await get("/api/agents?status=bogus")
+        XCTAssertEqual(response.statusCode, 200)
+        let decoded = try PodiumJSON.decoder.decode(AgentsResponse.self, from: data)
+        XCTAssertEqual(decoded.agents.count, 0)
+    }
+
+    // MARK: - Bug 5: empty string body fields preserve existing values
+
+    /// sessions.js lines 286–290: `name || null` collapses an empty string
+    /// to `null` before `stmts.updateSession.run(...)`, which then
+    /// `COALESCE`s into "leave column unchanged". Swift used to pass the
+    /// empty string straight through, blanking the name.
+    func testSessionPatchWithEmptyNameLeavesExistingNameUnchanged() async throws {
+        try store.insertSession(id: "s1", name: "Original Name", status: .active, cwd: nil, model: nil, metadata: nil)
+        try await bootServer()
+
+        let body = try JSONSerialization.data(withJSONObject: ["name": ""])
+        let (data, response) = try await send("PATCH", "/api/sessions/s1", body: body)
+        XCTAssertEqual(response.statusCode, 200)
+
+        struct PatchResponse: Decodable { let session: Session }
+        let decoded = try PodiumJSON.decoder.decode(PatchResponse.self, from: data)
+        XCTAssertEqual(decoded.session.name, "Original Name")
+    }
+
+    /// agents.js lines 77–83: same `name || null` collapse-to-null-first
+    /// pattern for the agents PATCH handler.
+    func testAgentPatchWithEmptyNameLeavesExistingNameUnchanged() async throws {
+        try store.insertSession(id: "s1", name: nil, status: .active, cwd: nil, model: nil, metadata: nil)
+        try store.insertAgent(id: "a1", sessionId: "s1", name: "Original Agent Name", type: .main, subagentType: nil, status: .working, task: nil, parentAgentId: nil, metadata: nil)
+        try await bootServer()
+
+        let body = try JSONSerialization.data(withJSONObject: ["name": ""])
+        let (data, response) = try await send("PATCH", "/api/agents/a1", body: body)
+        XCTAssertEqual(response.statusCode, 200)
+
+        struct PatchResponse: Decodable { let agent: Agent }
+        let decoded = try PodiumJSON.decoder.decode(PatchResponse.self, from: data)
+        XCTAssertEqual(decoded.agent.name, "Original Agent Name")
+    }
+
+    // MARK: - Bug 6: search cost uses its own startsWith-on-raw-order algorithm
+
+    /// search.js lines 89–104: `rules.find(r => model.toLowerCase()
+    /// .startsWith(r.model_pattern.replace(/%$/, "").toLowerCase()))` — a
+    /// `startsWith` match walking pricing rules in their raw/unsorted order
+    /// (here, `listPricing`'s `ORDER BY display_name ASC`), NOT
+    /// `CostCalculator`'s longest-pattern-first regex matcher. Seeds two
+    /// overlapping pricing rules ("claude-opus-4" ordered by display_name
+    /// BEFORE the longer/more-specific "claude-opus-4-5") so the two
+    /// algorithms disagree: `CostCalculator` would prefer the longer
+    /// pattern; search.js's raw-order `find` hits the shorter one first.
+    func testSearchCostUsesNodeStartsWithAlgorithmNotCostCalculatorOrdering() async throws {
+        try store.insertSession(id: "s1", name: "Search cost session", status: .active, cwd: nil, model: nil, metadata: nil)
+        try store.upsertTokenUsage(sessionId: "s1", model: "claude-opus-4-5-20250101", inputTokens: 1_000_000, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0)
+
+        // "AAA..." display_name sorts first alphabetically so listPricing()
+        // returns the short/catch-all pattern before the longer one —
+        // display_name is otherwise irrelevant to matching.
+        try store.upsertPricing(PricingPutRequest(
+            modelPattern: "claude-opus-4%", displayName: "AAA Catch-all Opus 4",
+            inputPerMtok: 1.0, outputPerMtok: 1.0, cacheReadPerMtok: 0, cacheWritePerMtok: 0
+        ))
+        try store.upsertPricing(PricingPutRequest(
+            modelPattern: "claude-opus-4-5%", displayName: "ZZZ Specific Opus 4.5",
+            inputPerMtok: 9.0, outputPerMtok: 9.0, cacheReadPerMtok: 0, cacheWritePerMtok: 0
+        ))
+
+        try await bootServer()
+        let (data, response) = try await get("/api/search?q=Search cost session")
+        XCTAssertEqual(response.statusCode, 200)
+        let decoded = try PodiumJSON.decoder.decode(SearchResponse.self, from: data)
+        let hit = try XCTUnwrap(decoded.results.first { $0.sessionId == "s1" })
+        // Raw-order startsWith hits "claude-opus-4%" first (rate 1.0/Mtok),
+        // NOT the longest-pattern-first "claude-opus-4-5%" (rate 9.0/Mtok)
+        // that CostCalculator would have chosen.
+        XCTAssertEqual(hit.cost ?? -1, 1.0, accuracy: 0.0001)
+    }
 }

@@ -179,4 +179,67 @@ final class WorkflowsRouterTests: XCTestCase {
         let summary = try PodiumJSON.decoder.decode(WorkflowSummary.self, from: data)
         XCTAssertEqual(summary.stats.totalSessions, 1)
     }
+
+    // MARK: - Bug 1 regression: top-level keys must stay literal camelCase
+
+    /// workflows.js lines 23–35: `res.json({ stats, orchestration, toolFlow,
+    /// effectiveness, patterns, modelDelegation, errorPropagation,
+    /// concurrency, complexity, compaction, cooccurrence })` — an
+    /// intentional camelCase exception to the rest of the snake_case API.
+    /// Decodes the raw wire body with `JSONSerialization` (NOT the
+    /// `WorkflowSummary` Codable type) so a regression to
+    /// `PodiumJSON.encoder`'s uniform `.convertToSnakeCase` (which would
+    /// silently rename these to `tool_flow`/`model_delegation`/
+    /// `error_propagation`) is actually caught, rather than round-tripped
+    /// through the same buggy encoder on both sides.
+    func testWorkflowsSummaryTopLevelKeysAreLiteralCamelCase() async throws {
+        try store.insertSession(id: "s1", name: nil, status: .active, cwd: nil, model: nil, metadata: nil)
+
+        try await bootServer()
+        let (data, response) = try await get("/api/workflows")
+        XCTAssertEqual(response.statusCode, 200)
+
+        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        for key in ["stats", "orchestration", "toolFlow", "effectiveness", "patterns", "modelDelegation", "errorPropagation", "concurrency", "complexity", "compaction", "cooccurrence"] {
+            XCTAssertNotNil(json[key], "expected literal camelCase top-level key \"\(key)\" in /api/workflows response")
+        }
+        // The buggy snake_case renderings must NOT be present.
+        for badKey in ["tool_flow", "model_delegation", "error_propagation"] {
+            XCTAssertNil(json[badKey], "wire response must not contain snake_case key \"\(badKey)\"")
+        }
+    }
+
+    /// workflows.js line 81: `res.json({ session, tree, toolTimeline,
+    /// swimLanes, events })`. Nested per-item fields inside `toolTimeline`/
+    /// `swimLanes` (e.g. `tool_name`, `started_at`, `parent_agent_id`) ARE
+    /// snake_case in Node (literal DB row field copies) and must stay that
+    /// way — only the two CONTAINER keys are camelCase.
+    func testWorkflowsSessionDetailTopLevelKeysAreLiteralCamelCase() async throws {
+        try store.insertSession(id: "s1", name: nil, status: .active, cwd: nil, model: nil, metadata: nil)
+        try store.insertAgent(id: "main", sessionId: "s1", name: "Main", type: .main, subagentType: nil, status: .working, task: nil, parentAgentId: nil, metadata: nil)
+        try store.insertEvent(sessionId: "s1", agentId: "main", eventType: "PostToolUse", toolName: "Bash", summary: nil, data: nil)
+
+        try await bootServer()
+        let (data, response) = try await get("/api/workflows/session/s1")
+        XCTAssertEqual(response.statusCode, 200)
+
+        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        for key in ["session", "tree", "toolTimeline", "swimLanes", "events"] {
+            XCTAssertNotNil(json[key], "expected literal camelCase top-level key \"\(key)\" in /api/workflows/session/:id response")
+        }
+        for badKey in ["tool_timeline", "swim_lanes"] {
+            XCTAssertNil(json[badKey], "wire response must not contain snake_case key \"\(badKey)\"")
+        }
+
+        // Nested per-item fields inside toolTimeline/swimLanes stay snake_case.
+        let toolTimeline = json["toolTimeline"] as! [[String: Any]]
+        XCTAssertEqual(toolTimeline.count, 1)
+        XCTAssertNotNil(toolTimeline[0]["tool_name"])
+        XCTAssertNil(toolTimeline[0]["toolName"])
+
+        let swimLanes = json["swimLanes"] as! [[String: Any]]
+        XCTAssertEqual(swimLanes.count, 1)
+        XCTAssertNotNil(swimLanes[0]["started_at"])
+        XCTAssertNil(swimLanes[0]["startedAt"])
+    }
 }
