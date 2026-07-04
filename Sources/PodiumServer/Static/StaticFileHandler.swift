@@ -11,7 +11,8 @@
 //                                         -> serve index.html with no-cache
 //
 // Resolution order for the dist directory (this task's spec, not Node's):
-//   env PODIUM_WEB_DIST > /usr/local/share/podium/web > <repo>/WebClient/dist
+//   env PODIUM_WEB_DIST > /usr/local/share/podium/web >
+//   <app bundle>/Contents/Resources/WebClient/dist > <repo>/WebClient/dist
 // exposed as a parameter with those defaults so callers/tests can override.
 
 import Foundation
@@ -36,7 +37,25 @@ public enum WebDistResolver {
         if FileManager.default.fileExists(atPath: installed) {
             return installed
         }
+        if let bundled = bundledResourcesDistPath(), FileManager.default.fileExists(atPath: bundled) {
+            return bundled
+        }
         return fallback
+    }
+
+    /// `Contents/Resources/WebClient/dist` inside the running `.app` bundle —
+    /// embedded by `scripts/package-macos.sh` (and by `run.sh` for dev
+    /// builds) so the in-process embedded server (see PodiumApp's
+    /// `EmbeddedServer`) can serve the dashboard without any `WebClient/dist`
+    /// present on disk outside the bundle. `Bundle.main.resourceURL` resolves
+    /// to `PodiumApp.app/Contents/Resources` for the packaged app; for the
+    /// non-bundled `podium-server`/`podium-hook` binaries it resolves to (or
+    /// near) the executable's own directory, where this path simply won't
+    /// exist — so this check is safe to run unconditionally on every
+    /// platform/product and never shadows the installed-Linux or dev paths.
+    private static func bundledResourcesDistPath() -> String? {
+        guard let resourceURL = Bundle.main.resourceURL else { return nil }
+        return resourceURL.appendingPathComponent("WebClient/dist", isDirectory: true).path
     }
 }
 
