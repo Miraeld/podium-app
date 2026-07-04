@@ -80,9 +80,17 @@ extension JSONValue {
             return .number(v)
         case let v as NSNumber:
             // CFBoolean bridges to NSNumber too; guard defensively.
+            #if canImport(Darwin)
             if CFGetTypeID(v) == CFBooleanGetTypeID() {
                 return .bool(v.boolValue)
             }
+            #else
+            // corelibs-foundation doesn't export CFGetTypeID; a Bool-backed
+            // NSNumber reports objCType "c" there — same defensive intent.
+            if String(cString: v.objCType) == "c" {
+                return .bool(v.boolValue)
+            }
+            #endif
             return .number(v.doubleValue)
         case let v as [Any?]:
             return .array(v.map { JSONValue.from($0) })

@@ -92,7 +92,10 @@ public enum ServerRuntimeInfo {
     public static var loadAverages: [Double] {
         var loads = [Double](repeating: 0, count: 3)
         let filled = loads.withUnsafeMutableBufferPointer { buffer -> Int32 in
-            getloadavg(buffer.baseAddress, 3)
+            // Glibc's getloadavg takes a non-optional pointer (Darwin's is
+            // optional) — unwrap so the same call compiles on both.
+            guard let base = buffer.baseAddress else { return -1 }
+            return getloadavg(base, 3)
         }
         return filled == 3 ? loads : [0, 0, 0]
     }
