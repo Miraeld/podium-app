@@ -40,7 +40,7 @@ extension URI {
     /// falls back on missing/unparseable input (mirrors `Number.isNaN`
     /// guards used throughout the Node routers).
     func queryInt(_ name: String, fallback: Int, min: Int = Int.min, max: Int = Int.max) -> Int {
-        guard let raw = queryValue(name), let parsed = Int(raw) else { return fallback }
+        guard let raw = queryValue(name), let parsed = jsParseInt(raw) else { return fallback }
         return Swift.min(Swift.max(parsed, min), max)
     }
 
@@ -49,7 +49,7 @@ extension URI {
     /// (e.g. `after`/`before` line numbers).
     func queryIntOrNil(_ name: String) -> Int? {
         guard let raw = queryValue(name) else { return nil }
-        return Int(raw)
+        return jsParseInt(raw)
     }
 
     /// Comma-separated list query param → non-empty trimmed components, or
@@ -76,4 +76,37 @@ extension URI {
         guard let date = PodiumDate.parse(raw) ?? ISO8601DateFormatter().date(from: raw) else { return nil }
         return PodiumDate.format(date)
     }
+}
+
+/// JS `parseInt(raw, 10)`-compatible leading-integer parser: strips leading
+/// whitespace, an optional `+`/`-` sign, then consumes a leading run of
+/// ASCII digits — trailing non-digit garbage is ignored (`"50abc"` → `50`),
+/// same as Node's `parseInt`. Returns `nil` if no digits are found at all
+/// (Node's `NaN` case), matching `Int(raw)`'s failure behavior for those
+/// call sites. Swift's `Int.init(_:)` is used throughout `RequestDecoding`
+/// instead, which is strict and rejects all of the above — this is the
+/// lenient replacement.
+func jsParseInt(_ raw: String) -> Int? {
+    var chars = Substring(raw)
+    // Strip leading whitespace (JS parseInt trims whitespace, matching
+    // `String.prototype.trim`'s whitespace set closely enough for query
+    // params — ASCII space/tab/newline cover realistic inputs).
+    while let first = chars.first, first.isWhitespace {
+        chars.removeFirst()
+    }
+
+    var sign = 1
+    if let first = chars.first, first == "+" || first == "-" {
+        if first == "-" { sign = -1 }
+        chars.removeFirst()
+    }
+
+    var digits = ""
+    while let first = chars.first, first.isASCII, first.isNumber {
+        digits.append(first)
+        chars.removeFirst()
+    }
+
+    guard !digits.isEmpty, let magnitude = Int(digits) else { return nil }
+    return sign * magnitude
 }
