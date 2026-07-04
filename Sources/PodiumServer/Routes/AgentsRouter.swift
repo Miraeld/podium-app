@@ -35,7 +35,16 @@ public enum AgentsRouterMount: RouterMount {
         if let sessionId {
             agents = try context.store.listAgentsBySession(sessionId: sessionId)
         } else if let status {
-            let parsedStatus = AgentStatus(rawValue: status) ?? .waiting
+            // agents.js line 23: `stmts.listAgentsByStatus.all(status, limit,
+            // offset)` binds the raw literal query string — an unrecognized
+            // value just matches no rows in SQL, returning `[]`. Swift's
+            // `listAgentsByStatus` takes a typed `AgentStatus`, so an
+            // unparseable status must short-circuit to empty here rather
+            // than silently substituting `.waiting` (which would wrongly
+            // return real waiting agents for a bogus/typo'd status).
+            guard let parsedStatus = AgentStatus(rawValue: status) else {
+                return try JSONResponse(AgentsResponse(agents: [], limit: limit, offset: offset))
+            }
             agents = try context.store.listAgentsByStatus(status: parsedStatus, limit: limit, offset: offset)
         } else {
             agents = try context.store.listAgents(limit: limit, offset: offset)
@@ -72,10 +81,18 @@ public enum AgentsRouterMount: RouterMount {
             return try JSONResponse(status: .ok, AgentCreateResponse(agent: existing, created: false))
         }
 
+        // agents.js lines 53–63: `subagent_type || null`, `task || null`,
+        // `parent_agent_id || null` — an empty string collapses to `null`
+        // BEFORE the DB call (JS `"" || null` → `null`), same as any other
+        // falsy value. Applied only to the plain string fields Node treats
+        // this way; `status`/`type` are Node's `field || "default"` case
+        // (handled separately by `?? .main`/`?? .waiting` below) and
+        // `metadata` is conditionally JSON-stringified, not `|| null`.
         try context.store.insertAgent(
             id: id, sessionId: body.sessionId, name: body.name, type: body.type ?? .main,
-            subagentType: body.subagentType, status: body.status ?? .waiting, task: body.task,
-            parentAgentId: body.parentAgentId, metadata: body.metadata
+            subagentType: collapseEmpty(body.subagentType), status: body.status ?? .waiting,
+            task: collapseEmpty(body.task), parentAgentId: collapseEmpty(body.parentAgentId),
+            metadata: body.metadata
         )
         guard let agent = try context.store.getAgent(id: id) else {
             return try JSONResponse(status: .internalServerError, CodedErrorResponse(code: "INTERNAL", message: "agent insert did not persist"))
@@ -103,9 +120,15 @@ public enum AgentsRouterMount: RouterMount {
         let body = try await mutableRequest.decodeJSONBody(as: AgentPatchRequest.self)
         let currentTool = body.currentTool ?? existing.currentTool
 
+        // agents.js lines 77–83: `name || null`, `task || null`, `ended_at
+        // || null` collapse an empty string to `null` before the DB call —
+        // since `updateAgent` COALESCEs a `nil` field into "leave column
+        // unchanged", sending `{"name":""}` must NOT blank the column.
+        // `current_tool` deliberately keeps its own "absent vs explicit null"
+        // handling above (not part of this collapse).
         try context.store.updateAgent(
-            id: id, name: body.name, status: body.status, task: body.task,
-            currentTool: currentTool, endedAt: body.endedAt, metadata: body.metadata
+            id: id, name: collapseEmpty(body.name), status: body.status, task: collapseEmpty(body.task),
+            currentTool: currentTool, endedAt: collapseEmpty(body.endedAt), metadata: body.metadata
         )
 
         guard let agent = try context.store.getAgent(id: id) else {

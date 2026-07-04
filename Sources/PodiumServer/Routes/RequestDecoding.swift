@@ -28,6 +28,21 @@ extension Request {
     }
 }
 
+/// JS `field || null` — collapses an empty string to `nil` before a value
+/// reaches a store method that uses SQL `COALESCE(?, existing)` for
+/// "unchanged" semantics. Node's create/patch handlers (agents.js,
+/// sessions.js) apply this to plain string body fields (name/task/cwd/
+/// model/subagent_type/parent_agent_id/ended_at) before calling into
+/// better-sqlite3 — without it, an explicit `""` in a PATCH body would
+/// overwrite an existing column instead of leaving it untouched. Only apply
+/// to fields Node actually treats this way; `status`/`type` use a
+/// `field || "default"` pattern (handled separately) and `metadata` is
+/// conditionally JSON-stringified.
+func collapseEmpty(_ value: String?) -> String? {
+    guard let value, !value.isEmpty else { return nil }
+    return value
+}
+
 extension URI {
     /// Raw string query parameter lookup (percent-decoded by `URI` itself).
     func queryValue(_ name: String) -> String? {

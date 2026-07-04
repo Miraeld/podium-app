@@ -279,6 +279,8 @@ public final class IngestEngine: @unchecked Sendable {
         // Node applies it: after the transcript scan, before the insert).
         alerts.clearStuckAlert(sessionId)
 
+        try testFailurePoint?()
+
         // ── touchSession + insertEvent + final broadcast (hooks.js 990–1011) ─
         try store.touchSession(id: sessionId)
 

@@ -361,8 +361,12 @@ public enum SessionsRouterMount: RouterMount {
             return try JSONResponse(status: .ok, SessionCreateResponse(session: existing, created: false))
         }
 
+        // sessions.js lines 267–272: `name || null`, `cwd || null`, `model
+        // || null` — an empty string collapses to `null` before the insert
+        // (`metadata` is conditionally JSON-stringified, not part of this).
         try context.store.insertSession(
-            id: id, name: body.name, status: .active, cwd: body.cwd, model: body.model, metadata: body.metadata
+            id: id, name: collapseEmpty(body.name), status: .active, cwd: collapseEmpty(body.cwd),
+            model: collapseEmpty(body.model), metadata: body.metadata
         )
         guard let session = try context.store.getSession(id: id) else {
             return try JSONResponse(status: .internalServerError, CodedErrorResponse(code: "INTERNAL", message: "session insert did not persist"))
