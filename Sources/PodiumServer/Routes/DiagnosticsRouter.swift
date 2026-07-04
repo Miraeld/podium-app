@@ -25,7 +25,14 @@ public enum DiagnosticsRouterMount: RouterMount {
     private static func get(_ req: Request, _ ctx: ServerRequestContext, context: ServerContext) async throws -> JSONResponse {
         let recorder = DiagnosticsRecorder.shared
         let health = await recorder.hookHealth()
-        let logEntries = await recorder.recentLog(limit: req.uri.queryInt("log_limit", fallback: 100))
+        // Clamp like every sibling router (see SearchRouter.swift:31-32,
+        // EventsRouter.swift:31-32): an unbounded `log_limit` reaches
+        // `LogRingBuffer.snapshot(limit:)` → `Sequence.prefix(_:)`, which
+        // traps fatally on a negative count — one GET with `log_limit=-1`
+        // would kill the whole process. Upper-bound at the ring buffer's own
+        // capacity since asking for more than it can ever hold is meaningless.
+        let logLimit = req.uri.queryInt("log_limit", fallback: 100, min: 0, max: LogRingBuffer.defaultCapacity)
+        let logEntries = await recorder.recentLog(limit: logLimit)
 
         let server = DiagnosticsResponse.ServerInfo(
             uptimeSeconds: ServerRuntimeInfo.uptimeSeconds,

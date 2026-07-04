@@ -62,9 +62,16 @@ public actor LogRingBuffer {
 
     /// Most recent entries first (newest-first — the natural order for a
     /// "recent activity" list), optionally capped to `limit`.
+    ///
+    /// Defensive guard: `Sequence.prefix(_:)` traps fatally on a negative
+    /// count. Callers are expected to clamp their own input (see
+    /// `DiagnosticsRouter`), but this is a public actor method reachable
+    /// from any future call site, so a non-positive `limit` degrades to "no
+    /// entries" here too rather than crashing the process.
     public func snapshot(limit: Int? = nil) -> [LogEntry] {
         let newestFirst = entries.reversed()
         guard let limit else { return Array(newestFirst) }
+        guard limit > 0 else { return [] }
         return Array(newestFirst.prefix(limit))
     }
 
