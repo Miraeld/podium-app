@@ -277,7 +277,7 @@ struct WorkflowsView: View {
                 Chart(Array(sorted)) { stat in
                     BarMark(
                         x: .value("Count", stat.count),
-                        y: .value("Type", stat.subagentType ?? "orchestrator")
+                        y: .value("Type", stat.subagentType)
                     )
                     .foregroundStyle(Theme.chartGradient)
                     .annotation(position: .trailing) {
@@ -359,16 +359,23 @@ struct WorkflowsView: View {
 
     // MARK: - Workflow Patterns
 
-    @ViewBuilder
-    var patternSection: some View {
+    /// Prefer the server's real cross-session aggregates (GET /api/workflows
+    /// — errorPropagation, compaction) over client-side heuristics; fall back
+    /// to a client-computed estimate only while the summary hasn't loaded yet
+    /// (or the request failed).
+    private var workflowPatterns: [(icon: String, title: String, metric: String, description: String, color: Color)] {
         let sessions = filteredSessions
         let total = sessions.count
 
         let deepOrchestration = sessions.filter { ($0.agentCount ?? 0) > 5 }.count
         let deepPct = total > 0 ? Int(Double(deepOrchestration) / Double(total) * 100) : 0
 
-        let errorSessions = sessions.filter { $0.status == .error }.count
-        let errorPct = total > 0 ? Int(Double(errorSessions) / Double(total) * 100) : 0
+        let errorSessions = summary?.errorPropagation.sessionsWithErrors ?? sessions.filter { $0.status == .error }.count
+        let errorTotal = summary?.errorPropagation.totalSessions ?? total
+        let errorPct: Int = {
+            if let rate = summary?.errorPropagation.errorRate { return Int(rate * 100) }
+            return errorTotal > 0 ? Int(Double(errorSessions) / Double(errorTotal) * 100) : 0
+        }()
 
         let longRunning: Int = {
             sessions.filter { s in
@@ -378,13 +385,16 @@ struct WorkflowsView: View {
         }()
 
         let bashHeavy: Bool = {
-            guard let tools = state.analytics?.toolUsage, !tools.isEmpty else { return false }
+            guard let tools = summary?.toolFlow.toolCounts, !tools.isEmpty else { return false }
             let totalCalls = tools.reduce(0) { $0 + $1.count }
             let bashCalls = tools.first(where: { $0.toolName.lowercased() == "bash" })?.count ?? 0
             return totalCalls > 0 && Double(bashCalls) / Double(totalCalls) > 0.5
         }()
 
-        let patterns: [(icon: String, title: String, metric: String, description: String, color: Color)] = [
+        let compactionsTotal = summary?.compaction.totalCompactions ?? 0
+        let compactionSessions = summary?.compaction.sessionsWithCompactions ?? 0
+
+        var patterns: [(icon: String, title: String, metric: String, description: String, color: Color)] = [
             (
                 icon: "arrow.triangle.branch",
                 title: "Deep Orchestration",
@@ -417,6 +427,22 @@ struct WorkflowsView: View {
             )
         ]
 
+        if compactionsTotal > 0 {
+            patterns.append((
+                icon: "arrow.triangle.2.circlepath",
+                title: "Context Compaction",
+                metric: "\(compactionsTotal) in \(compactionSessions) session\(compactionSessions == 1 ? "" : "s")",
+                description: "Sessions that hit a context-window compaction, recovering \(summary?.compaction.tokensRecovered ?? 0) tokens.",
+                color: Color(red: 0.4, green: 0.6, blue: 0.95)
+            ))
+        }
+
+        return patterns
+    }
+
+    @ViewBuilder
+    var patternSection: some View {
+        let patterns = workflowPatterns
         VStack(alignment: .leading, spacing: 12) {
             SectionHeader(title: "Workflow Patterns", trailing: "\(patterns.count) insights")
 
