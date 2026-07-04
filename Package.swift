@@ -17,11 +17,7 @@ let package = Package(
         .package(url: "https://github.com/hummingbird-project/hummingbird.git", from: "2.0.0"),
         .package(url: "https://github.com/hummingbird-project/hummingbird-websocket.git", from: "2.0.0"),
         .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.3.0"),
-        .package(url: "https://github.com/apple/swift-crypto.git", from: "3.0.0"),
-        // P4.3: session export/import bundles are zip archives (session JSON
-        // + events + transcript files). ZIPFoundation is pure Swift +
-        // Foundation — no Darwin-only APIs — so it builds on Linux too.
-        .package(url: "https://github.com/weichsel/ZIPFoundation.git", from: "0.9.19")
+        .package(url: "https://github.com/apple/swift-crypto.git", from: "3.0.0")
     ],
     targets: [
         // System library wrapping the platform sqlite3 (apt libsqlite3-dev on
@@ -40,10 +36,7 @@ let package = Package(
         // hook ingestion, transcripts, discovery. No UI, no Apple-only APIs.
         .target(
             name: "PodiumCore",
-            dependencies: [
-                "CSQLite",
-                .product(name: "ZIPFoundation", package: "ZIPFoundation")
-            ],
+            dependencies: ["CSQLite"],
             path: "Sources/PodiumCore"
         ),
 
