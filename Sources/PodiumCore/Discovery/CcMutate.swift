@@ -294,6 +294,21 @@ public enum CcMutate {
         public var isDir: Bool
         public var mtime: Double
         public var size: Int?
+
+        // backupPath/isDir must stay literal camelCase (client's
+        // `CcBackup`) — see `PodiumJSON.AnyEncodable`'s doc comment.
+        public func encode(to encoder: Encoder) throws {
+            var container = encoder.singleValueContainer()
+            try container.encode([
+                "scope": AnyEncodable(scope),
+                "type": AnyEncodable(type),
+                "name": AnyEncodable(name),
+                "backupPath": AnyEncodable(backupPath),
+                "isDir": AnyEncodable(isDir),
+                "mtime": AnyEncodable(mtime),
+                "size": AnyEncodable(size),
+            ])
+        }
     }
 
     /// List backups for either all types or a specific (scope, type)
