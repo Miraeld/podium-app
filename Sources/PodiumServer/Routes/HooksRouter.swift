@@ -3,10 +3,8 @@
 // around `IngestEngine.process`. Parses `{hook_type, data}` leniently, runs
 // the engine, fans out its broadcasts over the WS hub, and responds fast.
 //
-// NOT YET MOUNTED: this RouterMount must be added to the `mounts:` array
-// PodiumServerCLI's `main.swift` passes to `PodiumServerLifecycle.run` (that
-// file is owned by another dev in this checkout per the task's concurrency
-// fence — flagged in the task report, not wired here).
+// Mounted in both PodiumServerCLI's `main.swift` and PodiumApp's
+// `EmbeddedServer.swift` (`HooksRouterMount` in each `mounts:` array).
 //
 // P3.1: `IngestEngine` is now wired to the real `TranscriptCacheTokenSource`
 // (Sources/PodiumCore/Transcripts/) instead of the P2.3-era
