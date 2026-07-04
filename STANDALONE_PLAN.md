@@ -258,6 +258,7 @@ Legend: ⬜ todo · 🟦 in progress · ✅ done · ⚠️ done with caveats (se
 | **P5.5** | First-run onboarding tour (macOS app; web dashboard gets a lighter variant) | P5.4 | 🟦@F |
 | **P6.1** | Packaging: macOS .app/DMG script, Linux static-ish binary + systemd unit + install.sh | P5.1 | 🟦@F |
 | **P6.2** | E2E verification: React client vs Swift server contract test; docs (README, MIGRATION) | all | ⬜ |
+| **F1** | v1 polish: reimport/import perf on real-size corpora (backfillCompactions re-scan, snapshotTranscript copies) | P3.2 | 🟦@F |
 
 **PO decisions (Fable 5, delegated by Gaël 2026-07-04 ~02:00, "full power"):**
 1. After the Phase-3 gate, **P5.1 jumps the queue** (app embeds server = the
