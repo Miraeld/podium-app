@@ -69,7 +69,21 @@ final class AppState {
 
     // MARK: Connect
 
+    /// P5.1: resolves embedded-vs-external server mode (see
+    /// `EmbeddedServer.resolveAndStart`) and points `host`/`port` at whichever
+    /// mode won *before* building the API client / connecting the WebSocket,
+    /// so the rest of the app (which only ever reads `host`/`port`) needs
+    /// zero changes regardless of which mode is active.
     func start() async {
+        let resolved = await EmbeddedServer.shared.resolveAndStart(configuredHost: host, configuredPort: port)
+        switch resolved {
+        case .embedded(let boundPort), .externalClient(let boundPort):
+            host = "localhost"
+            port = boundPort
+        case .disabledByUser(let configuredPort):
+            port = configuredPort
+        }
+
         api = PodiumAPI(host: host, port: port)
         await refresh()
         await loadActiveAgents()
