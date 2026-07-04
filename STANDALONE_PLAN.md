@@ -255,8 +255,8 @@ Legend: ⬜ todo · 🟦 in progress · ✅ done · ⚠️ done with caveats (se
 | **P5.2** | macOS app: brand re-theme (black/gold), fix refresh-spinner annoyance | P0.1 | ✅ |
 | **P5.3** | macOS app: transcript viewer + search + session actions | P3.1 | ✅ |
 | **P5.4** | macOS app: workflows graphs, analytics upgrade, run page, cc-config, import/export UI | P3.4, P4.1, P4.3 | ✅ |
-| **P5.5** | First-run onboarding tour (macOS app; web dashboard gets a lighter variant) | P5.4 | 🟦 |
-| **P6.1** | Packaging: macOS .app/DMG script, Linux static-ish binary + systemd unit + install.sh | P5.1 | 🟦 |
+| **P5.5** | First-run onboarding tour (macOS app; web dashboard gets a lighter variant) | P5.4 | 🟦@F |
+| **P6.1** | Packaging: macOS .app/DMG script, Linux static-ish binary + systemd unit + install.sh | P5.1 | 🟦@F |
 | **P6.2** | E2E verification: React client vs Swift server contract test; docs (README, MIGRATION) | all | ⬜ |
 
 **PO decisions (Fable 5, delegated by Gaël 2026-07-04 ~02:00, "full power"):**

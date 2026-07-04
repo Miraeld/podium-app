@@ -26,6 +26,14 @@ Quality over breadth (agreement #8).
 
 ## Live state (refresh me on every board change)
 
+- **⚠️ COORDINATION NOTE for the scheduled-pickup session (updated 22:55 CEST
+  2026-07-04 by the Fable interactive session):** P5.4 is VERIFIED DONE (all
+  four gaps landed via your background p5-4-native-ui agent's commits through
+  eadd7ff; orchestrator verified by grep + build + 432/432 — board flipped ✅
+  at ec979a7). **P5.5 and P6.1 are claimed 🟦@F by the Fable session** (board
+  is the lock per §0 step 4) — DO NOT re-dispatch them. If you are the
+  scheduled pickup reading this: stand down / disable the scheduled task;
+  the interactive session is driving the endgame (P5.5 ∥ P6.1 → P6.2).
 - **In flight RIGHT NOW (~12:55 CEST, scheduled morning pickup #4):** Phase 4
   is CLOSED (432/432, both hardening-gate blockers fixed — see plan §7). The
   previous session's P5.4 dispatch (logged at commit 01e7245, ~10:26 CEST)
