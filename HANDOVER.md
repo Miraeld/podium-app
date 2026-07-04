@@ -27,19 +27,20 @@ the board + run log + this file as you go. Quality over breadth (agreement #8).
 
 ## Live state (refresh me on every board change)
 
-- **In flight RIGHT NOW (2 parallel agents, dispatched ~07:32 CEST):**
-  `p4-3-ccconfig` (P4.3 — fenced to new files under PodiumCore/Discovery +
-  new PodiumServer/Routes/{CcConfigRouter,UpdatesRouter,ExportRouter}.swift),
-  `p4-4-diagnostics` (P4.4 — no §6 prompt existed, orchestrator wrote the
-  spec inline referencing P3.3's ServerRuntimeInfo.swift; fenced to new files
-  under PodiumCore/Diagnostics + new PodiumServer/Routes/DiagnosticsRouter.swift
-  + new Sources/PodiumApp/DiagnosticsView.swift). **Neither agent touches
-  PodiumServerCLI/main.swift's `mounts:` array or EmbeddedServer.swift's
-  `makeServerMounts()`** — both will report back the exact `RouterMount.Type`
-  name(s) to add; the next orchestrator turn must hand-merge both sets into
-  BOTH files (they're duplicated, not shared — see the P5.1 run-log entry).
-  If picking this up cold and these aren't done: check `git log`, ping the
-  agents via SendMessage before re-dispatching (see environment quirk below).
+- **In flight RIGHT NOW (2 parallel agents, RE-dispatched ~09:45 CEST by
+  Fable session after session-3's agents died unreachable):**
+  `p4-3-ccconfig-r2` (P4.3, resuming: Discovery/{CcConfig,CcMutate,CcWatcher,
+  UpdateCheck} + CcConfigRouter/UpdatesRouter + watcher/update services +
+  ZIPFoundation dep all committed by predecessor; missing SessionExportBundle
+  model, ExportRouter, tests; predecessor's broken half-file parked at
+  .agent-stash/PodiumStore+SessionBundle.swift for it to restore),
+  `p4-4-diagnostics-r2` (P4.4, resuming: LogRingBuffer/DiagnosticsResponse/
+  DiagnosticsRouter/DiagnosticsView + HooksRouter recording committed; its
+  DiagnosticsTests:114 reset test fails — handed to it to resolve; checkpoint
+  1353377). **Neither agent touches PodiumServerCLI/main.swift's `mounts:` or
+  EmbeddedServer.swift's `makeServerMounts()`** — both report RouterMount
+  names; orchestrator hand-merges into BOTH files (duplicated, not shared).
+  Baseline at re-dispatch: 393/394 (the 1 failure is P4.4's own WIP test).
 - **Phase-3 hardening gate + all 8 fixes: ✅ done.** Gate found 8 confirmed,
   non-blocking bugs (see STANDALONE_PLAN.md §7 "Phase-3 hardening gate" +
   "Phase-3 hardening fixes" entries for full detail); two parallel fix-it
