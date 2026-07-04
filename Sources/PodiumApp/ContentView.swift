@@ -51,6 +51,9 @@ struct ContentView: View {
         }
         .navigationSplitViewStyle(.balanced)
         .tint(Theme.accent)
+        .overlayPreferenceValue(OnboardingAnchorKey.self) { anchors in
+            OnboardingOverlayView(anchors: anchors)
+        }
         .onChange(of: columnVisibility) { _, v in
             UserDefaults.standard.set(v != .detailOnly, forKey: "sidebar_visible")
         }
@@ -59,6 +62,12 @@ struct ContentView: View {
                 selection = d
                 state.navigationRequest = nil
             }
+        }
+        // P5.5: fires once the first real load (server up, hooks installed)
+        // has settled — see AppState.isInitialLoad's own doc comment for why
+        // this flips false exactly once per launch, not on every ⌘R.
+        .onChange(of: state.isInitialLoad) { _, stillLoading in
+            if !stillLoading { OnboardingCoordinator.shared.presentIfNeeded() }
         }
         .background(
             // Layer order (back → front):
@@ -136,18 +145,21 @@ struct Sidebar: View {
                     value: .dashboard,
                     badge: state.stats.map { "\($0.activeSessions) active" }
                 )
+                .onboardingAnchor(.dashboard)
                 SidebarRow(
                     icon: "list.bullet.rectangle.portrait.fill",
                     label: "Sessions",
                     value: .sessions,
                     badge: state.sessionTotal > 0 ? "\(state.sessionTotal)" : nil
                 )
+                .onboardingAnchor(.sessions)
                 SidebarRow(
                     icon: "chart.bar.fill",
                     label: "Analytics",
                     value: .analytics
                 )
                 SidebarRow(icon: "waveform", label: "Activity", value: .activityFeed)
+                    .onboardingAnchor(.activityFeed)
             } header: {
                 Text("Observe")
                     .font(.caption.weight(.semibold))

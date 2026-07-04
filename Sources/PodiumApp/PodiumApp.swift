@@ -41,6 +41,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 struct PodiumApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var delegate
     @State private var appState = AppState()
+    // P5.5: forces `OnboardingCoordinator.shared` to be constructed here,
+    // before the `.task { await appState.start() }` below runs — its
+    // `init()` snapshots whether the legacy-import marker file already
+    // exists, and that snapshot is only meaningful if it happens before
+    // `EmbeddedServer` gets a chance to create it during this same launch.
+    @State private var onboarding = OnboardingCoordinator.shared
     @AppStorage("appearance_mode") private var appearanceMode = AppearanceMode.system.rawValue
 
     init() {
@@ -81,6 +87,11 @@ struct PodiumApp: App {
         }
         .defaultSize(width: 1360, height: 860)
         .windowResizability(.contentMinSize)
+        .commands {
+            CommandGroup(after: .help) {
+                Button("Show Tour") { onboarding.showTour() }
+            }
+        }
 
         Settings {
             SettingsView()
