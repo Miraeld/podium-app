@@ -58,8 +58,11 @@ public actor DiagnosticsRecorder {
 
     /// Records one successfully-processed hook event. Called from
     /// `HooksRouterMount` after `IngestEngine.process` returns with at
-    /// least one broadcast.
-    public func recordHookEvent(hookType: String, sessionId: String, latencySeconds: Double) {
+    /// least one broadcast. Awaits the log write directly (no detached
+    /// `Task`) so callers observe a fully-updated recorder — including the
+    /// ring buffer — as soon as this returns; a fire-and-forget write here
+    /// would race with `resetForTesting()`'s `log.clear()`.
+    public func recordHookEvent(hookType: String, sessionId: String, latencySeconds: Double) async {
         let now = PodiumDate.now()
         lastEventAt = now
         lastLatencySeconds = latencySeconds
@@ -72,7 +75,7 @@ public actor DiagnosticsRecorder {
         averageLatencySeconds = recentLatencies.reduce(0, +) / Double(recentLatencies.count)
 
         let ms = String(format: "%.2fms", latencySeconds * 1000)
-        Task { await log.append(level: "info", message: "hook event processed: \(hookType) (session \(sessionId), \(ms))") }
+        await log.append(level: "info", message: "hook event processed: \(hookType) (session \(sessionId), \(ms))")
     }
 
     /// Records a hook payload the router rejected before it ever reached
@@ -80,9 +83,9 @@ public actor DiagnosticsRecorder {
     /// engine no-op'd on a missing `session_id`). Kept distinct from
     /// `recordHookEvent` so a client's malformed request doesn't masquerade
     /// as healthy ingestion.
-    public func recordHookFailure(reason: String) {
+    public func recordHookFailure(reason: String) async {
         totalEventsFailed += 1
-        Task { await log.append(level: "error", message: "hook event rejected: \(reason)") }
+        await log.append(level: "error", message: "hook event rejected: \(reason)")
     }
 
     /// Snapshot used by `DiagnosticsRouter` to build the HTTP response.
