@@ -162,4 +162,42 @@ final class DiagnosticsRouterTests: XCTestCase {
         XCTAssertEqual(decoded.log.count, 2)
         XCTAssertEqual(decoded.hooks.totalEventsProcessed, 5)
     }
+
+    // MARK: - Regression: negative/zero/huge log_limit must never trap
+    // (P4 hardening-gate BLOCKER 1 — `Sequence.prefix(_:)` traps fatally on
+    // a negative count; `log_limit=-1` used to kill the whole process).
+
+    func testNegativeLogLimitReturns200NotACrash() async throws {
+        try await bootServer()
+        _ = try await postHook(hookType: "PreToolUse", data: ["session_id": "sess-neg", "tool_name": "Bash"])
+
+        let (data, response) = try await get("/api/diagnostics?log_limit=-1")
+        XCTAssertEqual(response.statusCode, 200)
+        let decoded = try PodiumJSON.decoder.decode(DiagnosticsResponse.self, from: data)
+        XCTAssertTrue(decoded.log.isEmpty)
+    }
+
+    func testZeroLogLimitReturns200WithEmptyLog() async throws {
+        try await bootServer()
+        _ = try await postHook(hookType: "PreToolUse", data: ["session_id": "sess-zero", "tool_name": "Bash"])
+
+        let (data, response) = try await get("/api/diagnostics?log_limit=0")
+        XCTAssertEqual(response.statusCode, 200)
+        let decoded = try PodiumJSON.decoder.decode(DiagnosticsResponse.self, from: data)
+        XCTAssertTrue(decoded.log.isEmpty)
+    }
+
+    func testHugeLogLimitReturns200CappedAtRingBufferCapacity() async throws {
+        try await bootServer()
+        for i in 0..<5 {
+            _ = try await postHook(hookType: "PreToolUse", data: ["session_id": "sess-huge-\(i)", "tool_name": "Bash"])
+        }
+
+        let (data, response) = try await get("/api/diagnostics?log_limit=999999999")
+        XCTAssertEqual(response.statusCode, 200)
+        let decoded = try PodiumJSON.decoder.decode(DiagnosticsResponse.self, from: data)
+        // Only 5 log lines exist; the huge limit is clamped, not honored
+        // literally, but the important assertion is "didn't crash".
+        XCTAssertLessThanOrEqual(decoded.log.count, LogRingBuffer.defaultCapacity)
+    }
 }

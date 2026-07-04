@@ -29,6 +29,24 @@ final class DiagnosticsTests: XCTestCase {
         XCTAssertEqual(limited.map(\.message), ["entry 9", "entry 8"])
     }
 
+    // Regression for P4 hardening-gate BLOCKER 1: `Sequence.prefix(_:)`
+    // traps fatally on a negative count. `snapshot(limit:)` must degrade to
+    // "no entries" for a non-positive limit instead of crashing — this is
+    // the defensive guard behind `DiagnosticsRouter`'s own query-param clamp.
+    func testRingBufferSnapshotWithNegativeLimitReturnsEmptyNotATrap() async {
+        let buffer = LogRingBuffer(capacity: 10)
+        await buffer.append(level: "info", message: "entry")
+        let negative = await buffer.snapshot(limit: -1)
+        XCTAssertTrue(negative.isEmpty)
+    }
+
+    func testRingBufferSnapshotWithZeroLimitReturnsEmpty() async {
+        let buffer = LogRingBuffer(capacity: 10)
+        await buffer.append(level: "info", message: "entry")
+        let zero = await buffer.snapshot(limit: 0)
+        XCTAssertTrue(zero.isEmpty)
+    }
+
     func testRingBufferClearEmptiesAllEntries() async {
         let buffer = LogRingBuffer(capacity: 5)
         await buffer.append(level: "info", message: "hello")
