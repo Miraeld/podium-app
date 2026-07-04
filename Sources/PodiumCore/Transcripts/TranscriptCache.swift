@@ -246,14 +246,14 @@ public final class TranscriptCache: @unchecked Sendable {
             var compaction = state.compaction ?? .init(count: 0, entries: [])
             compaction.count += 1
             compaction.entries.append(TranscriptCompactionEntry(uuid: entry.nonEmptyString("uuid"), timestamp: entry.string("timestamp")))
-            trimIfNeeded(&compaction.entries)
+            trimAtWatermarkIfNeeded(&compaction.entries)
             state.compaction = compaction
         }
 
         if entry.string("type") == "system", entry.string("subtype") == "turn_duration",
            let durationMs = entry["durationMs"]?.asInt, durationMs != 0 {
             state.turnDurations.append(TranscriptTurnDuration(timestamp: coerceTimestamp(entry["timestamp"]), durationMs: durationMs))
-            trimIfNeeded(&state.turnDurations)
+            trimAtWatermarkIfNeeded(&state.turnDurations)
         }
 
         // `const msg = entry.message || entry;`
@@ -266,7 +266,7 @@ public final class TranscriptCache: @unchecked Sendable {
                 type: type, message: message, timestamp: entry.string("timestamp"),
                 raw: .object(["type": .string(type), "message": .string(message), "timestamp": entry["timestamp"] ?? .null])
             ))
-            trimIfNeeded(&state.errors)
+            trimAtWatermarkIfNeeded(&state.errors)
             return
         }
 
@@ -279,7 +279,7 @@ public final class TranscriptCache: @unchecked Sendable {
                 type: type, message: errText, timestamp: entry.string("timestamp"),
                 raw: .object(["type": .string(type), "message": .string(errText), "timestamp": entry["timestamp"] ?? .null])
             ))
-            trimIfNeeded(&state.errors)
+            trimAtWatermarkIfNeeded(&state.errors)
             return
         }
 

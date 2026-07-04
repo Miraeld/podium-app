@@ -73,20 +73,31 @@ public enum WorkflowsRouterMount: RouterMount {
         )
         let cooccurrence = WorkflowAggregator.cooccurrence(try store.agentCooccurrencePairs(filter: filter))
 
-        let response = WorkflowSummary(
-            stats: stats,
-            orchestration: orchestration,
-            toolFlow: toolFlow,
-            effectiveness: effectiveness,
-            patterns: patterns,
-            modelDelegation: modelDelegation,
-            errorPropagation: errorPropagation,
-            concurrency: concurrency,
-            complexity: complexity,
-            compaction: compaction,
-            cooccurrence: cooccurrence
-        )
-        return try JSONResponse(response)
+        // workflows.js line 23–35: `res.json({ stats, orchestration, toolFlow,
+        // effectiveness, patterns, modelDelegation, errorPropagation,
+        // concurrency, complexity, compaction, cooccurrence })` — literal
+        // camelCase top-level keys (an intentional exception to the rest of
+        // the snake_case API; the React client's `types.ts` reads these
+        // exact names). `JSONResponse(fields:)` encodes each piece
+        // independently via `PodiumJSON.encoder` (so nested snake_case
+        // fields stay correct) and splices them under literal keys, instead
+        // of running the whole `WorkflowSummary` struct through the encoder's
+        // uniform `.convertToSnakeCase`, which would wrongly transform these
+        // container keys too (see JSONResponse.swift for why CodingKeys alone
+        // can't fix this).
+        return try JSONResponse(fields: [
+            ("stats", stats),
+            ("orchestration", orchestration),
+            ("toolFlow", toolFlow),
+            ("effectiveness", effectiveness),
+            ("patterns", patterns),
+            ("modelDelegation", modelDelegation),
+            ("errorPropagation", errorPropagation),
+            ("concurrency", concurrency),
+            ("complexity", complexity),
+            ("compaction", compaction),
+            ("cooccurrence", cooccurrence),
+        ])
     }
 
     /// workflows.js lines 299–363: `types` base aggregate plus, per type, two
@@ -122,13 +133,21 @@ public enum WorkflowsRouterMount: RouterMount {
         let agents = try store.listAgentsBySession(sessionId: id)
         let events = try store.listEventsBySessionAscending(sessionId: id)
 
-        let detail = WorkflowDetail(
-            session: session,
-            tree: WorkflowAggregator.buildAgentTree(agents),
-            toolTimeline: WorkflowAggregator.toolTimeline(events: events),
-            swimLanes: WorkflowAggregator.swimLanes(agents: agents),
-            events: Array(events.prefix(500))
-        )
-        return try JSONResponse(detail)
+        // workflows.js line 81: `res.json({ session, tree, toolTimeline,
+        // swimLanes, events })` — same camelCase-top-level-keys exception as
+        // GET / above (`toolTimeline`/`swimLanes` are camelCase containers;
+        // their nested per-item fields like `tool_name`/`started_at` stay
+        // snake_case via the normal encoder and are untouched here).
+        let tree = WorkflowAggregator.buildAgentTree(agents)
+        let toolTimeline = WorkflowAggregator.toolTimeline(events: events)
+        let swimLanes = WorkflowAggregator.swimLanes(agents: agents)
+        let trimmedEvents = Array(events.prefix(500))
+        return try JSONResponse(fields: [
+            ("session", session),
+            ("tree", tree),
+            ("toolTimeline", toolTimeline),
+            ("swimLanes", swimLanes),
+            ("events", trimmedEvents),
+        ])
     }
 }

@@ -38,6 +38,40 @@ public struct JSONResponse: ResponseGenerator {
         self.extraHeaders = extraHeaders
     }
 
+    /// Builds a JSON object from an ordered list of literal top-level keys
+    /// paired with independently-encoded fragments, bypassing
+    /// `PodiumJSON.encoder`'s `.convertToSnakeCase` for the CONTAINER keys
+    /// while still applying it (correctly) to each fragment's own nested
+    /// fields.
+    ///
+    /// Needed because `JSONEncoder.KeyEncodingStrategy.convertToSnakeCase`
+    /// transforms every resolved key string uniformly with no way to exempt
+    /// individual keys via `CodingKeys` — some Node routes (workflows.js)
+    /// hand-build `res.json({...})` object literals with camelCase top-level
+    /// keys (an intentional exception to the rest of the snake_case API) but
+    /// still copy snake_case DB row fields verbatim into nested objects. See
+    /// `WorkflowsRouter.swift` for the two callers.
+    public init(
+        status: HTTPResponse.Status = .ok,
+        fields: [(String, any Encodable)],
+        extraHeaders: [HTTPField.Name: String] = [:]
+    ) throws {
+        self.status = status
+        var buffer = Data()
+        buffer.append(0x7B) // "{"
+        for (index, field) in fields.enumerated() {
+            let (key, value) = field
+            if index > 0 { buffer.append(0x2C) } // ","
+            let keyData = try PodiumJSON.encoder.encode(key)
+            buffer.append(keyData)
+            buffer.append(0x3A) // ":"
+            buffer.append(try PodiumJSON.encoder.encode(value))
+        }
+        buffer.append(0x7D) // "}"
+        self.body = buffer
+        self.extraHeaders = extraHeaders
+    }
+
     public func response(from request: Request, context: some RequestContext) throws -> Response {
         var headers: HTTPFields = [.contentType: "application/json; charset=utf-8"]
         for (name, value) in extraHeaders {
