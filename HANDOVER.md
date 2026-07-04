@@ -34,12 +34,13 @@ the board + run log + this file as you go. Quality over breadth (agreement #8).
   ZIPFoundation dep all committed by predecessor; missing SessionExportBundle
   model, ExportRouter, tests; predecessor's broken half-file parked at
   .agent-stash/PodiumStore+SessionBundle.swift for it to restore),
-  **P4.4 is now DONE** (real race found+fixed in DiagnosticsRecorder, panel
-  wired into sidebar, DiagnosticsRouterMount added to BOTH mounts arrays by
-  the orchestrator, 394/394 green). Only P4.3 remains in flight; it still
-  must NOT touch main.swift/EmbeddedServer mounts — it reports RouterMount
-  names (ExportRouterMount expected) and the orchestrator hand-merges into
-  BOTH files (duplicated, not shared).
+  **P4.3 and P4.4 are both DONE — Phase 4 complete (18/22), 419/419 green.**
+  All mounts merged into BOTH arrays (main.swift + EmbeddedServer.
+  makeServerMounts()): Diagnostics, CcConfig, Updates, Export. ZIPFoundation
+  dep dropped (unused — export.js never zipped; §6 P4.3 prompt was wrong).
+  Negative-uptime flake fixed (Date non-monotonic → clamp). Next: Phase-4
+  mini hardening gate over the P4.3+P4.4 diff + PodiumApp re-audit, then
+  P5.3 → P5.4 → P5.5 → P6.1 → P6.2.
 - **Phase-3 hardening gate + all 8 fixes: ✅ done.** Gate found 8 confirmed,
   non-blocking bugs (see STANDALONE_PLAN.md §7 "Phase-3 hardening gate" +
   "Phase-3 hardening fixes" entries for full detail); two parallel fix-it
