@@ -428,6 +428,17 @@ final class AppState {
         try await api.workflowSession(id)
     }
 
+    /// Cross-session aggregate workflow intelligence — `GET /api/workflows`.
+    func loadWorkflowSummary(status: String? = nil) async throws -> WorkflowSummary {
+        try await api.workflowSummary(status: status)
+    }
+
+    /// Full per-session drill-in (tree, tool timeline, swimlanes, events) —
+    /// `GET /api/workflows/session/:id`.
+    func loadWorkflowDetail(_ id: String) async throws -> WorkflowDetail {
+        try await api.workflowSessionDetail(id)
+    }
+
     // MARK: Import
 
     func importSession(data: Data) async throws -> String {
