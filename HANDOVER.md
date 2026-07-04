@@ -1,9 +1,9 @@
 # Handover prompt — paste this into a fresh Claude session to continue
 
 > Keep this file updated: the orchestrator refreshes the "Live state" section
-> after every task completion. Last update: 2026-07-04 ~07:45 CEST (Sonnet 5,
-> Phase-3 gate + all 8 fixes landed, P5.1 done + live-verified, P4.3 ∥ P4.4
-> in flight).
+> after every task completion. Last update: 2026-07-04 ~12:55 CEST (Sonnet 5,
+> scheduled morning pickup #4 — Phase 4 CLOSED (432/432), P5.4 re-dispatched
+> in background after previous attempt died with zero commits).
 
 ## Paste-ready prompt
 
@@ -16,18 +16,31 @@ Read STANDALONE_PLAN.md — start with §0 (resume protocol, binding), then §5
 decisions). Then HANDOVER.md "Live state" for what was in flight when the
 previous session ended.
 
-Your job: reconcile any 🟦 tasks per §0 step 2 (P4.3/P4.4 were in flight —
-check if the agents finished; if so verify + merge their reported
-RouterMount names into PodiumServerCLI/main.swift's mounts array AND
-EmbeddedServer.swift's makeServerMounts() by hand, since both agents were
-told not to touch those files themselves to avoid a merge fight), then keep
-dispatching Sonnet dev agents per §0 step 3 until the board is done, updating
-the board + run log + this file as you go. Quality over breadth (agreement #8).
+Your job: reconcile P5.4 (🟦, see Live state below — an agent named
+p5-4-native-ui was dispatched in background ~12:55 CEST; check whether it
+finished, verify with `swift build && swift test`, merge/commit if good),
+then keep dispatching Sonnet dev agents per §0 step 3 (P5.5 → P6.1 → P6.2)
+until the board is done, updating the board + run log + this file as you go.
+Quality over breadth (agreement #8).
 ```
 
 ## Live state (refresh me on every board change)
 
-- **In flight RIGHT NOW (2 parallel agents, RE-dispatched ~09:45 CEST by
+- **In flight RIGHT NOW (~12:55 CEST, scheduled morning pickup #4):** Phase 4
+  is CLOSED (432/432, both hardening-gate blockers fixed — see plan §7). The
+  previous session's P5.4 dispatch (logged at commit 01e7245, ~10:26 CEST)
+  died with **zero commits** — re-verified clean tree + exactly 432/432 tests
+  before re-dispatching. Re-dispatched `p5-4-native-ui` in the background
+  (general-purpose, sonnet) against the known gap list from the pre-P5.3/P5.4
+  inventory audit: (1) ConfigExplorerView reads local FS directly instead of
+  `/api/cc-config` — highest value, now unblocked since the gate's camelCase
+  fix landed; (2) WorkflowsView never calls `GET /api/workflows`; (3)
+  AnalyticsView passes no tzOffset; (4) RunView missing permission-mode/effort
+  pickers + `run_input_ack` WS handling. Fenced to Sources/PodiumApp/
+  {ConfigExplorerView,WorkflowsView,AnalyticsView,RunView,PodiumAPI,Models,
+  WebSocketClient,AppState}.swift only — no server-side files. Next when this
+  lands: P5.5 (onboarding tour) → P6.1 (packaging) → P6.2 (contract E2E+docs).
+- **Previously in flight (2 parallel agents, RE-dispatched ~09:45 CEST by
   Fable session after session-3's agents died unreachable):**
   `p4-3-ccconfig-r2` (P4.3, resuming: Discovery/{CcConfig,CcMutate,CcWatcher,
   UpdateCheck} + CcConfigRouter/UpdatesRouter + watcher/update services +
