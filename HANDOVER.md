@@ -1,9 +1,9 @@
 # Handover prompt — paste this into a fresh Claude session to continue
 
 > Keep this file updated: the orchestrator refreshes the "Live state" section
-> after every task completion. Last update: 2026-07-04 ~07:15 CEST (Sonnet 5,
-> new orchestrator session — Phase-3 gate run, 8 bugs found + dispatched as
-> parallel fixes, P5.1 dispatched alongside per PO decision).
+> after every task completion. Last update: 2026-07-04 ~07:45 CEST (Sonnet 5,
+> Phase-3 gate + all 8 fixes landed, P5.1 done + live-verified, P4.3 ∥ P4.4
+> in flight).
 
 ## Paste-ready prompt
 
@@ -16,45 +16,54 @@ Read STANDALONE_PLAN.md — start with §0 (resume protocol, binding), then §5
 decisions). Then HANDOVER.md "Live state" for what was in flight when the
 previous session ended.
 
-Your job: run the Phase-3 hardening gate (code review over the phases 2+3
-diff since 38b08ba + contract sanity check against WebClient/dist's React
-client), then keep dispatching Sonnet dev agents per §0 step 3 until the
-board is done, updating the board + run log + this file as you go. Quality
-over breadth (agreement #8).
+Your job: reconcile any 🟦 tasks per §0 step 2 (P4.3/P4.4 were in flight —
+check if the agents finished; if so verify + merge their reported
+RouterMount names into PodiumServerCLI/main.swift's mounts array AND
+EmbeddedServer.swift's makeServerMounts() by hand, since both agents were
+told not to touch those files themselves to avoid a merge fight), then keep
+dispatching Sonnet dev agents per §0 step 3 until the board is done, updating
+the board + run log + this file as you go. Quality over breadth (agreement #8).
 ```
 
 ## Live state (refresh me on every board change)
 
-- **In flight RIGHT NOW (3 parallel agents, dispatched ~07:15 CEST):**
-  `fix-core` (Ingest notifier-before-commit + Transcript trim watermark,
-  fenced to PodiumCore/Ingest + PodiumCore/Transcripts), `fix-routes` (6
-  router parity bugs incl. Workflows top-level casing, fenced to
-  PodiumServer/Routes + JSONResponse.swift), `p5-1-embed` (P5.1 app embeds
-  server, fenced to Sources/PodiumApp). All three have disjoint path fences
-  — safe to run concurrently. If you're picking this up cold and these
-  aren't done: check `git log` for progress, ping the agents via SendMessage
-  before re-dispatching (per the environment quirk below — they habitually
-  finish and go idle without reporting).
-- **Phase-3 hardening gate: ⚠️ done, 8 bugs found, fixes dispatched (see
-  STANDALONE_PLAN.md §7 "Phase-3 hardening gate" entry for full detail).**
-  355/355 tests + live-binary smoke test both clean; the bugs are latent
-  correctness gaps, not build/test failures. Highest-priority: **Workflows
-  API emits wrong top-level JSON key casing** (`tool_flow` instead of
-  `toolFlow` etc.) — Node's workflows.js is the one endpoint family that
-  hand-builds camelCase top-level keys against the rest of the snake_case
-  API, and Swift's global `.convertToSnakeCase` strategy stomps on it
-  uniformly (can't be fixed via CodingKeys alone — needs a raw-fragment JSON
-  assembler, see the fix-routes prompt / gate run-log entry for the
-  approach). Others: notifier fires before COMMIT (Ingest), transcript cache
-  trims every line instead of at the 2x watermark (perf), lenient-vs-strict
-  int query parsing, negative `limit` wrongly clamped to 0, unknown agent
-  `?status=` silently mapped to `.waiting`, empty-string PATCH fields wrongly
-  overwrite instead of preserving, SearchRouter cost calc uses the wrong
-  pricing-match algorithm. None touch PodiumApp/server-embedding — did not
-  block dispatching P5.1 alongside the fixes.
-- **Done (14/22):** P0.1, P1.1, P1.2, P2.1, P2.2, P2.3, P2.4, P3.1, P3.2,
-  P3.3, P3.4, P4.1, P4.2, P5.2. Phase 2 E2E-gate passed. 355/355 green at the
-  completion agent's close, re-verified clean at the Phase-3 gate.
+- **In flight RIGHT NOW (2 parallel agents, dispatched ~07:32 CEST):**
+  `p4-3-ccconfig` (P4.3 — fenced to new files under PodiumCore/Discovery +
+  new PodiumServer/Routes/{CcConfigRouter,UpdatesRouter,ExportRouter}.swift),
+  `p4-4-diagnostics` (P4.4 — no §6 prompt existed, orchestrator wrote the
+  spec inline referencing P3.3's ServerRuntimeInfo.swift; fenced to new files
+  under PodiumCore/Diagnostics + new PodiumServer/Routes/DiagnosticsRouter.swift
+  + new Sources/PodiumApp/DiagnosticsView.swift). **Neither agent touches
+  PodiumServerCLI/main.swift's `mounts:` array or EmbeddedServer.swift's
+  `makeServerMounts()`** — both will report back the exact `RouterMount.Type`
+  name(s) to add; the next orchestrator turn must hand-merge both sets into
+  BOTH files (they're duplicated, not shared — see the P5.1 run-log entry).
+  If picking this up cold and these aren't done: check `git log`, ping the
+  agents via SendMessage before re-dispatching (see environment quirk below).
+- **Phase-3 hardening gate + all 8 fixes: ✅ done.** Gate found 8 confirmed,
+  non-blocking bugs (see STANDALONE_PLAN.md §7 "Phase-3 hardening gate" +
+  "Phase-3 hardening fixes" entries for full detail); two parallel fix-it
+  agents fixed all 8 and added regression tests, 377/377 green (orchestrator
+  re-verified `swift build && swift test` clean after both landed). Highest-
+  priority fix was Workflows API's top-level JSON key casing (`toolFlow` etc.
+  were being wrongly snake_cased — fixed via a new `JSONResponse(fields:)`
+  raw-fragment assembler in JSONResponse.swift, since Swift's
+  `.convertToSnakeCase` can't be bypassed per-key via CodingKeys). Others:
+  Ingest notifier-before-COMMIT race, transcript cache trim watermark,
+  lenient int query parsing, negative `limit` clamp, unknown agent status
+  filter, empty-string PATCH collapse, SearchRouter's own cost-match
+  algorithm (found a genuinely distinct JS `Array.slice` negative-offset
+  quirk here too, different from SQL's negative-LIMIT-means-unbounded rule —
+  see the fix-routes run-log entry).
+- **P5.1 (app embeds server): ✅ done, live-verified both directions**
+  without touching Gaël's real data — see the full P5.1 run-log entry.
+  `EmbeddedServer.swift` is the whole feature; single-instance check
+  correctly detects his live Docker container and falls back to pure-client
+  mode; hosts+hooks+notifications all confirmed working end-to-end in an
+  isolated sandbox with a real piped hook payload showing up live in the app.
+- **Done (16/22):** P0.1, P1.1, P1.2, P2.1, P2.2, P2.3, P2.4, P3.1, P3.2,
+  P3.3, P3.4, P4.1, P4.2, P5.1, P5.2. Phase 2 E2E-gate + Phase-3 hardening
+  gate both passed. 377/377 green as of this handover.
 - **P3.2 (legacy import + sweeps): audited clean, nothing needed fixing.**
   LegacyImporter.swift (1165 lines: importAllSessions/backfillCompactions/
   importCompactions/scanAndImportSubagents), ImportRouter.swift (guide/
