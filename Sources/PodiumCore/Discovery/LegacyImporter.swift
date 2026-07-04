@@ -228,7 +228,7 @@ public enum LegacyImporter {
             // throw — a failure must be retried on the next run, never
             // silently treated as done.
             if succeeded, let stat = unchanged.stats[session.sourcePath] {
-                try? store.upsertImportFileCache(path: session.sourcePath, mtimeMs: stat.mtimeMs, size: stat.size)
+                _ = try? store.upsertImportFileCache(path: session.sourcePath, mtimeMs: stat.mtimeMs, size: stat.size)
             }
             try batch.checkpoint()
         }
