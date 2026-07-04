@@ -45,6 +45,13 @@ final class AppState {
     // Live activity feed
     var recentEvents: [DashboardEvent] = []
 
+    /// Bumped whenever a WS `new_event` arrives for a given session id. The
+    /// open Conversation/Thinking transcript tab (if any) observes its own
+    /// session's counter to know when to fetch-and-append newly written
+    /// transcript lines, without polling. Not cleared/removed — a growing
+    /// dictionary of small Ints for the sessions seen this run is negligible.
+    var transcriptEventTick: [String: Int] = [:]
+
     // Active agents (working or waiting)
     var activeAgents: [Agent] = []
 
@@ -246,6 +253,7 @@ final class AppState {
                 if recentEvents.count > 50 { recentEvents.removeLast() }
                 // Invalidate stats cache for this session
                 sessionStatsCache.removeValue(forKey: event.sessionId)
+                transcriptEventTick[event.sessionId, default: 0] += 1
             }
 
         case "stats_update":
@@ -314,8 +322,8 @@ final class AppState {
         try await api.savePricingRules(rules)
     }
 
-    func fetchTranscript(_ sessionId: String, before: Int? = nil) async throws -> TranscriptResponse {
-        try await api.transcript(sessionId, before: before)
+    func fetchTranscript(_ sessionId: String, after: Int? = nil, before: Int? = nil, limit: Int = 50) async throws -> TranscriptResponse {
+        try await api.transcript(sessionId, after: after, before: before, limit: limit)
     }
 
     // MARK: Widget

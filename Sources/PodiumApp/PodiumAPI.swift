@@ -196,9 +196,10 @@ actor PodiumAPI {
 
     // MARK: Transcript
 
-    func transcript(_ sessionId: String, before: Int? = nil, limit: Int = 50) async throws -> TranscriptResponse {
+    func transcript(_ sessionId: String, after: Int? = nil, before: Int? = nil, limit: Int = 50) async throws -> TranscriptResponse {
         var comps = URLComponents(url: baseURL.appending(path: "/api/sessions/\(sessionId)/transcript"), resolvingAgainstBaseURL: false)!
         var items: [URLQueryItem] = [.init(name: "limit", value: "\(limit)")]
+        if let a = after { items.append(.init(name: "after", value: "\(a)")) }
         if let b = before { items.append(.init(name: "before", value: "\(b)")) }
         comps.queryItems = items
         return try await get(url: comps.url!)
