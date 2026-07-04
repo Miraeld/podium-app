@@ -4,9 +4,12 @@
 // (name/cwd LIKE match) and event hits (summary/tool_name/data LIKE match)
 // into one recency-sorted array, capped at MAX_PER_TYPE (20) rows per
 // entity kind. SQL lives in PodiumStore+Filters.swift (`searchSessions`,
-// `searchEvents`, `costsForSessions`) — this file is HTTP mapping +
-// highlight-snippet building + the final merge-sort, matching search.js's
-// in-process (non-SQL) combine step exactly.
+// `searchEvents`); per-session cost for the matched hits uses this file's
+// own `searchCosts`/`matchSearchRule` (search.js's cost-matching algorithm
+// is a documented exception to `CostCalculator`, see the doc comment on
+// `searchCosts` below) — this file is HTTP mapping + highlight-snippet
+// building + the final merge-sort, matching search.js's in-process
+// (non-SQL) combine step exactly.
 
 import Foundation
 import Hummingbird
