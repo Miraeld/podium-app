@@ -1199,6 +1199,9 @@ private struct ThinkingTabView: View {
     @State private var messages: [TranscriptMessage] = []
     @State private var isLoading = false
     @State private var hasLoaded = false
+    @State private var lastLine: Int? = nil
+    @State private var isAppendingLive = false
+    @State private var appendDebounce: Task<Void, Never>? = nil
 
     struct ThinkingEntry: Identifiable {
         let id = UUID()
@@ -1271,9 +1274,37 @@ private struct ThinkingTabView: View {
             do {
                 let resp = try await state.fetchTranscript(sessionId)
                 messages = resp.messages
+                lastLine = resp.lastLine
                 hasLoaded = true
             } catch {}
             isLoading = false
+        }
+        .onChange(of: state.transcriptEventTick[sessionId]) { _, _ in
+            appendDebounce?.cancel()
+            appendDebounce = Task {
+                try? await Task.sleep(for: .milliseconds(600))
+                guard !Task.isCancelled else { return }
+                await appendLiveMessages()
+            }
+        }
+        .onDisappear { appendDebounce?.cancel() }
+    }
+
+    /// Quietly appends newly-written transcript lines (new thinking blocks
+    /// simply appear at the end of the list; unlike the Conversation tab,
+    /// there's no chat-style "jump to latest" affordance here since this is
+    /// a passive read-through view).
+    private func appendLiveMessages() async {
+        guard hasLoaded, var cursor = lastLine, !isAppendingLive else { return }
+        isAppendingLive = true
+        defer { isAppendingLive = false }
+        for _ in 0..<5 {
+            guard let resp = try? await state.fetchTranscript(sessionId, after: cursor, limit: 200) else { break }
+            guard !resp.messages.isEmpty else { break }
+            messages.append(contentsOf: resp.messages)
+            cursor = resp.lastLine ?? cursor
+            lastLine = cursor
+            guard resp.hasMore else { break }
         }
     }
 }
