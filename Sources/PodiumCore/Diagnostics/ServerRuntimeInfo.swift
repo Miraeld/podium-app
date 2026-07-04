@@ -27,9 +27,12 @@ public enum ServerRuntimeInfo {
     /// needing a platform-specific `/proc/self/stat` / `proc_pidinfo` read.
     public static let processStartDate = Date()
 
-    /// `process.uptime()` — seconds since `processStartDate`.
+    /// `process.uptime()` — seconds since `processStartDate`. Clamped to 0:
+    /// `Date()` is not monotonic, so a read taken within the same scheduler
+    /// quantum as the lazy `processStartDate` capture can land a fraction of
+    /// a microsecond *before* it and would otherwise report negative uptime.
     public static var uptimeSeconds: Double {
-        Date().timeIntervalSince(processStartDate)
+        max(0, Date().timeIntervalSince(processStartDate))
     }
 
     /// `process.version` has no Swift equivalent; reports the Swift
