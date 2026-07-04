@@ -34,13 +34,12 @@ the board + run log + this file as you go. Quality over breadth (agreement #8).
   ZIPFoundation dep all committed by predecessor; missing SessionExportBundle
   model, ExportRouter, tests; predecessor's broken half-file parked at
   .agent-stash/PodiumStore+SessionBundle.swift for it to restore),
-  `p4-4-diagnostics-r2` (P4.4, resuming: LogRingBuffer/DiagnosticsResponse/
-  DiagnosticsRouter/DiagnosticsView + HooksRouter recording committed; its
-  DiagnosticsTests:114 reset test fails — handed to it to resolve; checkpoint
-  1353377). **Neither agent touches PodiumServerCLI/main.swift's `mounts:` or
-  EmbeddedServer.swift's `makeServerMounts()`** — both report RouterMount
-  names; orchestrator hand-merges into BOTH files (duplicated, not shared).
-  Baseline at re-dispatch: 393/394 (the 1 failure is P4.4's own WIP test).
+  **P4.4 is now DONE** (real race found+fixed in DiagnosticsRecorder, panel
+  wired into sidebar, DiagnosticsRouterMount added to BOTH mounts arrays by
+  the orchestrator, 394/394 green). Only P4.3 remains in flight; it still
+  must NOT touch main.swift/EmbeddedServer mounts — it reports RouterMount
+  names (ExportRouterMount expected) and the orchestrator hand-merges into
+  BOTH files (duplicated, not shared).
 - **Phase-3 hardening gate + all 8 fixes: ✅ done.** Gate found 8 confirmed,
   non-blocking bugs (see STANDALONE_PLAN.md §7 "Phase-3 hardening gate" +
   "Phase-3 hardening fixes" entries for full detail); two parallel fix-it
