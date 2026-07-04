@@ -330,7 +330,9 @@ final class RunSpawnerTests: XCTestCase {
     /// so this test doesn't need to wait 5 real minutes to exercise it.
     func testFinishedHandleIsReapedAfterTheConfiguredDelay() async throws {
         let script = try writeFixtureScript("exit 0\n")
-        let spawner = RunSpawner(store: nil, broadcaster: RecordingBroadcaster(), claudeBinary: script, reapDelayNanoseconds: 50_000_000 /* 50ms */)
+        // 2s (not 50ms): on slow CI runners the completion-poll itself can
+        // outlast a tiny reap delay, making the "still present" check flake.
+        let spawner = RunSpawner(store: nil, broadcaster: RecordingBroadcaster(), claudeBinary: script, reapDelayNanoseconds: 2_000_000_000)
         let handle = try await spawner.spawnRun(
             prompt: "hi", mode: .headless, cwd: tempDir.path, model: nil,
             permissionMode: "acceptEdits", resumeSessionId: nil, effort: nil
@@ -341,7 +343,7 @@ final class RunSpawnerTests: XCTestCase {
         let stillPresent = await spawner.getRun(id: handle.id, includeEnvelopes: false)
         XCTAssertNotNil(stillPresent)
 
-        await poll(timeout: 2) { await spawner.getRun(id: handle.id, includeEnvelopes: false) == nil }
+        await poll(timeout: 10) { await spawner.getRun(id: handle.id, includeEnvelopes: false) == nil }
         let afterReap = await spawner.getRun(id: handle.id, includeEnvelopes: false)
         XCTAssertNil(afterReap)
     }

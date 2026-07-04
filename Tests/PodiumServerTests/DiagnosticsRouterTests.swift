@@ -54,7 +54,8 @@ final class DiagnosticsRouterTests: XCTestCase {
         port = try await waitForHealth(startingAt: candidatePort)
     }
 
-    private func waitForHealth(startingAt startPort: Int, timeout: TimeInterval = 5) async throws -> Int {
+    // 30s: CI containers boot Hummingbird far slower than local — 5s flaked.
+    private func waitForHealth(startingAt startPort: Int, timeout: TimeInterval = 30) async throws -> Int {
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
             if await isHealthy(port: startPort) { return startPort }
