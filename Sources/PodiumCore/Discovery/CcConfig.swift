@@ -445,11 +445,39 @@ public enum CcConfig {
         public var command: String?
         public var args: [String]?
         public var envNames: [String]?
+
+        // `envNames` must stay literal camelCase on the wire (client reads
+        // `server.envNames`) — see `AnyEncodable`'s doc comment for why a
+        // `CodingKeys` raw value alone can't survive `PodiumJSON.encoder`'s
+        // `.convertToSnakeCase`. Encoded literally throughout for consistency.
+        public func encode(to encoder: Encoder) throws {
+            var container = encoder.singleValueContainer()
+            try container.encode([
+                "name": AnyEncodable(name),
+                "source": AnyEncodable(source),
+                "kind": AnyEncodable(kind),
+                "url": AnyEncodable(url),
+                "headers": AnyEncodable(headers),
+                "command": AnyEncodable(command),
+                "args": AnyEncodable(args),
+                "envNames": AnyEncodable(envNames),
+            ])
+        }
     }
 
     public struct McpServersResponse: Codable, Equatable, Sendable {
         public var user: [McpServerInfo]
         public var projectScoped: [McpServerInfo]
+
+        // `projectScoped` must stay literal camelCase (client reads
+        // `CcMcpResponse.projectScoped`) — see `AnyEncodable`'s doc comment.
+        public func encode(to encoder: Encoder) throws {
+            var container = encoder.singleValueContainer()
+            try container.encode([
+                "user": AnyEncodable(user),
+                "projectScoped": AnyEncodable(projectScoped),
+            ])
+        }
     }
 
     static func summarizeMcpDef(_ def: JSONValue, name: String, source: String) -> McpServerInfo {

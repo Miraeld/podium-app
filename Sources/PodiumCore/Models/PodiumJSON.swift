@@ -130,6 +130,39 @@ public enum JSONValue: Codable, Equatable, Sendable {
     }
 }
 
+/// Type-erased `Encodable` box for the `PodiumJSON.encoder` camelCase
+/// footgun: `JSONEncoder.KeyEncodingStrategy.convertToSnakeCase` transforms
+/// EVERY resolved `CodingKey.stringValue` uniformly, with no way to exempt
+/// individual keys — not even via a `CodingKeys` enum with an explicit
+/// camelCase raw value (that raw string is itself a `CodingKey.stringValue`
+/// and gets re-transformed just the same, e.g. `claudeHome` → `claude_home`).
+/// `Dictionary<String, _>` is the one documented exception: its keys are
+/// written straight through with no `CodingKey` resolution step at all, so
+/// they survive `.convertToSnakeCase` verbatim — confirmed empirically, and
+/// true at any nesting depth (inside arrays, optionals, other structs).
+///
+/// So: for a wire type whose top-level field names must stay literal
+/// camelCase (a handful of cc-config responses mirror the Node API's own
+/// camelCase object literals — see `CcConfig.swift`/`CcMutate.swift`), give
+/// it a custom `encode(to:)` that builds a `[String: AnyEncodable]` with the
+/// literal key strings and writes that as a single-value container, instead
+/// of letting the compiler synthesize the normal keyed encode. Leave
+/// `init(from:)` to synthesize as usual — decoding is unaffected, since
+/// `PodiumJSON.decoder`'s `.convertFromSnakeCase` only rewrites keys that
+/// actually contain an underscore and passes an already-camelCase key
+/// through unchanged.
+public struct AnyEncodable: Encodable {
+    private let encodeClosure: (Encoder) throws -> Void
+
+    public init<T: Encodable>(_ wrapped: T) {
+        self.encodeClosure = wrapped.encode
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        try encodeClosure(encoder)
+    }
+}
+
 /// A raw-string-preserving enum wrapper: decodes any string into `.known`
 /// when it matches a case of `Known`, otherwise `.unknown(rawString)`. This
 /// is how status columns stay lenient — an old/foreign dashboard.db with an
