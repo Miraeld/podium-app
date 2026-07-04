@@ -78,14 +78,15 @@ final class EmbeddedServer {
             return resolved
         }
 
-        if let livePort = await Self.discoverLiveExternalServer() {
+        let startPort = configuredPort > 0 ? configuredPort : PodiumServerLifecycle.defaultPort()
+
+        if let livePort = await Self.discoverLiveExternalServer(preferredPort: startPort) {
             logger.info("Live Podium server already running — connecting as a client.", metadata: ["port": "\(livePort)"])
             let resolved = EmbeddedServerMode.externalClient(port: livePort)
             mode = resolved
             return resolved
         }
 
-        let startPort = configuredPort > 0 ? configuredPort : PodiumServerLifecycle.defaultPort()
         let boundPort = await start(startPort: startPort)
         let resolved = EmbeddedServerMode.embedded(port: boundPort)
         mode = resolved
@@ -94,16 +95,24 @@ final class EmbeddedServer {
 
     /// Task 2: reuse `HookPortDiscovery`'s multi-server-file + PID-liveness
     /// logic (the exact thing `podium-hook` uses to find where to POST) to
-    /// see if a server is already live, then confirm with a real health GET
-    /// so a stale/half-dead entry that happens to pass the PID check doesn't
-    /// fool us into skipping hosting.
-    private static func discoverLiveExternalServer() async -> Int? {
-        let candidatePorts = HookPortDiscovery.resolvePorts()
-        // resolvePorts() falls back to [4820] when the info file is missing
-        // or empty — that's a *guess*, not evidence of life, so only trust
-        // it if the info file actually named live entries.
-        guard FileManager.default.fileExists(atPath: HookPortDiscovery.defaultInfoPath().path) else {
-            return nil
+    /// enumerate candidate ports, then confirm with a real health GET so a
+    /// stale/half-dead entry that happens to pass the PID check doesn't fool
+    /// us into skipping hosting.
+    ///
+    /// Deliberately does NOT require `.agent-dashboard.json` to exist before
+    /// checking: that file records servers *this machine's own* podium
+    /// processes wrote, so a containerized/external instance (e.g. Gaël's
+    /// production Docker container bind-mounting a different `~/.claude`
+    /// inside the container) will never appear in it, yet is exactly the
+    /// kind of already-live server task 2 says must win over hosting. A real
+    /// TCP health check against `preferredPort` (our own configured/default
+    /// port) is the ground truth; the info file's PID-checked entries are
+    /// just additional candidates in case the live server ended up on a
+    /// fallback port a previous launch chose.
+    private static func discoverLiveExternalServer(preferredPort: Int) async -> Int? {
+        var candidatePorts = [preferredPort]
+        for port in HookPortDiscovery.resolvePorts() where !candidatePorts.contains(port) {
+            candidatePorts.append(port)
         }
         for port in candidatePorts {
             if await healthCheck(port: port) {
