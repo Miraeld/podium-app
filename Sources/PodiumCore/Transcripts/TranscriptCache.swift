@@ -70,6 +70,14 @@ public final class TranscriptCache: @unchecked Sendable {
     private var hits = 0
     private var misses = 0
 
+    /// Test-only counter: bumped every time `trimAtWatermarkIfNeeded` (the
+    /// per-line, watermark-gated trim used inside `consumeLine`) actually
+    /// performs a shift, as opposed to being a no-op below the watermark.
+    /// Lets tests assert the amortized-O(1) behavior directly (how often the
+    /// expensive trim runs) rather than only its externally-visible result,
+    /// which `finalize`/`merge`'s unconditional trim would otherwise mask.
+    var watermarkTrimExecutionCount = 0
+
     private struct CacheEntry {
         var mtime: Double
         var size: Int
@@ -375,6 +383,7 @@ public final class TranscriptCache: @unchecked Sendable {
     private func trimAtWatermarkIfNeeded<T>(_ array: inout [T]) {
         guard array.count >= parseTrimWatermark else { return }
         array.removeFirst(array.count - maxArrayLen)
+        watermarkTrimExecutionCount += 1
     }
 
     // MARK: - Merge (transcript-cache.js `_merge`)

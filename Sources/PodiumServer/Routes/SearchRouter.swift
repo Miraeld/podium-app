@@ -32,7 +32,7 @@ public enum SearchRouterMount: RouterMount {
         let (sessionRows, sessionTotal) = try store.searchSessions(query: q, limit: limit, offset: offset)
         let (eventRows, eventTotal) = try store.searchEvents(query: q, limit: limit, offset: offset)
 
-        let sessionCosts = sessionRows.isEmpty ? [:] : try store.costsForSessions(ids: sessionRows.map(\.id))
+        let sessionCosts = try searchCosts(store: store, sessionIds: sessionRows.map(\.id))
 
         let sessionHits: [(hit: SearchHit, sortKey: String)] = sessionRows.map { row in
             let highlight = buildHighlight(row.name, q) ?? buildHighlight(row.cwd, q) ?? row.name ?? row.cwd
@@ -80,6 +80,55 @@ public enum SearchRouterMount: RouterMount {
 
         let total = sessionTotal + eventTotal
         return try JSONResponse(SearchResponse(results: combined.map(\.hit), total: total))
+    }
+
+    /// search.js lines 68–104: bulk per-session cost for the matched session
+    /// hits, using search.js's OWN cost-matching algorithm — deliberately
+    /// NOT `PodiumStore.costsForSessions`/`CostCalculator`, which sorts
+    /// pricing rules longest-pattern-first and treats `%` as a full regex
+    /// wildcard (correct for every OTHER endpoint, but not what search.js
+    /// does). Confirmed against dashboard/server/routes/search.js lines
+    /// 82–103: `rules.find(...)` walks `stmts.listPricing.all()` in its
+    /// raw/unsorted order (whatever SQLite returns it in — same order as
+    /// `PodiumStore.listPricing()`, `ORDER BY display_name ASC`) and matches
+    /// via `model.toLowerCase().startsWith(pattern.replace(/%$/, "").toLowerCase())`
+    /// — only a TRAILING `%` is stripped; any other `%` inside the pattern
+    /// is left as a literal character for `startsWith` (not converted to a
+    /// wildcard). First match in that raw order wins, unlike
+    /// `CostCalculator`'s longest-pattern-first preference.
+    private static func searchCosts(store: PodiumStore, sessionIds: [String]) throws -> [String: Double] {
+        guard !sessionIds.isEmpty else { return [:] }
+        let rules = try store.listPricing()
+        guard !rules.isEmpty else { return [:] }
+
+        var result: [String: Double] = [:]
+        for sessionId in sessionIds {
+            let tokenRows = try store.getTokensBySession(sessionId: sessionId).map(CostTokenRow.init)
+            guard !tokenRows.isEmpty else { continue }
+
+            var cost = 0.0
+            for row in tokenRows {
+                guard let rule = matchSearchRule(model: row.model, rules: rules) else { continue }
+                cost +=
+                    (Double(row.inputTokens) / 1_000_000) * rule.inputPerMtok
+                    + (Double(row.outputTokens) / 1_000_000) * rule.outputPerMtok
+                    + (Double(row.cacheReadTokens) / 1_000_000) * rule.cacheReadPerMtok
+                    + (Double(row.cacheWriteTokens) / 1_000_000) * rule.cacheWritePerMtok
+            }
+            result[sessionId] = cost
+        }
+        return result
+    }
+
+    /// search.js line 92–94: `rules.find((r) => t.model && t.model.toLowerCase()
+    /// .startsWith(r.model_pattern.replace(/%$/, "").toLowerCase()))`.
+    private static func matchSearchRule(model: String, rules: [ModelPricing]) -> ModelPricing? {
+        let lowerModel = model.lowercased()
+        return rules.first { rule in
+            var pattern = rule.modelPattern
+            if pattern.hasSuffix("%") { pattern.removeLast() }
+            return lowerModel.hasPrefix(pattern.lowercased())
+        }
     }
 
     /// search.js `buildHighlight` (lines 25–36): case-insensitive substring

@@ -389,7 +389,16 @@ public enum SessionsRouterMount: RouterMount {
 
         var mutableRequest = req
         let body = try await mutableRequest.decodeJSONBody(as: SessionPatchRequestExtended.self)
-        try context.store.updateSession(id: id, name: body.name, status: body.status, endedAt: body.endedAt, metadata: body.metadata)
+        // sessions.js lines 286–290: `name || null`, `ended_at || null`
+        // collapse an empty string to `null` before the `COALESCE`-based
+        // update — `{"name":""}` must leave the existing name unchanged,
+        // not blank it. `status` is Node's plain `status || null` too, but
+        // it's a strict `SessionStatus?` enum on the Swift side (an empty
+        // string fails to decode as that enum well before this point).
+        try context.store.updateSession(
+            id: id, name: collapseEmpty(body.name), status: body.status,
+            endedAt: collapseEmpty(body.endedAt), metadata: body.metadata
+        )
 
         guard let session = try context.store.getSession(id: id) else {
             return try JSONResponse(status: .internalServerError, CodedErrorResponse(code: "INTERNAL", message: "session update did not persist"))
