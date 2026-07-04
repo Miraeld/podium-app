@@ -439,6 +439,36 @@ final class AppState {
         try await api.workflowSessionDetail(id)
     }
 
+    // MARK: CC Config Explorer (GET/PUT/DELETE /api/cc-config/*)
+    //
+    // Thin passthroughs so `ConfigExplorerView` doesn't need to construct
+    // its own `PodiumAPI` instance (which is private state here) — mirrors
+    // the `loadWorkflow*` passthrough pattern above. See
+    // `PodiumAPI+CcConfig.swift` for the actual HTTP calls.
+
+    func ccOverview(cwd: String?) async throws -> CcOverview { try await api.ccOverview(cwd: cwd) }
+    func ccSkills(cwd: String?) async throws -> [CcSkillItem] { try await api.ccSkills(cwd: cwd) }
+    func ccAgents(cwd: String?) async throws -> [CcMdItem] { try await api.ccAgents(cwd: cwd) }
+    func ccCommands(cwd: String?) async throws -> [CcMdItem] { try await api.ccCommands(cwd: cwd) }
+    func ccOutputStyles(cwd: String?) async throws -> [CcMdItem] { try await api.ccOutputStyles(cwd: cwd) }
+    func ccMcpServers(cwd: String?) async throws -> CcMcpResponse { try await api.ccMcpServers(cwd: cwd) }
+    func ccHooks(cwd: String?) async throws -> [CcHooksSource] { try await api.ccHooks(cwd: cwd) }
+    func ccSettings(cwd: String?) async throws -> [CcSettingsSource] { try await api.ccSettings(cwd: cwd) }
+    func ccMemory(cwd: String?) async throws -> [CcMemoryItem] { try await api.ccMemory(cwd: cwd) }
+    func ccMarketplaces() async throws -> CcMarketplacesResponse { try await api.ccMarketplaces() }
+    func ccKeybindings() async throws -> CcKeybindingsResponse { try await api.ccKeybindings() }
+    func ccStatusline() async throws -> CcStatuslineResponse { try await api.ccStatusline() }
+    func ccHookScripts() async throws -> CcHookScriptsResponse { try await api.ccHookScripts() }
+    func ccBackups(cwd: String?, type: String? = nil) async throws -> [CcBackup] { try await api.ccBackups(type: type, cwd: cwd) }
+
+    func ccWriteFile(scope: String, type: String, name: String?, content: String, cwd: String?) async throws -> CcWriteResult {
+        try await api.ccWriteFile(scope: scope, type: type, name: name, content: content, cwd: cwd)
+    }
+
+    func ccDeleteFile(scope: String, type: String, name: String?, cwd: String?) async throws -> CcDeleteResult {
+        try await api.ccDeleteFile(scope: scope, type: type, name: name, cwd: cwd)
+    }
+
     // MARK: Import
 
     func importSession(data: Data) async throws -> String {

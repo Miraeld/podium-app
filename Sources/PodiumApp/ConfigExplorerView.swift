@@ -1,6 +1,5 @@
 #if os(macOS)
 import SwiftUI
-import AppKit
 
 // MARK: - Config Explorer View
 //
@@ -16,13 +15,31 @@ import AppKit
 // The fix is an explicit `HStack` of three panes driven by plain `@State`
 // and wired with `.onChange`, so every selection deterministically updates
 // the next pane.
+//
+// P5.4 GAP FIX: this view used to read `~/.claude` directly via
+// `FileManager` — wrong in client mode, where PodiumApp is a pure client
+// connecting to a remote/Docker Podium server with no local filesystem to
+// read. It now fetches everything through `PodiumAPI`'s `/api/cc-config`
+// family (`Sources/PodiumServer/Routes/CcConfigRouter.swift`), matching
+// `EmbeddedServer.shared.mode`-agnostic behavior — the explorer works the
+// same whether this instance is hosting the server or just a client of one.
 
 struct ConfigExplorerView: View {
     @Environment(AppState.self) var state
 
     @State private var selectedCategory: ConfigCategory = .settings
-    @State private var items: [ConfigItem] = []
-    @State private var selectedItem: ConfigItem?
+    @State private var isLoadingItems = false
+    @State private var loadError: String?
+
+    // Per-category item caches (typed, since the API returns different
+    // shapes per surface).
+    @State private var skillItems: [CcSkillItem] = []
+    @State private var mdItems: [CcMdItem] = []
+    @State private var mcpServers: CcMcpResponse?
+    @State private var memoryItems: [CcMemoryItem] = []
+    @State private var backups: [CcBackup] = []
+
+    @State private var selectedRowId: String?
 
     private var projectCwd: String? { state.sessions.first?.cwd }
 
@@ -34,7 +51,7 @@ struct ConfigExplorerView: View {
             Divider().opacity(0.4)
 
             itemColumn
-                .frame(width: 280)
+                .frame(width: 300)
 
             Divider().opacity(0.4)
 
@@ -43,8 +60,11 @@ struct ConfigExplorerView: View {
         }
         .background(ThemeBackground())
         .navigationTitle("CC Config Explorer")
-        .onAppear { reloadItems() }
-        .onChange(of: selectedCategory) { _, _ in reloadItems() }
+        .task { await reloadItems() }
+        .onChange(of: selectedCategory) { _, _ in
+            selectedRowId = nil
+            Task { await reloadItems() }
+        }
     }
 
     // MARK: Columns
@@ -60,34 +80,127 @@ struct ConfigExplorerView: View {
         .scrollContentBackground(.hidden)
     }
 
+    @ViewBuilder
     private var itemColumn: some View {
-        Group {
-            if items.isEmpty {
-                EmptyStateView(
-                    icon: selectedCategory.icon,
-                    title: "No \(selectedCategory.label) found",
-                    message: emptyMessage
-                )
-                .padding()
-            } else {
-                List(items, selection: $selectedItem) { item in
-                    ConfigItemRow(item: item)
-                        .tag(item)
-                }
-                .listStyle(.sidebar)
-                .scrollContentBackground(.hidden)
+        if isLoadingItems && currentRowCount == 0 {
+            VStack {
+                Spacer()
+                ProgressView().tint(.cyan)
+                Spacer()
             }
+        } else if let loadError, currentRowCount == 0 {
+            EmptyStateView(icon: "exclamationmark.triangle", title: "Couldn't load", message: loadError)
+                .padding()
+        } else if currentRowCount == 0 {
+            EmptyStateView(
+                icon: selectedCategory.icon,
+                title: "No \(selectedCategory.label) found",
+                message: emptyMessage
+            )
+            .padding()
+        } else {
+            List(selection: $selectedRowId) {
+                switch selectedCategory {
+                case .skills:
+                    ForEach(skillItems) { item in
+                        ConfigItemRow(title: item.frontmatter["name"]?.nilIfEmpty ?? item.name, subtitle: item.frontmatter["description"] ?? item.scope)
+                            .tag(item.id)
+                    }
+                case .agents:
+                    ForEach(mdItems) { item in
+                        ConfigItemRow(title: item.frontmatter["name"]?.nilIfEmpty ?? item.name, subtitle: item.frontmatter["description"] ?? item.scope)
+                            .tag(item.id)
+                    }
+                case .commands:
+                    ForEach(mdItems) { item in
+                        ConfigItemRow(title: item.frontmatter["name"]?.nilIfEmpty ?? item.name, subtitle: item.frontmatter["description"] ?? item.scope)
+                            .tag(item.id)
+                    }
+                case .outputStyles:
+                    ForEach(mdItems) { item in
+                        ConfigItemRow(title: item.frontmatter["name"]?.nilIfEmpty ?? item.name, subtitle: item.frontmatter["description"] ?? item.scope)
+                            .tag(item.id)
+                    }
+                case .mcpServers:
+                    ForEach((mcpServers?.user ?? []) + (mcpServers?.projectScoped ?? [])) { server in
+                        ConfigItemRow(title: server.name, subtitle: server.command ?? server.url ?? server.kind)
+                            .tag(server.id)
+                    }
+                case .claudeMd:
+                    ForEach(memoryItems) { item in
+                        ConfigItemRow(title: item.scope == "user" ? "~/.claude/CLAUDE.md" : "project/CLAUDE.md", subtitle: item.preview)
+                            .tag(item.id)
+                    }
+                case .settings:
+                    EmptyView()
+                case .backups:
+                    ForEach(backups) { backup in
+                        ConfigItemRow(title: "\(backup.type)/\(backup.name)", subtitle: "\(backup.scope) · \(Theme.shortDate(Date(timeIntervalSince1970: backup.mtime / 1000)))")
+                            .tag(backup.id)
+                    }
+                }
+            }
+            .listStyle(.sidebar)
+            .scrollContentBackground(.hidden)
         }
     }
 
     private var detailColumn: some View {
         Group {
-            if let item = selectedItem {
-                ConfigDetailView(item: item)
-                    .id(item.id)   // force a fresh load when the selection changes
-            } else {
-                ConfigEmptyDetail()
+            switch selectedCategory {
+            case .settings:
+                SettingsSurfaceView(state: state, cwd: projectCwd)
+            case .skills:
+                if let item = skillItems.first(where: { $0.id == selectedRowId }) {
+                    SkillDetailView(item: item, state: state, cwd: projectCwd, onMutated: { await reloadItems() })
+                } else {
+                    ConfigEmptyDetail()
+                }
+            case .agents, .commands, .outputStyles:
+                if let item = mdItems.first(where: { $0.id == selectedRowId }) {
+                    MdDetailView(item: item, mutableType: mutableType(for: selectedCategory), state: state, cwd: projectCwd, onMutated: { await reloadItems() })
+                } else {
+                    ConfigEmptyDetail()
+                }
+            case .mcpServers:
+                if let server = ((mcpServers?.user ?? []) + (mcpServers?.projectScoped ?? [])).first(where: { $0.id == selectedRowId }) {
+                    McpDetailView(server: server)
+                } else {
+                    ConfigEmptyDetail()
+                }
+            case .claudeMd:
+                if let item = memoryItems.first(where: { $0.id == selectedRowId }) {
+                    MemoryDetailView(item: item, state: state, cwd: projectCwd, onMutated: { await reloadItems() })
+                } else {
+                    ConfigEmptyDetail()
+                }
+            case .backups:
+                if let backup = backups.first(where: { $0.id == selectedRowId }) {
+                    BackupDetailView(backup: backup, state: state, cwd: projectCwd)
+                } else {
+                    ConfigEmptyDetail()
+                }
             }
+        }
+    }
+
+    private func mutableType(for category: ConfigCategory) -> String {
+        switch category {
+        case .agents: return "agents"
+        case .commands: return "commands"
+        case .outputStyles: return "output-styles"
+        default: return ""
+        }
+    }
+
+    private var currentRowCount: Int {
+        switch selectedCategory {
+        case .skills: return skillItems.count
+        case .agents, .commands, .outputStyles: return mdItems.count
+        case .mcpServers: return (mcpServers?.user.count ?? 0) + (mcpServers?.projectScoped.count ?? 0)
+        case .claudeMd: return memoryItems.count
+        case .settings: return 1 // always has a detail surface
+        case .backups: return backups.count
         }
     }
 
@@ -97,22 +210,40 @@ struct ConfigExplorerView: View {
         case .agents:     return "No agent .md files found under ~/.claude/agents (or the project's .claude/agents)."
         case .skills:     return "No skill folders found under ~/.claude/skills."
         case .commands:   return "No command .md files found under ~/.claude/commands."
-        case .mcpServers: return "No mcpServers configured in ~/.claude/settings.json."
+        case .outputStyles: return "No output-style .md files found."
+        case .mcpServers: return "No mcpServers configured in ~/.claude.json or ~/.claude/settings.json."
         case .claudeMd:   return "No CLAUDE.md found in ~/.claude or the active project."
+        case .backups:    return "No backups yet — edits and deletes to skills/agents/commands/output-styles/memory create one automatically."
         }
     }
 
     // MARK: Loading
 
-    private func reloadItems() {
-        let loaded = ConfigLoader.items(for: selectedCategory, projectCwd: projectCwd)
-        items = loaded
-        // Keep the current selection if it still exists; otherwise clear it so
-        // the detail pane doesn't show a stale file from the previous category.
-        if let sel = selectedItem, loaded.contains(where: { $0.id == sel.id }) {
-            // keep
-        } else {
-            selectedItem = nil
+    private func reloadItems() async {
+        isLoadingItems = true
+        loadError = nil
+        defer { isLoadingItems = false }
+        do {
+            switch selectedCategory {
+            case .settings:
+                break // SettingsSurfaceView loads its own data
+            case .skills:
+                skillItems = try await state.ccSkills(cwd: projectCwd)
+            case .agents:
+                mdItems = try await state.ccAgents(cwd: projectCwd)
+            case .commands:
+                mdItems = try await state.ccCommands(cwd: projectCwd)
+            case .outputStyles:
+                mdItems = try await state.ccOutputStyles(cwd: projectCwd)
+            case .mcpServers:
+                mcpServers = try await state.ccMcpServers(cwd: projectCwd)
+            case .claudeMd:
+                memoryItems = try await state.ccMemory(cwd: projectCwd)
+            case .backups:
+                backups = try await state.ccBackups(cwd: projectCwd)
+            }
+        } catch {
+            loadError = error.localizedDescription
         }
     }
 }
@@ -124,8 +255,10 @@ enum ConfigCategory: String, CaseIterable, Hashable {
     case agents     = "agents"
     case skills     = "skills"
     case commands   = "commands"
+    case outputStyles = "output-styles"
     case mcpServers = "mcp"
     case claudeMd   = "claudemd"
+    case backups    = "backups"
 
     var label: String {
         switch self {
@@ -133,8 +266,10 @@ enum ConfigCategory: String, CaseIterable, Hashable {
         case .agents:     return "Agents"
         case .skills:     return "Skills"
         case .commands:   return "Commands"
+        case .outputStyles: return "Output Styles"
         case .mcpServers: return "MCP Servers"
         case .claudeMd:   return "CLAUDE.md"
+        case .backups:    return "Backups"
         }
     }
 
@@ -144,249 +279,11 @@ enum ConfigCategory: String, CaseIterable, Hashable {
         case .agents:     return "person.2"
         case .skills:     return "bolt"
         case .commands:   return "terminal"
+        case .outputStyles: return "paintbrush"
         case .mcpServers: return "server.rack"
         case .claudeMd:   return "doc.text"
+        case .backups:    return "clock.arrow.circlepath"
         }
-    }
-}
-
-// MARK: - Config Item model
-
-struct ConfigItem: Identifiable, Hashable {
-    let id: String
-    let title: String
-    let subtitle: String
-    let url: URL
-    let kind: ConfigItemKind
-
-    enum ConfigItemKind: Hashable {
-        case jsonFile
-        case markdownFile
-        case mcpServer(command: String)
-        case skillDir
-    }
-
-    func hash(into hasher: inout Hasher) { hasher.combine(id) }
-    static func == (lhs: ConfigItem, rhs: ConfigItem) -> Bool { lhs.id == rhs.id }
-}
-
-// MARK: - Loader (pure, testable, no view state)
-
-enum ConfigLoader {
-    private static var home: URL { FileManager.default.homeDirectoryForCurrentUser }
-    private static var claudeDir: URL { home.appendingPathComponent(".claude") }
-
-    static func items(for category: ConfigCategory, projectCwd: String?) -> [ConfigItem] {
-        switch category {
-        case .settings:
-            return loadSettingsItems()
-        case .agents:
-            return loadMarkdownItems(dirs: agentDirs(projectCwd: projectCwd))
-        case .skills:
-            return loadSkillItems(projectCwd: projectCwd)
-        case .commands:
-            return loadMarkdownItems(dirs: commandDirs(projectCwd: projectCwd))
-        case .mcpServers:
-            return loadMCPItems()
-        case .claudeMd:
-            return loadClaudeMdItems(projectCwd: projectCwd)
-        }
-    }
-
-    // MARK: Directory resolution
-
-    private static func agentDirs(projectCwd: String?) -> [URL] {
-        var dirs = [claudeDir.appendingPathComponent("agents")]
-        if let cwd = projectCwd {
-            dirs.append(URL(fileURLWithPath: cwd).appendingPathComponent(".claude/agents"))
-        }
-        return dirs
-    }
-
-    private static func commandDirs(projectCwd: String?) -> [URL] {
-        var dirs = [claudeDir.appendingPathComponent("commands")]
-        if let cwd = projectCwd {
-            dirs.append(URL(fileURLWithPath: cwd).appendingPathComponent(".claude/commands"))
-        }
-        return dirs
-    }
-
-    private static func skillDirs(projectCwd: String?) -> [URL] {
-        var dirs = [claudeDir.appendingPathComponent("skills")]
-        if let cwd = projectCwd {
-            dirs.append(URL(fileURLWithPath: cwd).appendingPathComponent(".claude/skills"))
-        }
-        return dirs
-    }
-
-    // MARK: Loaders
-
-    private static func loadSettingsItems() -> [ConfigItem] {
-        let files = ["settings.json", "settings.local.json"]
-        return files.compactMap { name in
-            let url = claudeDir.appendingPathComponent(name)
-            guard FileManager.default.fileExists(atPath: url.path) else { return nil }
-            let attrs = try? FileManager.default.attributesOfItem(atPath: url.path)
-            let size = (attrs?[.size] as? Int).map { formatBytes($0) } ?? "?"
-            let modified = (attrs?[.modificationDate] as? Date).map { relativeDateString($0) } ?? ""
-            return ConfigItem(
-                id: url.path,
-                title: name,
-                subtitle: "\(size) · \(modified)",
-                url: url,
-                kind: .jsonFile
-            )
-        }
-    }
-
-    private static func loadMarkdownItems(dirs: [URL]) -> [ConfigItem] {
-        var result: [ConfigItem] = []
-        var seen = Set<String>()
-        let fm = FileManager.default
-        for dir in dirs {
-            guard let files = try? fm.contentsOfDirectory(
-                at: dir,
-                includingPropertiesForKeys: [.fileSizeKey, .contentModificationDateKey]
-            ) else { continue }
-            let mdFiles = files
-                .filter { $0.pathExtension.lowercased() == "md" }
-                .sorted { $0.lastPathComponent.localizedCaseInsensitiveCompare($1.lastPathComponent) == .orderedAscending }
-            for file in mdFiles {
-                guard !seen.contains(file.path) else { continue }
-                seen.insert(file.path)
-                let content = (try? String(contentsOf: file, encoding: .utf8)) ?? ""
-                let frontmatter = parseFrontmatter(content)
-                let displayName = frontmatter["name"]?.nilIfEmpty ?? file.deletingPathExtension().lastPathComponent
-                let description = frontmatter["description"] ?? ""
-                let attrs = try? fm.attributesOfItem(atPath: file.path)
-                let size = (attrs?[.size] as? Int).map { formatBytes($0) } ?? "?"
-                result.append(ConfigItem(
-                    id: file.path,
-                    title: displayName,
-                    subtitle: description.isEmpty ? size : description,
-                    url: file,
-                    kind: .markdownFile
-                ))
-            }
-        }
-        return result
-    }
-
-    private static func loadSkillItems(projectCwd: String?) -> [ConfigItem] {
-        var result: [ConfigItem] = []
-        var seen = Set<String>()
-        let fm = FileManager.default
-        for dir in skillDirs(projectCwd: projectCwd) {
-            guard let subdirs = try? fm.contentsOfDirectory(
-                at: dir,
-                includingPropertiesForKeys: [.isDirectoryKey]
-            ) else { continue }
-            let dirs = subdirs
-                .filter { (try? $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true }
-                .sorted { $0.lastPathComponent.localizedCaseInsensitiveCompare($1.lastPathComponent) == .orderedAscending }
-            for subdir in dirs {
-                guard !seen.contains(subdir.path) else { continue }
-                seen.insert(subdir.path)
-                // SKILL.md (canonical), fall back to skill.md just in case.
-                let skillMd = [subdir.appendingPathComponent("SKILL.md"),
-                               subdir.appendingPathComponent("skill.md")]
-                    .first { fm.fileExists(atPath: $0.path) }
-                let content = skillMd.flatMap { try? String(contentsOf: $0, encoding: .utf8) } ?? ""
-                let frontmatter = parseFrontmatter(content)
-                let displayName = frontmatter["name"]?.nilIfEmpty ?? subdir.lastPathComponent
-                let description = frontmatter["description"] ?? ""
-                result.append(ConfigItem(
-                    id: subdir.path,
-                    title: displayName,
-                    subtitle: description.isEmpty ? subdir.lastPathComponent : description,
-                    url: skillMd ?? subdir,
-                    kind: .skillDir
-                ))
-            }
-        }
-        return result
-    }
-
-    private static func loadMCPItems() -> [ConfigItem] {
-        // mcpServers can live in settings.json (and/or settings.local.json).
-        // Merge both, with local taking precedence.
-        var merged: [String: Any] = [:]
-        for name in ["settings.json", "settings.local.json"] {
-            let url = claudeDir.appendingPathComponent(name)
-            guard let data = try? Data(contentsOf: url),
-                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let servers = json["mcpServers"] as? [String: Any] else { continue }
-            for (k, v) in servers { merged[k] = v }
-        }
-        guard !merged.isEmpty else { return [] }
-
-        let settingsUrl = claudeDir.appendingPathComponent("settings.json")
-        return merged.keys.sorted().map { name in
-            let info = merged[name] as? [String: Any]
-            let command = describeMCPCommand(info)
-            return ConfigItem(
-                id: "mcp:\(name)",
-                title: name,
-                subtitle: command,
-                url: settingsUrl,
-                kind: .mcpServer(command: command)
-            )
-        }
-    }
-
-    /// Human-readable one-liner for an MCP server entry. Handles both
-    /// stdio (`command` + `args`) and remote (`url`/`type`) server shapes.
-    private static func describeMCPCommand(_ info: [String: Any]?) -> String {
-        guard let info else { return "unknown" }
-        if let cmd = info["command"] as? String {
-            let args = info["args"] as? [String] ?? []
-            return ([cmd] + args).joined(separator: " ")
-        }
-        if let url = info["url"] as? String {
-            let type = info["type"] as? String
-            return type.map { "\($0): \(url)" } ?? url
-        }
-        if let type = info["type"] as? String {
-            return type
-        }
-        return "unknown"
-    }
-
-    private static func loadClaudeMdItems(projectCwd: String?) -> [ConfigItem] {
-        var candidates: [(URL, String)] = [
-            (claudeDir.appendingPathComponent("CLAUDE.md"), "~/.claude/CLAUDE.md")
-        ]
-        if let cwd = projectCwd {
-            let proj = URL(fileURLWithPath: cwd).appendingPathComponent("CLAUDE.md")
-            candidates.append((proj, "\(URL(fileURLWithPath: cwd).lastPathComponent)/CLAUDE.md"))
-        }
-        return candidates.compactMap { (url, label) in
-            guard FileManager.default.fileExists(atPath: url.path) else { return nil }
-            let attrs = try? FileManager.default.attributesOfItem(atPath: url.path)
-            let size = (attrs?[.size] as? Int).map { formatBytes($0) } ?? "?"
-            let modified = (attrs?[.modificationDate] as? Date).map { relativeDateString($0) } ?? ""
-            return ConfigItem(
-                id: url.path,
-                title: label,
-                subtitle: "\(size) · \(modified)",
-                url: url,
-                kind: .markdownFile
-            )
-        }
-    }
-
-    // MARK: Formatting helpers
-
-    static func formatBytes(_ bytes: Int) -> String {
-        if bytes < 1024 { return "\(bytes) B" }
-        if bytes < 1024 * 1024 { return String(format: "%.1f KB", Double(bytes) / 1024) }
-        return String(format: "%.1f MB", Double(bytes) / (1024 * 1024))
-    }
-
-    static func relativeDateString(_ date: Date) -> String {
-        let f = RelativeDateTimeFormatter()
-        f.unitsStyle = .abbreviated
-        return f.localizedString(for: date, relativeTo: Date())
     }
 }
 
@@ -394,17 +291,18 @@ private extension String {
     var nilIfEmpty: String? { isEmpty ? nil : self }
 }
 
-// MARK: - Item row
+// MARK: - Item row (generic)
 
 struct ConfigItemRow: View {
-    let item: ConfigItem
+    let title: String
+    let subtitle: String
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(item.title)
+            Text(title)
                 .font(.system(size: 13, weight: .medium))
                 .lineLimit(1)
-            Text(item.subtitle)
+            Text(subtitle)
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
@@ -413,120 +311,561 @@ struct ConfigItemRow: View {
     }
 }
 
-// MARK: - Detail view
+// MARK: - Shared header card
 
-struct ConfigDetailView: View {
-    let item: ConfigItem
+struct ConfigDetailHeader: View {
+    let title: String
+    let subtitle: String
+    var trailing: AnyView?
 
-    @State private var content: String = ""
-    @State private var frontmatter: [String: String] = [:]
-    @State private var bodyText: String = ""
-    @State private var fileSize: String = ""
-    @State private var modifiedDate: String = ""
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.title2.weight(.semibold))
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
+            Spacer()
+            trailing
+        }
+        .padding(16)
+        .glassCard()
+    }
+}
+
+// MARK: - Skill detail (mutable: edit + delete)
+
+struct SkillDetailView: View {
+    let item: CcSkillItem
+    let state: AppState
+    let cwd: String?
+    let onMutated: () async -> Void
+
+    @State private var editedBody: String = ""
+    @State private var isSaving = false
+    @State private var isDeleting = false
+    @State private var statusMessage: String?
+    @State private var isDirty = false
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                headerCard
+                ConfigDetailHeader(
+                    title: item.frontmatter["name"]?.nilIfEmpty ?? item.name,
+                    subtitle: item.path,
+                    trailing: AnyView(mutationControls)
+                )
 
-                switch item.kind {
-                case .jsonFile:
-                    jsonContentView
-                case .markdownFile, .skillDir:
-                    markdownContentView
-                case .mcpServer(let command):
-                    mcpDetailView(command: command)
+                if !item.frontmatter.isEmpty {
+                    FrontmatterCard(frontmatter: item.frontmatter)
+                }
+
+                VStack(alignment: .leading, spacing: 12) {
+                    SectionHeader(title: "SKILL.md")
+                    TextEditor(text: $editedBody)
+                        .font(.system(.caption, design: .monospaced))
+                        .frame(minHeight: 300)
+                        .padding(12)
+                        .glassCard()
+                        .onChange(of: editedBody) { _, _ in isDirty = true }
+                }
+
+                if let statusMessage {
+                    Text(statusMessage).font(.caption).foregroundStyle(.secondary)
                 }
             }
             .padding(20)
         }
         .background(ThemeBackground())
-        .onAppear { loadContent() }
-        .onChange(of: item) { _, _ in loadContent() }
+        .onAppear { editedBody = item.preview; isDirty = false }
+        .onChange(of: item.id) { _, _ in editedBody = item.preview; isDirty = false; statusMessage = nil }
     }
 
-    // MARK: Sub-views
-
-    private var headerCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(item.title)
-                        .font(.title2.weight(.semibold))
-                    Text(displayPath)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .textSelection(.enabled)
+    private var mutationControls: some View {
+        HStack(spacing: 8) {
+            if isDirty {
+                Button {
+                    Task { await save() }
+                } label: {
+                    Label(isSaving ? "Saving…" : "Save", systemImage: "square.and.arrow.down")
+                        .font(.caption.weight(.medium))
                 }
-                Spacer()
-                revealButton
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+                .disabled(isSaving)
             }
+            Button(role: .destructive) {
+                Task { await delete() }
+            } label: {
+                Label(isDeleting ? "Deleting…" : "Delete", systemImage: "trash")
+                    .font(.caption.weight(.medium))
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .disabled(isDeleting)
+        }
+    }
 
-            if !fileSize.isEmpty || !modifiedDate.isEmpty {
-                HStack(spacing: 16) {
-                    if !fileSize.isEmpty {
-                        Label(fileSize, systemImage: "doc")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+    private func save() async {
+        isSaving = true
+        defer { isSaving = false }
+        do {
+            let result = try await state.ccWriteFile(scope: item.scope, type: "skills", name: item.name, content: editedBody, cwd: cwd)
+            isDirty = false
+            statusMessage = result.backupPath != nil ? "Saved — backup created at \(result.backupPath!)" : "Saved."
+            await onMutated()
+        } catch {
+            statusMessage = "Save failed: \(error.localizedDescription)"
+        }
+    }
+
+    private func delete() async {
+        isDeleting = true
+        defer { isDeleting = false }
+        do {
+            _ = try await state.ccDeleteFile(scope: item.scope, type: "skills", name: item.name, cwd: cwd)
+            await onMutated()
+        } catch {
+            statusMessage = "Delete failed: \(error.localizedDescription)"
+        }
+    }
+}
+
+// MARK: - Simple MD detail (agents / commands / output-styles — mutable)
+
+struct MdDetailView: View {
+    let item: CcMdItem
+    let mutableType: String
+    let state: AppState
+    let cwd: String?
+    let onMutated: () async -> Void
+
+    @State private var editedBody: String = ""
+    @State private var isSaving = false
+    @State private var isDeleting = false
+    @State private var statusMessage: String?
+    @State private var isDirty = false
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                ConfigDetailHeader(
+                    title: item.frontmatter["name"]?.nilIfEmpty ?? item.name,
+                    subtitle: item.file,
+                    trailing: AnyView(mutationControls)
+                )
+
+                if !item.frontmatter.isEmpty {
+                    FrontmatterCard(frontmatter: item.frontmatter)
+                }
+
+                VStack(alignment: .leading, spacing: 12) {
+                    SectionHeader(title: "Content")
+                    TextEditor(text: $editedBody)
+                        .font(.system(.caption, design: .monospaced))
+                        .frame(minHeight: 300)
+                        .padding(12)
+                        .glassCard()
+                        .onChange(of: editedBody) { _, _ in isDirty = true }
+                }
+
+                if let statusMessage {
+                    Text(statusMessage).font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            .padding(20)
+        }
+        .background(ThemeBackground())
+        .onAppear { editedBody = item.preview; isDirty = false }
+        .onChange(of: item.id) { _, _ in editedBody = item.preview; isDirty = false; statusMessage = nil }
+    }
+
+    private var mutationControls: some View {
+        HStack(spacing: 8) {
+            if isDirty {
+                Button {
+                    Task { await save() }
+                } label: {
+                    Label(isSaving ? "Saving…" : "Save", systemImage: "square.and.arrow.down")
+                        .font(.caption.weight(.medium))
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+                .disabled(isSaving)
+            }
+            Button(role: .destructive) {
+                Task { await delete() }
+            } label: {
+                Label(isDeleting ? "Deleting…" : "Delete", systemImage: "trash")
+                    .font(.caption.weight(.medium))
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .disabled(isDeleting)
+        }
+    }
+
+    private func save() async {
+        isSaving = true
+        defer { isSaving = false }
+        do {
+            let result = try await state.ccWriteFile(scope: item.scope, type: mutableType, name: item.name, content: editedBody, cwd: cwd)
+            isDirty = false
+            statusMessage = result.backupPath != nil ? "Saved — backup created at \(result.backupPath!)" : "Saved."
+            await onMutated()
+        } catch {
+            statusMessage = "Save failed: \(error.localizedDescription)"
+        }
+    }
+
+    private func delete() async {
+        isDeleting = true
+        defer { isDeleting = false }
+        do {
+            _ = try await state.ccDeleteFile(scope: item.scope, type: mutableType, name: item.name, cwd: cwd)
+            await onMutated()
+        } catch {
+            statusMessage = "Delete failed: \(error.localizedDescription)"
+        }
+    }
+}
+
+// MARK: - Memory (CLAUDE.md) detail — mutable, no `name`
+
+struct MemoryDetailView: View {
+    let item: CcMemoryItem
+    let state: AppState
+    let cwd: String?
+    let onMutated: () async -> Void
+
+    @State private var editedBody: String = ""
+    @State private var isSaving = false
+    @State private var statusMessage: String?
+    @State private var isDirty = false
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                ConfigDetailHeader(
+                    title: item.scope == "user" ? "~/.claude/CLAUDE.md" : "Project CLAUDE.md",
+                    subtitle: item.file,
+                    trailing: AnyView(
+                        Group {
+                            if isDirty {
+                                Button {
+                                    Task { await save() }
+                                } label: {
+                                    Label(isSaving ? "Saving…" : "Save", systemImage: "square.and.arrow.down")
+                                        .font(.caption.weight(.medium))
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .controlSize(.small)
+                                .disabled(isSaving)
+                            }
+                        }
+                    )
+                )
+
+                VStack(alignment: .leading, spacing: 12) {
+                    SectionHeader(title: "Content")
+                    TextEditor(text: $editedBody)
+                        .font(.system(.caption, design: .monospaced))
+                        .frame(minHeight: 400)
+                        .padding(12)
+                        .glassCard()
+                        .onChange(of: editedBody) { _, _ in isDirty = true }
+                }
+
+                if let statusMessage {
+                    Text(statusMessage).font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            .padding(20)
+        }
+        .background(ThemeBackground())
+        .onAppear { editedBody = item.preview; isDirty = false }
+        .onChange(of: item.id) { _, _ in editedBody = item.preview; isDirty = false; statusMessage = nil }
+    }
+
+    private func save() async {
+        isSaving = true
+        defer { isSaving = false }
+        do {
+            let result = try await state.ccWriteFile(scope: item.scope, type: "memory", name: nil, content: editedBody, cwd: cwd)
+            isDirty = false
+            statusMessage = result.backupPath != nil ? "Saved — backup created at \(result.backupPath!)" : "Saved."
+            await onMutated()
+        } catch {
+            statusMessage = "Save failed: \(error.localizedDescription)"
+        }
+    }
+}
+
+// MARK: - MCP server detail (read-only — never mutable, per CcMutate's hard constraints)
+
+struct McpDetailView: View {
+    let server: CcMcpServer
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                ConfigDetailHeader(title: server.name, subtitle: server.source)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    SectionHeader(title: "Server Details")
+                    detailRow("Kind", server.kind)
+                    if let url = server.url { detailRow("URL", url) }
+                    if let command = server.command {
+                        detailRow("Command", ([command] + (server.args ?? [])).joined(separator: " "))
                     }
-                    if !modifiedDate.isEmpty {
-                        Label(modifiedDate, systemImage: "clock")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                    if let envNames = server.envNames, !envNames.isEmpty {
+                        detailRow("Env vars", envNames.joined(separator: ", "))
+                    }
+                    if let headers = server.headers, !headers.isEmpty {
+                        detailRow("Headers", headers.joined(separator: ", "))
                     }
                 }
+                .padding(14)
+                .glassCard()
+
+                Text("MCP servers are read-only here — they have concurrent-write races with the live Claude Code CLI, so this explorer never mutates them.")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(20)
+        }
+        .background(ThemeBackground())
+    }
+
+    private func detailRow(_ label: String, _ value: String) -> some View {
+        HStack(alignment: .top) {
+            Text(label)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 90, alignment: .leading)
+            Text(value)
+                .font(.system(.caption, design: .monospaced))
+                .textSelection(.enabled)
+                .foregroundStyle(.primary)
+        }
+        .padding(.vertical, 3)
+    }
+}
+
+// MARK: - Settings surface (read-only aggregate: settings.json sources + overview + hooks + keybindings + statusline)
+
+struct SettingsSurfaceView: View {
+    let state: AppState
+    let cwd: String?
+
+    @State private var overview: CcOverview?
+    @State private var settingsSources: [CcSettingsSource] = []
+    @State private var hooks: [CcHooksSource] = []
+    @State private var keybindings: CcKeybindingsResponse?
+    @State private var statusline: CcStatuslineResponse?
+    @State private var loadError: String?
+    @State private var loaded = false
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                if let overview {
+                    overviewCard(overview)
+                }
+                ForEach(settingsSources) { source in
+                    settingsSourceCard(source)
+                }
+                if !hooks.isEmpty {
+                    hooksCard
+                }
+                if let keybindings, keybindings.exists {
+                    keybindingsCard(keybindings)
+                }
+                if let statusline, statusline.config != nil || !statusline.scripts.isEmpty {
+                    statuslineCard(statusline)
+                }
+                if let loadError {
+                    Text(loadError).font(.caption).foregroundStyle(.red)
+                }
+            }
+            .padding(20)
+        }
+        .background(ThemeBackground())
+        .task {
+            guard !loaded else { return }
+            loaded = true
+            await load()
+        }
+    }
+
+    private func load() async {
+        do {
+            async let ov = state.ccOverview(cwd: cwd)
+            async let settings = state.ccSettings(cwd: cwd)
+            async let hooksData = state.ccHooks(cwd: cwd)
+            async let kb = state.ccKeybindings()
+            async let sl = state.ccStatusline()
+            let (o, s, h, k, l) = try await (ov, settings, hooksData, kb, sl)
+            overview = o
+            settingsSources = s
+            hooks = h
+            keybindings = k
+            statusline = l
+        } catch {
+            loadError = error.localizedDescription
+        }
+    }
+
+    private func overviewCard(_ overview: CcOverview) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            SectionHeader(title: "Overview")
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                overviewStat("Skills", overview.counts.skills.user + overview.counts.skills.project)
+                overviewStat("Agents", overview.counts.agents.user + overview.counts.agents.project)
+                overviewStat("Commands", overview.counts.commands.user + overview.counts.commands.project)
+                overviewStat("Output Styles", overview.counts.outputStyles.user + overview.counts.outputStyles.project)
+                overviewStat("Plugins", overview.counts.plugins)
+                overviewStat("Marketplaces", overview.counts.marketplaces)
+                overviewStat("MCP Servers", overview.counts.mcpServers.user + overview.counts.mcpServers.project)
+                overviewStat("Keybindings", overview.counts.keybindings)
+                overviewStat("Memory Files", overview.counts.memory)
             }
         }
         .padding(16)
         .glassCard()
     }
 
-    private var revealButton: some View {
-        Button {
-            NSWorkspace.shared.activateFileViewerSelecting([item.url])
-        } label: {
-            Label("Reveal", systemImage: "arrow.right.circle")
-                .font(.caption.weight(.medium))
-        }
-        .buttonStyle(.bordered)
-        .controlSize(.small)
-        .tint(Theme.accent)
-    }
-
-    private var jsonContentView: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            SectionHeader(title: "Contents")
-            ScrollView(.horizontal, showsIndicators: false) {
-                Text(prettyJSON(content))
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundStyle(.primary)
-                    .textSelection(.enabled)
-                    .padding(16)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .glassCard()
-            }
+    private func overviewStat(_ label: String, _ value: Int) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text("\(value)").font(.title3.weight(.semibold))
+            Text(label).font(.caption2).foregroundStyle(.secondary)
         }
     }
 
-    private var markdownContentView: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            if !frontmatter.isEmpty {
-                frontmatterCard
+    private func settingsSourceCard(_ source: CcSettingsSource) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                SectionHeader(title: source.scope)
+                Spacer()
+                Text(source.exists ? "\(source.rawSize ?? 0) bytes" : "missing")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
             }
-            VStack(alignment: .leading, spacing: 12) {
-                SectionHeader(title: "Content")
-                Text(bodyText.isEmpty ? "(empty)" : bodyText)
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundStyle(.primary)
-                    .textSelection(.enabled)
-                    .padding(16)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .glassCard()
+            Text(source.file)
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+                .textSelection(.enabled)
+            if let data = source.data {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    Text(data.prettyText)
+                        .font(.system(.caption2, design: .monospaced))
+                        .textSelection(.enabled)
+                        .padding(10)
+                }
+                .frame(maxHeight: 200)
+                .background(Color.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: 8))
             }
         }
+        .padding(14)
+        .glassCard()
     }
 
-    private var frontmatterCard: some View {
+    private var hooksCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            SectionHeader(title: "Hooks")
+            ForEach(hooks) { source in
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("\(source.scope) — \(source.exists ? "\(source.hooks.count) event type(s)" : "no settings file")")
+                        .font(.caption.weight(.medium))
+                    ForEach(Array(source.hooks.keys.sorted()), id: \.self) { event in
+                        Text(event).font(.caption2).foregroundStyle(.secondary)
+                    }
+                }
+                if source.scope != hooks.last?.scope { Divider().opacity(0.2) }
+            }
+        }
+        .padding(14)
+        .glassCard()
+    }
+
+    private func keybindingsCard(_ kb: CcKeybindingsResponse) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            SectionHeader(title: "Keybindings", trailing: "\(kb.groups.reduce(0) { $0 + $1.bindings.count }) bindings")
+            ForEach(kb.groups) { group in
+                Text(group.context).font(.caption.weight(.medium))
+            }
+        }
+        .padding(14)
+        .glassCard()
+    }
+
+    private func statuslineCard(_ sl: CcStatuslineResponse) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            SectionHeader(title: "Status Line")
+            if !sl.scripts.isEmpty {
+                ForEach(sl.scripts) { script in
+                    Text(script.file).font(.caption2.monospaced()).foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding(14)
+        .glassCard()
+    }
+}
+
+// MARK: - Backup detail (restore-by-copy is out of scope; this is a browser)
+
+struct BackupDetailView: View {
+    let backup: CcBackup
+    let state: AppState
+    let cwd: String?
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                ConfigDetailHeader(
+                    title: "\(backup.type)/\(backup.name)",
+                    subtitle: backup.backupPath
+                )
+                VStack(alignment: .leading, spacing: 8) {
+                    SectionHeader(title: "Backup Details")
+                    row("Scope", backup.scope)
+                    row("Type", backup.type)
+                    row("Kind", backup.isDir ? "directory" : "file")
+                    if let size = backup.size {
+                        row("Size", ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file))
+                    }
+                    row("Created", Theme.shortDate(Date(timeIntervalSince1970: backup.mtime / 1000)))
+                }
+                .padding(14)
+                .glassCard()
+
+                Text("Backups are created automatically before every edit or delete of a mutable artifact (skills, agents, commands, output styles, memory). Restoring isn't wired up yet — copy the path above manually if you need to recover a version.")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(20)
+        }
+        .background(ThemeBackground())
+    }
+
+    private func row(_ label: String, _ value: String) -> some View {
+        HStack {
+            Text(label).font(.caption.weight(.semibold)).foregroundStyle(.secondary).frame(width: 80, alignment: .leading)
+            Text(value).font(.caption).textSelection(.enabled)
+        }
+    }
+}
+
+// MARK: - Frontmatter card (shared)
+
+struct FrontmatterCard: View {
+    let frontmatter: [String: String]
+
+    var body: some View {
         let keys = frontmatter.keys.sorted()
         return VStack(alignment: .leading, spacing: 10) {
             SectionHeader(title: "Frontmatter")
@@ -553,111 +892,6 @@ struct ConfigDetailView: View {
             .glassCard(radius: 10)
         }
     }
-
-    private func mcpDetailView(command: String) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            SectionHeader(title: "Server Details")
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Text("Name")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 80, alignment: .leading)
-                    Text(item.title)
-                        .font(.caption)
-                        .textSelection(.enabled)
-                }
-                Divider().opacity(0.3)
-                HStack(alignment: .top) {
-                    Text("Command")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 80, alignment: .leading)
-                    Text(command)
-                        .font(.system(.caption, design: .monospaced))
-                        .textSelection(.enabled)
-                        .foregroundStyle(.primary)
-                }
-                if !mcpServerJSON.isEmpty {
-                    Divider().opacity(0.3)
-                    HStack(alignment: .top) {
-                        Text("Config")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                            .frame(width: 80, alignment: .leading)
-                        Text(mcpServerJSON)
-                            .font(.system(.caption2, design: .monospaced))
-                            .textSelection(.enabled)
-                            .foregroundStyle(.primary)
-                    }
-                }
-            }
-            .padding(14)
-            .glassCard()
-        }
-    }
-
-    // MARK: Load
-
-    private func loadContent() {
-        content = ""
-        frontmatter = [:]
-        bodyText = ""
-        fileSize = ""
-        modifiedDate = ""
-
-        switch item.kind {
-        case .mcpServer, .jsonFile:
-            content = (try? String(contentsOf: item.url, encoding: .utf8)) ?? ""
-            loadFileMeta(item.url)
-
-        case .markdownFile, .skillDir:
-            let raw = (try? String(contentsOf: item.url, encoding: .utf8)) ?? ""
-            let parsed = parseFrontmatterAndBody(raw)
-            frontmatter = parsed.0
-            bodyText = parsed.1
-            loadFileMeta(item.url)
-        }
-    }
-
-    private func loadFileMeta(_ url: URL) {
-        let attrs = try? FileManager.default.attributesOfItem(atPath: url.path)
-        if let size = attrs?[.size] as? Int {
-            fileSize = ConfigLoader.formatBytes(size)
-        }
-        if let date = attrs?[.modificationDate] as? Date {
-            let f = DateFormatter()
-            f.dateStyle = .medium
-            f.timeStyle = .short
-            modifiedDate = f.string(from: date)
-        }
-    }
-
-    // MARK: Helpers
-
-    private var displayPath: String {
-        let homePath = FileManager.default.homeDirectoryForCurrentUser.path
-        return item.url.path.replacingOccurrences(of: homePath, with: "~")
-    }
-
-    private var mcpServerJSON: String {
-        guard let data = content.data(using: .utf8),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let servers = json["mcpServers"] as? [String: Any],
-              let serverInfo = servers[item.title] else { return "" }
-        let formatted = try? JSONSerialization.data(withJSONObject: serverInfo, options: [.prettyPrinted, .sortedKeys])
-        return (formatted.flatMap { String(data: $0, encoding: .utf8) }) ?? ""
-    }
-
-    private func prettyJSON(_ raw: String) -> String {
-        guard let data = raw.data(using: .utf8),
-              let obj = try? JSONSerialization.jsonObject(with: data),
-              let pretty = try? JSONSerialization.data(withJSONObject: obj, options: [.prettyPrinted, .sortedKeys]),
-              let str = String(data: pretty, encoding: .utf8) else {
-            return raw.isEmpty ? "(empty)" : raw
-        }
-        return str
-    }
 }
 
 // MARK: - Empty detail placeholder
@@ -679,42 +913,6 @@ struct ConfigEmptyDetail: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(ThemeBackground())
     }
-}
-
-// MARK: - Frontmatter parser
-
-/// Parses simple YAML frontmatter delimited by `---` lines.
-/// Returns (frontmatter dict, body string). No nested YAML support needed.
-private func parseFrontmatter(_ text: String) -> [String: String] {
-    parseFrontmatterAndBody(text).0
-}
-
-private func parseFrontmatterAndBody(_ text: String) -> ([String: String], String) {
-    let lines = text.components(separatedBy: "\n")
-    guard lines.first?.trimmingCharacters(in: .whitespaces) == "---" else {
-        return ([:], text)
-    }
-
-    var dict: [String: String] = [:]
-    var i = 1
-    while i < lines.count {
-        let line = lines[i]
-        if line.trimmingCharacters(in: .whitespaces) == "---" {
-            i += 1
-            break
-        }
-        if let colonRange = line.range(of: ":") {
-            let key = String(line[line.startIndex..<colonRange.lowerBound]).trimmingCharacters(in: .whitespaces)
-            let value = String(line[colonRange.upperBound...]).trimmingCharacters(in: .whitespaces)
-            if !key.isEmpty {
-                dict[key] = value
-            }
-        }
-        i += 1
-    }
-
-    let body = lines[i...].joined(separator: "\n").trimmingCharacters(in: .newlines)
-    return (dict, body)
 }
 
 #endif
