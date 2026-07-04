@@ -13,15 +13,17 @@ INFO_PLIST="$APP_BUNDLE/Contents/Info.plist"
 
 echo "▶ Building…"
 cd "$SCRIPT_DIR"
-# Only the macOS app product — the package also vends podium-server /
-# podium-hook (cross-platform daemon + hook binaries), which run.sh doesn't
-# need to build for the native app flow.
+# PodiumApp embeds the server in-process (P5.1) but still shells out to the
+# native podium-hook binary for Claude Code hook events (EmbeddedServer.swift
+# installs it into ~/.claude/podium/), so it needs to be built and bundled too.
 swift build --product PodiumApp 2>&1
+swift build --product podium-hook 2>&1
 
 echo "▶ Assembling .app bundle…"
 mkdir -p "$MACOS_DIR" "$RESOURCES_DIR"
 
 cp "$BUILD_DIR/PodiumApp" "$MACOS_DIR/PodiumApp"
+cp "$BUILD_DIR/podium-hook" "$RESOURCES_DIR/podium-hook"
 
 # App icon: bundle AppIcon.icns from the repo root if present (same brand
 # icon install.sh ships in the release build — see AppIcon.icns generated
