@@ -24,10 +24,16 @@ private extension Array where Element == Session {
 struct WorkflowsView: View {
     @Environment(AppState.self) var state
     @State private var selectedSessionId: String? = nil
-    @State private var workflowData: WorkflowSessionRaw? = nil
+    @State private var workflowData: WorkflowDetail? = nil
     @State private var isLoadingWorkflow = false
     @State private var loaded = false
     @State private var range: TimeRange = .week
+
+    // Real cross-session aggregate from GET /api/workflows (gap #2 fix —
+    // this used to be faked client-side from /api/sessions + /api/analytics).
+    @State private var summary: WorkflowSummary? = nil
+    @State private var isLoadingSummary = false
+    @State private var summaryError: String? = nil
 
     private var filteredSessions: [Session] {
         state.sessions.filtered(by: range)
@@ -40,12 +46,12 @@ struct WorkflowsView: View {
 
                 sessionDrilldownSection
 
-                if let analytics = state.analytics, !analytics.agentTypes.isEmpty {
-                    agentTypeSection(analytics.agentTypes)
+                if let summary, !summary.orchestration.subagentTypes.isEmpty {
+                    agentTypeSection(summary.orchestration.subagentTypes)
                 }
 
-                if let analytics = state.analytics, !analytics.toolUsage.isEmpty {
-                    toolFlowSection(analytics.toolUsage)
+                if let summary, !summary.toolFlow.toolCounts.isEmpty {
+                    toolFlowSection(summary.toolFlow.toolCounts)
                 }
 
                 patternSection
@@ -56,13 +62,13 @@ struct WorkflowsView: View {
             guard !loaded else { return }
             loaded = true
             if state.sessions.isEmpty { await state.refresh() }
-            await state.loadAnalytics()
+            await loadSummary()
         }
         .onChange(of: selectedSessionId) { _, id in
             guard let id else { workflowData = nil; return }
             isLoadingWorkflow = true
             Task {
-                workflowData = try? await state.loadWorkflow(id)
+                workflowData = try? await state.loadWorkflowDetail(id)
                 isLoadingWorkflow = false
             }
         }
@@ -78,7 +84,7 @@ struct WorkflowsView: View {
             }
             ToolbarItem {
                 Button {
-                    Task { await state.loadAnalytics() }
+                    Task { await loadSummary() }
                 } label: {
                     Label("Refresh", systemImage: "arrow.clockwise")
                 }
@@ -86,16 +92,27 @@ struct WorkflowsView: View {
         }
     }
 
+    private func loadSummary() async {
+        isLoadingSummary = true
+        defer { isLoadingSummary = false }
+        do {
+            summary = try await state.loadWorkflowSummary()
+            summaryError = nil
+        } catch {
+            summaryError = error.localizedDescription
+        }
+    }
+
     // MARK: - Stats Row
 
     @ViewBuilder
     var workflowStatsRow: some View {
-        let sessions = filteredSessions
-        let totalSessions = sessions.count
-        let totalAgents = sessions.compactMap(\.agentCount).reduce(0, +)
-        let avgSubagents: Double = totalSessions > 0
-            ? Double(totalAgents) / Double(totalSessions)
-            : 0
+        let stats = summary?.stats
+        let totalSessions = stats?.totalSessions ?? filteredSessions.count
+        let totalAgents = stats?.totalAgents ?? filteredSessions.compactMap(\.agentCount).reduce(0, +)
+        let avgSubagents = stats?.avgSubagents ?? {
+            totalSessions > 0 ? Double(totalAgents) / Double(totalSessions) : 0
+        }()
         let peakConcurrency = state.stats?.activeAgents ?? 0
 
         HStack(spacing: 16) {
@@ -240,7 +257,7 @@ struct WorkflowsView: View {
     // MARK: - Agent Type Distribution
 
     @ViewBuilder
-    func agentTypeSection(_ types: [Analytics.AgentTypeStat]) -> some View {
+    func agentTypeSection(_ types: [WorkflowSummary.Orchestration.SubagentTypeOutcome]) -> some View {
         let sorted = types.sorted { $0.count > $1.count }.prefix(10)
         let total = sorted.reduce(0) { $0 + $1.count }
 
@@ -295,7 +312,7 @@ struct WorkflowsView: View {
     // MARK: - Tool Execution Flow
 
     @ViewBuilder
-    func toolFlowSection(_ tools: [Analytics.ToolUsageStat]) -> some View {
+    func toolFlowSection(_ tools: [WorkflowSummary.ToolFlow.ToolCount]) -> some View {
         let sorted = tools.sorted { $0.count > $1.count }.prefix(12)
         let maxCount = sorted.map(\.count).max() ?? 1
 
