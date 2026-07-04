@@ -6,11 +6,8 @@
 // view — all fed by the new `GET /api/diagnostics` endpoint
 // (`Sources/PodiumServer/Routes/DiagnosticsRouter.swift`).
 //
-// NOT WIRED INTO NAVIGATION: this file only defines the view. Hooking it
-// into `ContentView`'s sidebar/NavigationSplitView is left to whoever owns
-// that file this task (see this task's final report for the one-line note
-// on where to add it) since `ContentView.swift`/`SettingsView.swift` may be
-// touched by parallel work.
+// Wired into navigation via a "System" sidebar section in
+// ContentView.swift (NavDestination.diagnostics).
 //
 // Polling: follows the same convention as the rest of the app's
 // "self-contained tab" views (`HooksTab`, `PricingTab` in SettingsView.swift)

@@ -14,6 +14,7 @@ enum NavDestination: Hashable {
     case importSession
     case run
     case configExplorer
+    case diagnostics
 }
 
 // MARK: - Content View
@@ -44,6 +45,7 @@ struct ContentView: View {
                 case .importSession: ImportSessionView()
                 case .run:          RunView()
                 case .configExplorer: ConfigExplorerView()
+                case .diagnostics:  DiagnosticsView()
                 }
             }
         }
@@ -160,6 +162,13 @@ struct Sidebar: View {
                 SidebarRow(icon: "folder.badge.gearshape", label: "CC Config", value: .configExplorer)
             } header: {
                 Text("Discover")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+            Section {
+                SidebarRow(icon: "stethoscope", label: "Diagnostics", value: .diagnostics)
+            } header: {
+                Text("System")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
             }
