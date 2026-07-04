@@ -304,3 +304,100 @@ final class LegacyImporterTests: XCTestCase {
         XCTAssertEqual(files, ["top.jsonl", "deep.jsonl"])
     }
 }
+
+/// F1 perf regression: a 50-session corpus, imported+backfilled twice.
+/// Kept CI-fast (tens of ms), but shaped like the real-world symptom
+/// (`POST /api/settings/reimport` re-scanning the whole corpus on every
+/// call) — the SECOND pass must do near-zero parsing work, verified two
+/// ways: (1) deterministic counters (`skipped == sessionCount`, nothing
+/// re-imported/re-backfilled — not timing-based, so it can't flake on a
+/// loaded CI runner), and (2) a generous wall-clock ratio ceiling as a
+/// coarse regression guard against the skip-cache silently regressing back
+/// into a full rescan.
+final class F1ImportSkipCacheRegressionTests: XCTestCase {
+    private var tempHome: URL!
+    private var tempDataDir: URL!
+    private var originalClaudeEnv: [String: String]!
+    private var originalPathsEnv: [String: String]!
+
+    override func setUpWithError() throws {
+        tempHome = FileManager.default.temporaryDirectory.appendingPathComponent("podium-f1-perf-home-\(UUID().uuidString)", isDirectory: true)
+        tempDataDir = FileManager.default.temporaryDirectory.appendingPathComponent("podium-f1-perf-data-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempHome, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: tempDataDir, withIntermediateDirectories: true)
+
+        originalClaudeEnv = ClaudeHome.environment
+        originalPathsEnv = PodiumPaths.environment
+        ClaudeHome.environment = ["CLAUDE_HOME": tempHome.path]
+        PodiumPaths.environment = ["DASHBOARD_DATA_DIR": tempDataDir.path]
+        ClaudeHome.resetOverrideCacheForTesting()
+    }
+
+    override func tearDownWithError() throws {
+        ClaudeHome.environment = originalClaudeEnv
+        PodiumPaths.environment = originalPathsEnv
+        ClaudeHome.resetOverrideCacheForTesting()
+        try? FileManager.default.removeItem(at: tempHome)
+        try? FileManager.default.removeItem(at: tempDataDir)
+    }
+
+    private let sessionCount = 50
+    private let turnsPerSession = 60
+
+    /// Writes `sessionCount` session JSONLs (each `turnsPerSession` assistant
+    /// turns with a tool_use/tool_result pair every 5th turn, plus one
+    /// compaction marker) — big enough that a full rescan is measurably
+    /// slower than a cache-hit skip, small enough to stay CI-fast either way.
+    private func writeCorpus() throws {
+        let projectsDir = tempHome.appendingPathComponent("projects", isDirectory: true)
+        for i in 0..<sessionCount {
+            let dir = projectsDir.appendingPathComponent("proj-\(i % 5)", isDirectory: true)
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            let path = dir.appendingPathComponent("sess-\(i).jsonl")
+
+            var lines = [
+                #"{"cwd":"/Users/test/project\#(i % 5)","slug":"demo","timestamp":"2024-01-01T00:00:00.000Z","type":"user","message":{"role":"user","content":"Hello"}}"#,
+            ]
+            for t in 0..<turnsPerSession {
+                let ts = String(format: "2024-01-01T00:%02d:%02d.000Z", (t * 5) / 60, (t * 5) % 60)
+                var content = #"[{"type":"text","text":"response text padded out a fair bit to be realistic"}]"#
+                if t % 5 == 0 {
+                    content = #"[{"type":"tool_use","id":"tu-\#(i)-\#(t)","name":"Bash","input":{"command":"ls -la"}}]"#
+                }
+                lines.append(#"{"timestamp":"\#(ts)","type":"assistant","message":{"role":"assistant","model":"claude-sonnet-4-5","content":\#(content),"usage":{"input_tokens":50,"output_tokens":20,"cache_read_input_tokens":5,"cache_creation_input_tokens":2}}}"#)
+            }
+            lines.append(#"{"timestamp":"2024-01-01T00:59:00.000Z","isCompactSummary":true,"uuid":"compact-\#(i)"}"#)
+            try lines.joined(separator: "\n").write(to: path, atomically: true, encoding: .utf8)
+            try FileManager.default.setAttributes([.modificationDate: Date().addingTimeInterval(-3600)], ofItemAtPath: path.path)
+        }
+    }
+
+    func testSecondImportBackfillPassDoesNearZeroParsing() throws {
+        try writeCorpus()
+        let store = try PodiumStore(path: tempDataDir.appendingPathComponent("dashboard.db").path)
+
+        let firstStart = Date()
+        let firstImport = try LegacyImporter.importAllSessions(store: store)
+        _ = try LegacyImporter.backfillCompactions(store: store)
+        let firstElapsed = Date().timeIntervalSince(firstStart)
+
+        XCTAssertEqual(firstImport.imported, sessionCount)
+
+        let secondStart = Date()
+        let secondImport = try LegacyImporter.importAllSessions(store: store)
+        let secondBackfilled = try LegacyImporter.backfillCompactions(store: store)
+        let secondElapsed = Date().timeIntervalSince(secondStart)
+
+        // Deterministic — not timing-based, so this can't flake: an
+        // unchanged corpus must be entirely served from the skip cache.
+        XCTAssertEqual(secondImport.imported, 0, "no file changed — nothing should be freshly imported")
+        XCTAssertEqual(secondImport.backfilled, 0, "no file changed — nothing new to backfill")
+        XCTAssertEqual(secondImport.skipped, sessionCount, "every unchanged session file must be served from the import_file_cache skip")
+        XCTAssertEqual(secondBackfilled, 0, "backfillCompactions must skip files whose fingerprint is unchanged")
+
+        // Coarse regression guard: a silent revert to full-rescan-on-every-call
+        // would make pass 2 roughly as slow as pass 1. Generous margin (4x)
+        // so this doesn't flake on a loaded CI runner.
+        XCTAssertLessThan(secondElapsed, firstElapsed / 4, "second pass should be dramatically faster than the first — got first=\(firstElapsed)s second=\(secondElapsed)s")
+    }
+}
