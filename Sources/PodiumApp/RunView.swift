@@ -159,7 +159,25 @@ private struct NewRunForm: View {
     @State private var cwd: String = ""
     @State private var mode: String = "conversation"
     @State private var model: String = ""
+    @State private var permissionMode: String = "acceptEdits"
+    @State private var effort: String = ""
     @State private var isRunning = false
+
+    private static let permissionModes: [(label: String, value: String)] = [
+        ("Accept Edits", "acceptEdits"),
+        ("Default", "default"),
+        ("Plan", "plan"),
+        ("Bypass Permissions", "bypassPermissions"),
+    ]
+
+    private static let effortLevels: [(label: String, value: String)] = [
+        ("Default", ""),
+        ("Low", "low"),
+        ("Medium", "medium"),
+        ("High", "high"),
+        ("X-High", "xhigh"),
+        ("Max", "max"),
+    ]
 
     private var canRun: Bool { !cwd.isEmpty && !prompt.isEmpty }
 
@@ -231,6 +249,32 @@ private struct NewRunForm: View {
                         .font(.callout)
                         .padding(10)
                         .glassCard()
+                }
+
+                // Permission mode
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Permission Mode")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                    Picker("", selection: $permissionMode) {
+                        ForEach(Self.permissionModes, id: \.value) { item in
+                            Text(item.label).tag(item.value)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                }
+
+                // Effort (optional)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Effort (optional)")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                    Picker("", selection: $effort) {
+                        ForEach(Self.effortLevels, id: \.value) { item in
+                            Text(item.label).tag(item.value)
+                        }
+                    }
+                    .pickerStyle(.segmented)
                 }
 
                 // Error

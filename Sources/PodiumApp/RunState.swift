@@ -14,6 +14,10 @@ final class RunState {
     var currentHandle: RunHandle?
     var isLoading = false
     var errorMessage: String?
+    /// Set briefly when a `run_input_ack` arrives for the selected run —
+    /// confirms a follow-up message was received by the subprocess's stdin.
+    /// Cleared by the view after showing a transient confirmation.
+    var lastInputAckAt: Date?
 
     private let api: PodiumAPI = {
         let host = UserDefaults.standard.string(forKey: "podium_host") ?? "localhost"
@@ -91,7 +95,7 @@ final class RunState {
 
     // MARK: Start a new run
 
-    func start(prompt: String, mode: String, cwd: String, model: String?) async {
+    func start(prompt: String, mode: String, cwd: String, model: String?, permissionMode: String = "acceptEdits", effort: String? = nil) async {
         errorMessage = nil
         do {
             let handle = try await api.createRun(
@@ -99,7 +103,8 @@ final class RunState {
                 mode: mode,
                 cwd: cwd,
                 model: model,
-                permissionMode: "acceptEdits"
+                permissionMode: permissionMode,
+                effort: effort
             )
             // Insert at front of list
             runs.insert(handle, at: 0)
@@ -186,6 +191,11 @@ final class RunState {
                     Task { await self.loadRuns() }
                 }
             }
+
+        case "run_input_ack":
+            guard let msg = try? JSONDecoder.podium.decode(RunInputAckMessage.self, from: data) else { return }
+            guard msg.data.id == selectedRunId else { return }
+            lastInputAckAt = Date(timeIntervalSince1970: msg.data.at / 1000)
 
         default:
             break

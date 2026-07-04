@@ -110,8 +110,16 @@ actor PodiumAPI {
 
     // MARK: Analytics
 
-    func analytics() async throws -> Analytics {
-        try await get("/api/analytics")
+    /// `tz_offset` (minutes, `Date().timeZoneOffsetMinutes` on the client —
+    /// i.e. `TimeZone.current.secondsFromGMT() / -60`, matching
+    /// JS `Date.getTimezoneOffset()`'s sign convention) shifts the server's
+    /// `daily_events`/`daily_sessions` bucketing into the caller's local
+    /// timezone. See `AnalyticsRouter.swift`.
+    func analytics(tzOffsetMinutes: Int? = nil) async throws -> Analytics {
+        guard let tzOffsetMinutes else { return try await get("/api/analytics") }
+        var comps = URLComponents(url: baseURL.appending(path: "/api/analytics"), resolvingAgainstBaseURL: false)!
+        comps.queryItems = [.init(name: "tz_offset", value: "\(tzOffsetMinutes)")]
+        return try await get(url: comps.url!)
     }
 
     // MARK: Cost
@@ -148,7 +156,7 @@ actor PodiumAPI {
         return try await get(url: comps.url!)
     }
 
-    func createRun(prompt: String, mode: String, cwd: String, model: String?, permissionMode: String) async throws -> RunHandle {
+    func createRun(prompt: String, mode: String, cwd: String, model: String?, permissionMode: String, effort: String? = nil) async throws -> RunHandle {
         var dict: [String: String] = [
             "prompt": prompt,
             "mode": mode,
@@ -156,6 +164,7 @@ actor PodiumAPI {
             "permissionMode": permissionMode
         ]
         if let m = model { dict["model"] = m }
+        if let effort, !effort.isEmpty { dict["effort"] = effort }
         let body = try JSONEncoder().encode(dict)
         return try await postDecodable("/api/run", body: body)
     }

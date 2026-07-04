@@ -159,7 +159,11 @@ final class AppState {
     func loadAnalytics() async {
         defer { isAnalyticsInitialLoad = false }
         do {
-            analytics = try await api.analytics()
+            // JS `Date.prototype.getTimezoneOffset()` sign convention: positive
+            // west of UTC, negative east — i.e. `-secondsFromGMT/60`. Matches
+            // what `AnalyticsRouter`'s `tz_offset` expects (see PodiumAPI.analytics).
+            let tzOffsetMinutes = -(TimeZone.current.secondsFromGMT() / 60)
+            analytics = try await api.analytics(tzOffsetMinutes: tzOffsetMinutes)
         } catch {
             // Keep any previously-loaded analytics visible; just surface the error.
             lastError = error.localizedDescription

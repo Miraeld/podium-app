@@ -10,6 +10,7 @@ struct RunHandle: Identifiable, Decodable {
     let cwd: String
     let model: String?
     let permissionMode: String
+    let effort: String?
     let prompt: String
     let status: String          // "spawning" | "running" | "completed" | "error" | "killed"
     let startedAt: Double       // epoch milliseconds
@@ -279,6 +280,19 @@ struct RunStatusMessage: Decodable {
     struct Payload: Decodable {
         let id: String
         let status: String
+    }
+}
+
+/// Acknowledges a message sent to a conversation-mode run via
+/// `POST /api/run/:id/message`. Matches `PodiumCore.RunInputAckPayload`
+/// (camelCase wire format — same `/api/run` family exception as the rest
+/// of this file).
+struct RunInputAckMessage: Decodable {
+    let data: Payload
+    struct Payload: Decodable {
+        let id: String
+        let messageId: String
+        let at: Double
     }
 }
 
