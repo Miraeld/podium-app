@@ -99,20 +99,30 @@ final class EmbeddedServer {
     /// stale/half-dead entry that happens to pass the PID check doesn't fool
     /// us into skipping hosting.
     ///
-    /// Deliberately does NOT require `.agent-dashboard.json` to exist before
-    /// checking: that file records servers *this machine's own* podium
-    /// processes wrote, so a containerized/external instance (e.g. Gaël's
-    /// production Docker container bind-mounting a different `~/.claude`
-    /// inside the container) will never appear in it, yet is exactly the
-    /// kind of already-live server task 2 says must win over hosting. A real
-    /// TCP health check against `preferredPort` (our own configured/default
-    /// port) is the ground truth; the info file's PID-checked entries are
-    /// just additional candidates in case the live server ended up on a
-    /// fallback port a previous launch chose.
+    /// Candidate ports checked, in order:
+    ///   1. `preferredPort` — our own configured/default port. This is the
+    ///      one candidate we check unconditionally, info file or not: it's
+    ///      also the exact port `PodiumServerLifecycle.run` would try to bind
+    ///      first, so confirming it's unreachable before hosting is the
+    ///      minimum needed to avoid a bind-fails-silently-retries-on-+1
+    ///      surprise, and confirming it *is* reachable catches containerized/
+    ///      external instances that never write `.agent-dashboard.json`
+    ///      (e.g. Gaël's production Docker container, which bind-mounts a
+    ///      different `~/.claude` inside the container and so never appears
+    ///      in this machine's discovery file — yet is exactly the kind of
+    ///      already-live server task 2 says must win over hosting).
+    ///   2. Any additional live entries from `.agent-dashboard.json` (only
+    ///      when that file actually exists and names PID-verified-live
+    ///      servers — `resolvePorts()`'s own `[4820]` guess-fallback for a
+    ///      missing/empty file is deliberately NOT trusted here, since that
+    ///      fallback exists for hooks' best-effort POST semantics, not for
+    ///      deciding whether *this app* should host).
     private static func discoverLiveExternalServer(preferredPort: Int) async -> Int? {
         var candidatePorts = [preferredPort]
-        for port in HookPortDiscovery.resolvePorts() where !candidatePorts.contains(port) {
-            candidatePorts.append(port)
+        if FileManager.default.fileExists(atPath: HookPortDiscovery.defaultInfoPath().path) {
+            for port in HookPortDiscovery.resolvePorts() where !candidatePorts.contains(port) {
+                candidatePorts.append(port)
+            }
         }
         for port in candidatePorts {
             if await healthCheck(port: port) {

@@ -75,7 +75,6 @@ final class AppState {
     /// so the rest of the app (which only ever reads `host`/`port`) needs
     /// zero changes regardless of which mode is active.
     func start() async {
-        FileHandle.standardError.write("DEBUG configuredPort=\(port) configuredHost=\(host)\n".data(using: .utf8)!)
         let resolved = await EmbeddedServer.shared.resolveAndStart(configuredHost: host, configuredPort: port)
         switch resolved {
         case .embedded(let boundPort), .externalClient(let boundPort):
