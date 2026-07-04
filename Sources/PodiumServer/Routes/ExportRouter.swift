@@ -72,6 +72,16 @@ public enum ExportRouterMount: RouterMount {
 
     // MARK: - POST /api/export/session · POST /api/import/session
 
+    /// Minimal shape used only to check `podium_export_version` before
+    /// attempting a full `SessionExportBundle` decode — needed to preserve
+    /// export.js's exact validation ORDER: (1) body must be a JSON object,
+    /// (2) version must match, (3) `session.id` must be present. Decoding
+    /// straight to `SessionExportBundle` would check those out of order
+    /// (a missing `session` throws before the version is ever inspected).
+    private struct VersionProbe: Decodable {
+        let podiumExportVersion: String?
+    }
+
     /// export.js lines 58–177. Validates `podium_export_version` and
     /// `session.id` before running the all-or-nothing import transaction.
     private static func importSession(_ req: Request, _ ctx: ServerRequestContext, context: ServerContext) async throws -> JSONResponse {
@@ -79,26 +89,27 @@ public enum ExportRouterMount: RouterMount {
         let buffer = try await mutableRequest.collectBody(upTo: importBodyLimit)
         let data = buffer.readableBytesView.isEmpty ? Data("{}".utf8) : Data(buffer.readableBytesView)
 
-        let bundle: SessionExportBundle
-        do {
-            bundle = try PodiumJSON.decoder.decode(SessionExportBundle.self, from: data)
-        } catch {
-            // Mirrors export.js's `!session || !session.id` INVALID_INPUT
-            // path — any decode failure means the body wasn't a usable
-            // bundle (missing/malformed `session` is the common case).
+        guard let probe = try? PodiumJSON.decoder.decode(VersionProbe.self, from: data) else {
             return try JSONResponse(
                 status: .badRequest,
-                CodedErrorResponse(code: "INVALID_INPUT", message: "bundle.session.id is required")
+                CodedErrorResponse(code: "INVALID_INPUT", message: "Request body must be a JSON object")
             )
         }
 
-        guard bundle.podiumExportVersion == SessionExportBundle.currentVersion else {
+        guard (probe.podiumExportVersion ?? "") == SessionExportBundle.currentVersion else {
             return try JSONResponse(
                 status: .badRequest,
                 CodedErrorResponse(
                     code: "UNSUPPORTED_VERSION",
                     message: "Only podium_export_version \"\(SessionExportBundle.currentVersion)\" is supported"
                 )
+            )
+        }
+
+        guard let bundle = try? PodiumJSON.decoder.decode(SessionExportBundle.self, from: data) else {
+            return try JSONResponse(
+                status: .badRequest,
+                CodedErrorResponse(code: "INVALID_INPUT", message: "bundle.session.id is required")
             )
         }
 
