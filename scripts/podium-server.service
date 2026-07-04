@@ -1,0 +1,22 @@
+[Unit]
+Description=Podium standalone server (REST + WebSocket API + web dashboard)
+After=network.target
+
+[Service]
+Type=simple
+# No --no-hooks: podium-server auto-installs the Claude Code hooks into
+# ~/.claude/settings.json on every startup (idempotent, non-fatal on
+# failure — see PodiumServerCLI.installHooksNonFatal), matching the P6.1
+# acceptance bar of "download -> open -> your agents appear live" with no
+# separate install step for this unit to run.
+#
+# No --web-dist / $PODIUM_WEB_DIST needed either: install-linux.sh copies
+# the vendored dashboard to /usr/local/share/podium/web, which
+# WebDistResolver.resolve() (Sources/PodiumServer/Static/StaticFileHandler.swift)
+# checks by default as the "installed Linux layout" fallback.
+ExecStart=/usr/local/bin/podium-server
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target

@@ -34,6 +34,17 @@ if [ -f "$SCRIPT_DIR/AppIcon.icns" ]; then
   ICON_KEY='  <key>CFBundleIconFile</key>        <string>AppIcon</string>'
 fi
 
+# Bundle the vendored web client so the embedded server (EmbeddedServer.swift)
+# can serve it straight from the .app bundle, same as a packaged release
+# (see scripts/package-macos.sh + WebDistResolver's bundle-Resources
+# fallback). Optional for dev: if WebClient/dist isn't present yet, the
+# server just falls back to resolving it from the repo tree directly.
+if [ -d "$SCRIPT_DIR/WebClient/dist" ]; then
+  rm -rf "$RESOURCES_DIR/WebClient"
+  mkdir -p "$RESOURCES_DIR/WebClient"
+  cp -R "$SCRIPT_DIR/WebClient/dist" "$RESOURCES_DIR/WebClient/dist"
+fi
+
 cat > "$INFO_PLIST" << PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"

@@ -8,3 +8,8 @@ PodiumApp.app/
 # Local signing team + generated Xcode project (see install.sh --widget / MIGRATION.md)
 .podium-team
 Podium.xcodeproj/
+# scripts/package-macos.sh + scripts/build-linux.sh output — root-anchored
+# so this doesn't also match the vendored WebClient/dist/ (tracked, see
+# WebClient/SYNC.md).
+/dist/
+/dist-linux/

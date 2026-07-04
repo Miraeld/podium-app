@@ -36,7 +36,14 @@ let package = Package(
         // hook ingestion, transcripts, discovery. No UI, no Apple-only APIs.
         .target(
             name: "PodiumCore",
-            dependencies: ["CSQLite"],
+            // swift-crypto: PodiumCore/Push (VAPID + RFC 8291) imports Crypto.
+            // Must be declared HERE, not only on PodiumServer — macOS builds
+            // mask a missing declaration via the shared build dir, but a clean
+            // Linux build fails (caught by the P6.1 docker verification).
+            dependencies: [
+                "CSQLite",
+                .product(name: "Crypto", package: "swift-crypto")
+            ],
             path: "Sources/PodiumCore"
         ),
 
