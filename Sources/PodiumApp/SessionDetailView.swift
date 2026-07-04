@@ -916,21 +916,18 @@ private struct BottomAnchorKey: PreferenceKey {
 struct ConversationTabView: View {
     let sessionId: String
     @Environment(AppState.self) var state
-    @State private var messages: [TranscriptMessage] = []
-    @State private var isLoading = false
-    @State private var hasMore = false
-    @State private var firstLine: Int? = nil
-    @State private var lastLine: Int? = nil
-    @State private var isAppendingLive = false
-    @State private var appendDebounce: Task<Void, Never>? = nil
-    @State private var isNearBottom = true
-    @State private var pendingNewCount = 0
+    @State private var store: TranscriptLiveStore
+
+    init(sessionId: String) {
+        self.sessionId = sessionId
+        _store = State(initialValue: TranscriptLiveStore(sessionId: sessionId))
+    }
 
     var body: some View {
         Group {
-            if isLoading && messages.isEmpty {
+            if store.isLoading && store.messages.isEmpty {
                 LoadingView()
-            } else if messages.isEmpty {
+            } else if store.messages.isEmpty {
                 EmptyStateView(
                     icon: "bubble.left.and.bubble.right",
                     title: "No Transcript",
@@ -942,15 +939,15 @@ struct ConversationTabView: View {
                         ZStack(alignment: .bottom) {
                             ScrollView {
                                 LazyVStack(spacing: 12) {
-                                    if hasMore {
+                                    if store.hasMore {
                                         Button("Load earlier messages") {
-                                            Task { await loadMore() }
+                                            Task { await store.loadMore() }
                                         }
                                         .buttonStyle(.plain)
                                         .foregroundStyle(.cyan)
                                         .padding(.top, 8)
                                     }
-                                    ForEach(Array(messages.enumerated()), id: \.offset) { _, message in
+                                    ForEach(Array(store.messages.enumerated()), id: \.offset) { _, message in
                                         MessageBubbleView(message: message)
                                     }
                                     Color.clear
@@ -970,19 +967,15 @@ struct ConversationTabView: View {
                             .onPreferenceChange(BottomAnchorKey.self) { minY in
                                 // Sentinel visible within ~120pt of the viewport's
                                 // bottom edge counts as "following along".
-                                let nearBottom = minY <= viewport.size.height + 120
-                                if nearBottom != isNearBottom {
-                                    isNearBottom = nearBottom
-                                    if nearBottom { pendingNewCount = 0 }
-                                }
+                                store.setNearBottom(minY <= viewport.size.height + 120)
                             }
 
-                            if pendingNewCount > 0 {
+                            if store.pendingNewCount > 0 {
                                 Button {
                                     withAnimation { proxy.scrollTo("bottomAnchor", anchor: .bottom) }
-                                    pendingNewCount = 0
+                                    store.acknowledgeJumpToLatest()
                                 } label: {
-                                    Label("\(pendingNewCount) new message\(pendingNewCount == 1 ? "" : "s")", systemImage: "arrow.down")
+                                    Label("\(store.pendingNewCount) new message\(store.pendingNewCount == 1 ? "" : "s")", systemImage: "arrow.down")
                                         .font(.caption.weight(.semibold))
                                         .padding(.horizontal, 12)
                                         .padding(.vertical, 6)
@@ -997,8 +990,8 @@ struct ConversationTabView: View {
                             }
                         }
                         .coordinateSpace(name: "conversationViewport")
-                        .onChange(of: messages.count) { _, _ in
-                            if isNearBottom {
+                        .onChange(of: store.messages.count) { _, _ in
+                            if store.isNearBottom {
                                 withAnimation { proxy.scrollTo("bottomAnchor", anchor: .bottom) }
                             }
                         }
@@ -1006,63 +999,14 @@ struct ConversationTabView: View {
                 }
             }
         }
-        .task(id: sessionId) { await loadTranscript() }
+        .task(id: sessionId) {
+            store = TranscriptLiveStore(sessionId: sessionId)
+            await store.loadInitial()
+        }
         .onChange(of: state.transcriptEventTick[sessionId]) { _, _ in
-            scheduleLiveAppend()
+            store.scheduleLiveAppend()
         }
-        .onDisappear { appendDebounce?.cancel() }
-    }
-
-    private func loadTranscript() async {
-        isLoading = true
-        defer { isLoading = false }
-        do {
-            let resp = try await state.fetchTranscript(sessionId)
-            messages = resp.messages
-            hasMore = resp.hasMore
-            firstLine = resp.firstLine
-            lastLine = resp.lastLine
-        } catch {}
-    }
-
-    private func loadMore() async {
-        guard let before = firstLine else { return }
-        do {
-            let resp = try await state.fetchTranscript(sessionId, before: before)
-            messages = resp.messages + messages
-            hasMore = resp.hasMore
-            firstLine = resp.firstLine
-        } catch {}
-    }
-
-    /// New hook events can burst (several PostToolUse events in quick
-    /// succession); debounce so a run of events triggers one fetch instead
-    /// of one per event.
-    private func scheduleLiveAppend() {
-        appendDebounce?.cancel()
-        appendDebounce = Task {
-            try? await Task.sleep(for: .milliseconds(600))
-            guard !Task.isCancelled else { return }
-            await appendLiveMessages()
-        }
-    }
-
-    private func appendLiveMessages() async {
-        guard var cursor = lastLine, !isAppendingLive else { return }
-        isAppendingLive = true
-        defer { isAppendingLive = false }
-        // Cap the number of forward pages drained per burst so a pathological
-        // number of new lines can't stall the debounce loop indefinitely —
-        // any remainder is picked up by the next tick.
-        for _ in 0..<5 {
-            guard let resp = try? await state.fetchTranscript(sessionId, after: cursor, limit: 200) else { break }
-            guard !resp.messages.isEmpty else { break }
-            messages.append(contentsOf: resp.messages)
-            cursor = resp.lastLine ?? cursor
-            lastLine = cursor
-            if !isNearBottom { pendingNewCount += resp.messages.count }
-            guard resp.hasMore else { break }
-        }
+        .onDisappear { store.cancelPendingAppend() }
     }
 }
 
@@ -1196,12 +1140,12 @@ struct MessageBubbleView: View {
 private struct ThinkingTabView: View {
     let sessionId: String
     @Environment(AppState.self) var state
-    @State private var messages: [TranscriptMessage] = []
-    @State private var isLoading = false
-    @State private var hasLoaded = false
-    @State private var lastLine: Int? = nil
-    @State private var isAppendingLive = false
-    @State private var appendDebounce: Task<Void, Never>? = nil
+    @State private var store: TranscriptLiveStore
+
+    init(sessionId: String) {
+        self.sessionId = sessionId
+        _store = State(initialValue: TranscriptLiveStore(sessionId: sessionId))
+    }
 
     struct ThinkingEntry: Identifiable {
         let id = UUID()
@@ -1211,7 +1155,7 @@ private struct ThinkingTabView: View {
     }
 
     private var thinkingEntries: [ThinkingEntry] {
-        messages.compactMap { msg -> ThinkingEntry? in
+        store.messages.compactMap { msg -> ThinkingEntry? in
             let blocks = msg.content.filter { $0.type == "thinking" && $0.text != nil }
             guard !blocks.isEmpty else { return nil }
             return blocks.first.map { block in
@@ -1222,7 +1166,7 @@ private struct ThinkingTabView: View {
 
     var body: some View {
         Group {
-            if isLoading && !hasLoaded {
+            if store.isLoading && !store.hasLoadedOnce {
                 ProgressView("Loading thinking blocks…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if thinkingEntries.isEmpty {
@@ -1269,43 +1213,17 @@ private struct ThinkingTabView: View {
             }
         }
         .task(id: sessionId) {
-            guard !hasLoaded else { return }
-            isLoading = true
-            do {
-                let resp = try await state.fetchTranscript(sessionId)
-                messages = resp.messages
-                lastLine = resp.lastLine
-                hasLoaded = true
-            } catch {}
-            isLoading = false
+            store = TranscriptLiveStore(sessionId: sessionId)
+            await store.loadInitial()
         }
         .onChange(of: state.transcriptEventTick[sessionId]) { _, _ in
-            appendDebounce?.cancel()
-            appendDebounce = Task {
-                try? await Task.sleep(for: .milliseconds(600))
-                guard !Task.isCancelled else { return }
-                await appendLiveMessages()
-            }
+            // Thinking blocks simply appear at the end of the list as they
+            // arrive — unlike the Conversation tab, there's no chat-style
+            // "jump to latest" affordance here since this is a passive
+            // read-through view, so no near-bottom tracking is needed.
+            store.scheduleLiveAppend()
         }
-        .onDisappear { appendDebounce?.cancel() }
-    }
-
-    /// Quietly appends newly-written transcript lines (new thinking blocks
-    /// simply appear at the end of the list; unlike the Conversation tab,
-    /// there's no chat-style "jump to latest" affordance here since this is
-    /// a passive read-through view).
-    private func appendLiveMessages() async {
-        guard hasLoaded, var cursor = lastLine, !isAppendingLive else { return }
-        isAppendingLive = true
-        defer { isAppendingLive = false }
-        for _ in 0..<5 {
-            guard let resp = try? await state.fetchTranscript(sessionId, after: cursor, limit: 200) else { break }
-            guard !resp.messages.isEmpty else { break }
-            messages.append(contentsOf: resp.messages)
-            cursor = resp.lastLine ?? cursor
-            lastLine = cursor
-            guard resp.hasMore else { break }
-        }
+        .onDisappear { store.cancelPendingAppend() }
     }
 }
 
