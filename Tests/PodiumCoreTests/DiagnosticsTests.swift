@@ -86,12 +86,6 @@ final class DiagnosticsTests: XCTestCase {
         await recorder.recordHookEvent(hookType: "PreToolUse", sessionId: "sess-1", latencySeconds: 0.005)
         await recorder.recordHookFailure(reason: "bad payload")
 
-        // Recording enqueues log writes onto detached Tasks; give them a
-        // beat to land before asserting (actor-isolated queue, no ordering
-        // guarantee beyond FIFO submission — a tiny sleep is the simplest
-        // deterministic wait here since there's no completion signal).
-        try? await Task.sleep(nanoseconds: 200_000_000)
-
         let entries = await recorder.recentLog(limit: 10)
         XCTAssertEqual(entries.count, 2)
         XCTAssertTrue(entries.contains { $0.level == "info" && $0.message.contains("PreToolUse") })
