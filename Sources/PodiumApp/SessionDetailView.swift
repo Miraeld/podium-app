@@ -904,6 +904,15 @@ struct EventRow: View {
 
 // MARK: - Conversation Tab
 
+/// Reports where the bottom-of-list sentinel currently sits, in the
+/// coordinate space of the ScrollView's containing `GeometryReader` (fixed
+/// to the viewport, not the scrolling content) — used to tell whether the
+/// user is following along at the bottom or has scrolled up to read.
+private struct BottomAnchorKey: PreferenceKey {
+    static var defaultValue: CGFloat = .infinity
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
+}
+
 struct ConversationTabView: View {
     let sessionId: String
     @Environment(AppState.self) var state
@@ -911,6 +920,11 @@ struct ConversationTabView: View {
     @State private var isLoading = false
     @State private var hasMore = false
     @State private var firstLine: Int? = nil
+    @State private var lastLine: Int? = nil
+    @State private var isAppendingLive = false
+    @State private var appendDebounce: Task<Void, Never>? = nil
+    @State private var isNearBottom = true
+    @State private var pendingNewCount = 0
 
     var body: some View {
         Group {
@@ -923,25 +937,80 @@ struct ConversationTabView: View {
                     message: "Transcript is not available for this session."
                 )
             } else {
-                ScrollView {
-                    LazyVStack(spacing: 12) {
-                        if hasMore {
-                            Button("Load earlier messages") {
-                                Task { await loadMore() }
+                GeometryReader { viewport in
+                    ScrollViewReader { proxy in
+                        ZStack(alignment: .bottom) {
+                            ScrollView {
+                                LazyVStack(spacing: 12) {
+                                    if hasMore {
+                                        Button("Load earlier messages") {
+                                            Task { await loadMore() }
+                                        }
+                                        .buttonStyle(.plain)
+                                        .foregroundStyle(.cyan)
+                                        .padding(.top, 8)
+                                    }
+                                    ForEach(Array(messages.enumerated()), id: \.offset) { _, message in
+                                        MessageBubbleView(message: message)
+                                    }
+                                    Color.clear
+                                        .frame(height: 1)
+                                        .id("bottomAnchor")
+                                        .background(
+                                            GeometryReader { anchor in
+                                                Color.clear.preference(
+                                                    key: BottomAnchorKey.self,
+                                                    value: anchor.frame(in: .named("conversationViewport")).minY
+                                                )
+                                            }
+                                        )
+                                }
+                                .padding(16)
                             }
-                            .buttonStyle(.plain)
-                            .foregroundStyle(.cyan)
-                            .padding(.top, 8)
+                            .onPreferenceChange(BottomAnchorKey.self) { minY in
+                                // Sentinel visible within ~120pt of the viewport's
+                                // bottom edge counts as "following along".
+                                let nearBottom = minY <= viewport.size.height + 120
+                                if nearBottom != isNearBottom {
+                                    isNearBottom = nearBottom
+                                    if nearBottom { pendingNewCount = 0 }
+                                }
+                            }
+
+                            if pendingNewCount > 0 {
+                                Button {
+                                    withAnimation { proxy.scrollTo("bottomAnchor", anchor: .bottom) }
+                                    pendingNewCount = 0
+                                } label: {
+                                    Label("\(pendingNewCount) new message\(pendingNewCount == 1 ? "" : "s")", systemImage: "arrow.down")
+                                        .font(.caption.weight(.semibold))
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 6)
+                                        .background(Theme.accent.opacity(0.85))
+                                        .foregroundStyle(.black)
+                                        .clipShape(Capsule())
+                                        .shadow(radius: 8)
+                                }
+                                .buttonStyle(.plain)
+                                .padding(.bottom, 12)
+                                .transition(.move(edge: .bottom).combined(with: .opacity))
+                            }
                         }
-                        ForEach(Array(messages.enumerated()), id: \.offset) { _, message in
-                            MessageBubbleView(message: message)
+                        .coordinateSpace(name: "conversationViewport")
+                        .onChange(of: messages.count) { _, _ in
+                            if isNearBottom {
+                                withAnimation { proxy.scrollTo("bottomAnchor", anchor: .bottom) }
+                            }
                         }
                     }
-                    .padding(16)
                 }
             }
         }
         .task(id: sessionId) { await loadTranscript() }
+        .onChange(of: state.transcriptEventTick[sessionId]) { _, _ in
+            scheduleLiveAppend()
+        }
+        .onDisappear { appendDebounce?.cancel() }
     }
 
     private func loadTranscript() async {
@@ -952,6 +1021,7 @@ struct ConversationTabView: View {
             messages = resp.messages
             hasMore = resp.hasMore
             firstLine = resp.firstLine
+            lastLine = resp.lastLine
         } catch {}
     }
 
@@ -963,6 +1033,36 @@ struct ConversationTabView: View {
             hasMore = resp.hasMore
             firstLine = resp.firstLine
         } catch {}
+    }
+
+    /// New hook events can burst (several PostToolUse events in quick
+    /// succession); debounce so a run of events triggers one fetch instead
+    /// of one per event.
+    private func scheduleLiveAppend() {
+        appendDebounce?.cancel()
+        appendDebounce = Task {
+            try? await Task.sleep(for: .milliseconds(600))
+            guard !Task.isCancelled else { return }
+            await appendLiveMessages()
+        }
+    }
+
+    private func appendLiveMessages() async {
+        guard var cursor = lastLine, !isAppendingLive else { return }
+        isAppendingLive = true
+        defer { isAppendingLive = false }
+        // Cap the number of forward pages drained per burst so a pathological
+        // number of new lines can't stall the debounce loop indefinitely —
+        // any remainder is picked up by the next tick.
+        for _ in 0..<5 {
+            guard let resp = try? await state.fetchTranscript(sessionId, after: cursor, limit: 200) else { break }
+            guard !resp.messages.isEmpty else { break }
+            messages.append(contentsOf: resp.messages)
+            cursor = resp.lastLine ?? cursor
+            lastLine = cursor
+            if !isNearBottom { pendingNewCount += resp.messages.count }
+            guard resp.hasMore else { break }
+        }
     }
 }
 
