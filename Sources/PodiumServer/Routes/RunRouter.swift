@@ -133,15 +133,19 @@ public enum RunRouterMount: RouterMount {
     /// `dashboard_runs` rows are snake_case (straight from SQL) with one
     /// camelCase exception: `isLive`, spliced in post-query by cross-
     /// referencing still-live in-memory handles (routes/run.js lines
-    /// 114–132). `DashboardRunWire`'s explicit `CodingKeys` spell out both
-    /// conventions in the same object — encoded with a plain `JSONEncoder`
-    /// so nothing gets auto-converted on top of that.
+    /// 114–132). `DashboardRun.encode(to:)` spells out both conventions —
+    /// and emits unset columns as explicit `null` — via the `AnyEncodable`
+    /// dictionary pattern, so no strategy can mangle the keys.
     private static func history(_ req: Request, context: ServerContext) async throws -> JSONResponse {
         let limit = req.uri.queryInt("limit", fallback: 50, min: 1, max: 500)
         let rows = (try? context.store.listDashboardRuns(limit: limit)) ?? []
         let liveIds = await context.runSpawner.liveRunIds()
-        let items = rows.map { DashboardRunWire($0, isLive: liveIds.contains($0.id)) }
-        return try JSONResponse(rawJSON: JSONEncoder().encode(RunHistoryWire(items: items)))
+        let items = rows.map { row in
+            var item = row
+            item.isLive = liveIds.contains(row.id)
+            return item
+        }
+        return try JSONResponse(rawJSON: JSONEncoder().encode(RunHistoryResponse(items: items)))
     }
 
     // MARK: - GET /cwds
@@ -234,7 +238,9 @@ public enum RunRouterMount: RouterMount {
                 prompt: prompt, mode: mode, cwd: cwd, model: model,
                 permissionMode: permissionMode.rawValue, resumeSessionId: resumeSessionId, effort: effort
             )
-            return try JSONResponse(status: .created, rawJSON: JSONEncoder().encode(handle))
+            // Node's create handler responds with a plain `res.json(handle)`
+            // — HTTP 200, not 201 (routes/run.js).
+            return try JSONResponse(rawJSON: JSONEncoder().encode(handle))
         } catch let err as RunSpawnerError {
             if case .concurrency(_, let running) = err {
                 let wire = RunConcurrencyWire(error: .init(code: err.code, message: err.message), running: running)
@@ -297,61 +303,6 @@ public enum RunRouterMount: RouterMount {
 /// (snake_case); `isLive` is a literal camelCase JS field spliced in after
 /// the query in routes/run.js. Encoded with a plain `JSONEncoder` (no
 /// strategy) since every key is already spelled out explicitly here.
-private struct DashboardRunWire: Encodable {
-    let id: String
-    let sessionId: String?
-    let mode: String
-    let cwd: String
-    let model: String?
-    let permissionMode: String?
-    let effort: String?
-    let resumeSessionId: String?
-    let promptPreview: String?
-    let status: String
-    let exitCode: Int?
-    let startedAt: String
-    let endedAt: String?
-    let isLive: Bool
-
-    init(_ run: DashboardRun, isLive: Bool) {
-        id = run.id
-        sessionId = run.sessionId
-        mode = run.mode.rawValue
-        cwd = run.cwd
-        model = run.model
-        permissionMode = run.permissionMode
-        effort = run.effort
-        resumeSessionId = run.resumeSessionId
-        promptPreview = run.promptPreview
-        status = run.status.rawValue
-        exitCode = run.exitCode
-        startedAt = run.startedAt
-        endedAt = run.endedAt
-        self.isLive = isLive
-    }
-
-    enum CodingKeys: String, CodingKey {
-        case id
-        case sessionId = "session_id"
-        case mode
-        case cwd
-        case model
-        case permissionMode = "permission_mode"
-        case effort
-        case resumeSessionId = "resume_session_id"
-        case promptPreview = "prompt_preview"
-        case status
-        case exitCode = "exit_code"
-        case startedAt = "started_at"
-        case endedAt = "ended_at"
-        case isLive
-    }
-}
-
-private struct RunHistoryWire: Encodable {
-    let items: [DashboardRunWire]
-}
-
 private struct RunConcurrencyWire: Encodable {
     let error: CodedErrorResponse.Body
     let running: [RunConcurrencyEntry]
