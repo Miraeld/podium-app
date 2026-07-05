@@ -22,7 +22,7 @@
 // see RunSpawner.swift's header comment for the full analysis. `GET
 // /history` is the one endpoint that IS snake_case (it mirrors raw
 // `dashboard_runs` SQL rows) plus one camelCase exception (`isLive`,
-// spliced in after the query) — handled by `DashboardRunWire` below.
+// spliced in after the query) — handled by `DashboardRun.encode(to:)`.
 //
 // Security model (routes/run.js's `sameOriginGuard`): this is a
 // local-first dashboard. To stop a malicious webpage from drive-by
