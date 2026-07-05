@@ -487,6 +487,7 @@ public actor RunSpawner {
     }
 
     private func reap(id: String) {
+        handles[id]?.stdinWriter.close()
         handles.removeValue(forKey: id)
         reapTasks.removeValue(forKey: id)
     }
