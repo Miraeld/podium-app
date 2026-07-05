@@ -249,7 +249,8 @@ public actor RunSpawner {
         let live = LiveRun(
             id: id, mode: mode, cwd: cwd, model: model, permissionMode: permissionMode,
             effort: normalizedEffort, prompt: prompt, argv: argv, resumeSessionId: resumeSessionId,
-            startedAt: startedAt, process: process, stdinPipe: stdinPipe, stdinWriter: stdinWriter
+            startedAt: startedAt, process: process, stdinPipe: stdinPipe, stdinWriter: stdinWriter,
+            stdoutPipe: stdoutPipe, stderrPipe: stderrPipe
         )
         // Optimistic; confirmed (or corrected) by the system/init envelope.
         live.sessionId = resumeSessionId
@@ -866,6 +867,11 @@ private final class LiveRun {
     /// `StdinWriter`'s doc comment for why a plain `FileHandle.write` on
     /// this actor would be a deadlock hazard.
     let stdinWriter: StdinWriter
+    /// Kept (not just passed to `attachIO`) so `onProcessTerminated` can do
+    /// a final synchronous drain once the child has genuinely exited — see
+    /// that method's doc comment for why this is load-bearing on Linux.
+    let stdoutPipe: Pipe
+    let stderrPipe: Pipe
     var stdinClosed = false
     var stdoutClosed = false
     var stderrClosed = false
@@ -875,7 +881,7 @@ private final class LiveRun {
     init(
         id: String, mode: RunMode, cwd: String, model: String?, permissionMode: String, effort: String?,
         prompt: String, argv: [String], resumeSessionId: String?, startedAt: Double,
-        process: Process, stdinPipe: Pipe, stdinWriter: StdinWriter
+        process: Process, stdinPipe: Pipe, stdinWriter: StdinWriter, stdoutPipe: Pipe, stderrPipe: Pipe
     ) {
         self.id = id
         self.mode = mode
@@ -890,5 +896,7 @@ private final class LiveRun {
         self.process = process
         self.stdinPipe = stdinPipe
         self.stdinWriter = stdinWriter
+        self.stdoutPipe = stdoutPipe
+        self.stderrPipe = stderrPipe
     }
 }
