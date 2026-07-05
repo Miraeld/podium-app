@@ -207,6 +207,43 @@ public struct RunHandle: Codable, Identifiable, Equatable, Sendable {
         self.stderrTail = stderrTail
         self.envelopes = envelopes
     }
+
+    /// Node parity: `publicHandle` (lib/run-spawner.js) is a hand-built
+    /// object literal whose camelCase keys are ALWAYS present — unset
+    /// fields are explicit JSON `null`, and the stdio tails are always
+    /// strings (accumulated buffers, `""` before first output). The
+    /// `AnyEncodable` dictionary pattern keeps the literal keys immune to
+    /// any encoder's key strategy. `envelopes` stays omitted unless the
+    /// request opted in via `?envelopes=1`.
+    public func encode(to encoder: Encoder) throws {
+        var fields: [String: AnyEncodable] = [
+            "id": AnyEncodable(id),
+            "pid": AnyEncodable(pid),
+            "mode": AnyEncodable(mode),
+            "cwd": AnyEncodable(cwd),
+            "model": AnyEncodable(model),
+            "permissionMode": AnyEncodable(permissionMode),
+            "effort": AnyEncodable(effort),
+            "prompt": AnyEncodable(prompt),
+            "argv": AnyEncodable(argv),
+            "resumeSessionId": AnyEncodable(resumeSessionId),
+            "status": AnyEncodable(status),
+            "startedAt": AnyEncodable(startedAt),
+            "endedAt": AnyEncodable(endedAt),
+            "exitCode": AnyEncodable(exitCode),
+            "signal": AnyEncodable(signal),
+            "error": AnyEncodable(error),
+            "sessionId": AnyEncodable(sessionId),
+            "envelopeCount": AnyEncodable(envelopeCount),
+            "stdoutTail": AnyEncodable(stdoutTail ?? ""),
+            "stderrTail": AnyEncodable(stderrTail ?? ""),
+        ]
+        if let envelopes {
+            fields["envelopes"] = AnyEncodable(envelopes)
+        }
+        var container = encoder.singleValueContainer()
+        try container.encode(fields)
+    }
 }
 
 /// One structured envelope from `claude --output-format stream-json`
