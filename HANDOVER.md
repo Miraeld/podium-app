@@ -24,106 +24,50 @@ that a remote exists.
 
 ## Live state (refresh me on every board change)
 
-- **Board: 21 ✅ + P6.1 ⚠️→closing + P6.2a 🟦@P.** All of phases 0–5 and F1
-  done. Tests: 433/433 in our scope (the 83 failures visible in a full run
-  are ALL in the @P session's untracked WIP Tests/PodiumServerTests/
-  ContractTests.swift — do not "fix" them, that lane is theirs).
-- **NEW: GitHub remote + CI.** `github.com/Miraeld/podium-app` (public),
-  created by Gaël 2026-07-05 ~01:20 CEST, develop pushed. CI (.github/
-  workflows/ci.yml: macOS + Linux swift:6.1 container) triggered on the
-  push — first-ever CI run; check `gh run list` for the verdict. From now
-  on: push after committing; watch CI. Suggested once the board is done:
-  create `main` from develop and make it the GitHub default (plan convention
-  expects PRs → main).
-- **P6.1 status:** macOS fully verified earlier (dist/Podium-1.0.dmg built,
-  ad-hoc signed, sandbox-launched clean). Linux: after 4 rounds of real
-  verification the tarball now BUILDS — dist-linux/podium-linux-ba5d107.tar.gz
-  (25MB, aarch64). Four real bugs found+fixed on the way (run log has
-  details): missing Crypto dep on PodiumCore, Glibc getloadavg signature,
-  CFGetTypeID absent on corelibs-foundation, and `swift build --product A
-  --product B` silently building only the last product (script + §6 prompt
-  both had this wrong). REMAINING to close ⚠️→✅: ONLY a first green Linux CI run (runs 28722982661 +
-  28723047443 were in_progress at handover — check `gh run list`). The
-  in-container smoke already proved the Linux binary boots + listens
-  ("Server started and listening on 0.0.0.0:48111"); the HTTP probe step
-  failed on a shell quirk, not the server — CI's Linux test job covers the
-  rest. If CI is red instead: fix forward, the log will say exactly what. NOTE: the Linux docker build re-points
-  the shared .build/release symlink to the Linux triple — package-macos.sh
-  re-runs swift build itself so it self-heals, but don't be surprised by it.
-- **P6.2a (contract E2E) — the @P session's lane (scheduled-pickup session,
-  tag @P on the board).** Its WIP ContractTests.swift is untracked in the
-  tree with 83 failing asserts (in-progress, expected). Coordinate via the
-  board; don't dispatch P6.2 work yourself unless @P's lane is confirmed
-  dead AND its board entry is reconciled per §0 step 2.
-- **v1 close-out list (after P6.2a lands):** (1) final v1 QA sweep — empty/
-  error states, light/dark pass on new views (tour, diagnostics, config
-  editor); (2) README/MIGRATION docs (part of P6.2 scope); (3) create main
-  branch + set default; (4) HUMAN items below.
-- **CI DIAGNOSED (2026-07-05 morning, Fable session 4).** Run 28723847298 logs
-  fetched: TWO distinct issues. (A) macOS: RunSpawnerTests.
-  testEnvelopeReplayLogIsBoundedTo500 HANGS ~3min then exit 1 (all listed
-  tests pass) — possible REAL product bug: RunSpawner stdin write may block
-  on pipe backpressure (would freeze real runs too). (B) Linux: ALL 7
-  DiagnosticsRouterTests uniformly time out waiting for server health (30s,
-  URLError -1001) — server never comes up in the GH container; NOT slowness
-  (raising timeout already tried). Suspects: health-poll-vs-port-fallback
-  mismatch, bind address in container, or real-socket-vs-in-process test
-  style unique to this suite. A CI-fix dev owns both since ~09:00; it will
-  push + watch CI to verdict. P6.1 ⚠️→✅ still gated on first green Linux run.
-  Stray Phase-3 audit reports (delegation-spiral orphans) finally arrived:
-  the one MAJOR (IngestEngine ROLLBACK leak on ensureSession-nil) is ALREADY
-  FIXED in current code (empty-commit path, verified 07-05); rest were
-  NONE/parity-faithful confirmations.
-  Then F2 (board): Gaël's 3 native-app v1 bugs — Thinking tab empty,
-  reinstall-hooks error, Diagnostics unavailable (suspect: app is in CLIENT
-  mode against the plugin-era Node Docker which lacks those endpoints —
-  verify embedded mode first, and make client-mode UI degrade gracefully).
-  Then P6.2a (@P lane), then the supervised switchover (remove the prod
-  Docker container AS PART of it — Gaël's standing decision).
-- **CI update (2026-07-05 ~02:00):** first runs FAILED on two timing flakes
-  (not product bugs): Linux DiagnosticsRouterTests 5s health-wait too tight
-  for CI containers → 30s; macOS reap test's 50ms reap delay outlasted by
-  the completion-poll on shared runners → 2s + 10s poll. Fixed at 07340c0,
-  pushed, CI re-running — CHECK THE VERDICT (`gh run list`); green closes
-  P6.1 ⚠️→✅.
-- **HUMAN (Gaël) checklist:**
-  - DONE ✓: tour light/dark + live-transcript click-through (verified by
-    Gaël 2026-07-05). wizardly_golick container: already auto-cleaned.
-  - Prod `podium` Docker container (plugin-era): Gaël wants it REMOVED —
-    orchestrator advice: defer to the switchover session; it is currently
-    his only live dashboard, and its DB bind-mount is the data the app
-    takes over. Remove it AS PART OF the switchover, not before.
-  - His prod `podium` container reports UNHEALTHY since ~2026-07-04 (was
-    healthy before; nobody here touched it — read-only observations only).
-  - The supervised switchover: stop Docker → app hosts against a COPY of
-    ~/.claude/podium/data/dashboard.db first → verify → real thing. DMG is
-    ready at dist/Podium-1.0.dmg.
-- **Open minor debts (documented, non-blocking):** PushNotifier Sendable
-  closure warning (Swift-6 mode); cold-cache first import still CPU-bound
-  seconds-per-hundred-files (async reimport endpoint = Routes change,
-  revisit if real-corpus UX warrants); symlink-following gap in cc-config
-  file API (EXACT Node parity — joint ticket both codebases); web push
-  click-through fields are snake_case on the wire while future client JS
-  may expect camelCase (no consumer yet).
-- **Dependent-task notes live in the run log (§7):** camelCase run
-  live-handle wire family vs snake_case history (P4.1); Hummingbird does NOT
-  percent-decode path params (P3.3); JSONResponse(fields:) for intentionally
-  camelCase top-level keys; PodiumJSON CodingKeys footgun; PodiumJSON.
-  AnyEncodable dictionary-encode pattern for camelCase field names (gate
-  fix); §6b №2 answer-from-popup needs a stdin control-response framing
-  extension in RunSpawner.sendInput.
-- **Standing corrections:** error responses are CodedErrorResponse
-  {"error":{"code","message"}}; route responses must go through
-  JSONResponse; never mix snake_case CodingKeys with .convertFromSnakeCase.
-  Re-attach the fence/constraint blocks verbatim on any re-dispatch.
-- **Environment quirks:** auto-commit hook commits the WHOLE dirty tree on
-  any agent save — commit file-lists misattribute parallel work; real
-  authorship = `git show <commit> -- <file>`. Agents habitually finish then
-  go idle WITHOUT reporting — ping via SendMessage before assuming death.
-  A USER INTERRUPT of the main conversation kills running background agents.
-  /Applications/Podium.app (old install) can shadow the dev bundle.
-  Session-limit errors can kill an Agent spawn with 0 tokens — re-dispatch.
-  `ClaudeHome.current()` defaults to the REAL ~/.claude regardless of
-  --data-dir — smoke tests need CLAUDE_HOME pointed at a fixture.
-  NEVER touch: Gaël's ~/.claude/podium/data (live Docker bind-mount), his
-  running PodiumApp process, his prod `podium` container.
+- **2026-07-05 (late) — CI FULLY GREEN: run 28755002211, both jobs ✅.** The
+  "flaky CI" was FOUR stacked real RunSpawner bugs (cooperative-pool
+  deadlock from waitUntilExit in Task.detached; pipe write-ends never
+  closed → EOF-less blocking drain; readabilityHandler never detached at
+  EOF → GCD spin-storm until reap; the documented inFlightIO wait LOST
+  from onProcessTerminated → finalize outran envelope reads) + two
+  runner-env gates (Linux container networking, dead-port latency) + one
+  Linux test-classifier fix (corelibs 0/1 NSNumber→Bool bridging;
+  objCType=='c' is the real bool marker). Full story: §7 run log rows
+  dated 2026-07-05.
+- **P6.2a contract suite: 29/29 green, ours now** (@P lane dead, adopted).
+  Six wire-parity bug families fixed (workflows camelCase, explicit nulls,
+  settings info shape, vapid publicKey, updates git_repo, search/run
+  families). ContractTests is the wire gate — keep it green.
+- **P6.2b docs: DONE** (README/MIGRATION/CLAUDE.md rewritten). README's
+  "Verified compatibility" holds a placeholder until the browser walk.
+- **Local: 463/463.** Suite runtime dropped 18.7s→14.2s when the EOF storm
+  died — regressions there are a smell.
+- **NEXT WORK COMES FROM ROADMAP.md** (repo root) — the full PO plan with
+  copy-paste dispatch prompts. Phase 0: 0.2 contract-check.sh, 0.3 browser
+  walk, 0.4 README close-out. Phase 1: F2 bugs (likely client-mode
+  degradation), QA sweep, main branch, THE SWITCHOVER (human, with Gaël).
+  Phase 2 features ranked. Don't re-plan — execute.
+- **CI truth policy (Gaël, binding):** local-green + runner-red ⇒
+  GITHUB_ACTIONS-gated XCTSkip with the observed mechanism in a comment.
+  Never delete, never gate unconditionally, never gate a local failure.
+- **New global skill `/orch-fable`** (~/.claude/skills/orch-fable, model:
+  opus) — run it at session start to orchestrate Fable-style after Fable
+  retires. ROADMAP.md §3 has the per-repo operating rules.
+- **HUMAN (Gaël) checklist:** unchanged — prod `podium` Docker container
+  (UNHEALTHY since ~07-04) is his only live dashboard until the
+  switchover; its DB bind-mount is the data the app takes over. Remove it
+  only AS PART of the supervised switchover (ROADMAP 1.4). DMG ready at
+  dist/Podium-1.0.dmg.
+- **Open minor debts:** tracked in ROADMAP.md Phase 3 ledger (PushNotifier
+  Sendable warning; audit LinuxDesktopNotifier/GitContext/RunBinaryLocator
+  waitUntilExit call sites; cold-cache import; cc-config symlink gap;
+  WorkflowSessionRaw dead code; stdin-backpressure test for 2.2a).
+- **Environment quirks (still true):** auto-commit hook commits the WHOLE
+  dirty tree on any agent save — authorship = `git show <sha> -- <file>`.
+  Agents finish then idle without reporting — ping before assuming death.
+  A USER INTERRUPT kills running background agents. /Applications/
+  Podium.app (old install) can shadow the dev bundle. ClaudeHome.current()
+  defaults to the REAL ~/.claude — tests need CLAUDE_HOME + PodiumPaths
+  HOME overrides (ContractTests shows the pattern). /usr/bin/true, never
+  /bin/true (Darwin 25 removed it). NEVER touch: ~/.claude/podium/data,
+  Gaël's running PodiumApp, his prod podium container.

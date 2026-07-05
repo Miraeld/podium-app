@@ -75,7 +75,7 @@ From STANDALONE_PLAN.md §6b + Gaël's memory notes:
 
 ## PHASE 0 — CI green + P6.2 closed  *(½ day, mostly Sonnet)*
 
-### 0.1 ☐ First fully-green CI run
+### 0.1 ☑ First fully-green CI run — DONE 2026-07-05, run 28755002211 (both jobs green)
 Already in flight when this file was written: HookClient dead-port skip
 pushed; watch `gh run list`. If the Linux job surfaces one more
 runner-environment failure, gate it per the CI truth policy (same XCTSkip
