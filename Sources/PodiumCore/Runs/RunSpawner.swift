@@ -534,18 +534,6 @@ public actor RunSpawner {
         guard let live = handles[id] else { return }
         live.pendingExit = (code: code, signal: signalDescription)
 
-        // Let any readabilityHandler reads that were already scheduled
-        // before the process's exit was observed actually run first — see
-        // `attachIO`'s doc comment. This is a short, bounded spin (only
-        // in-flight `Task`s already queued on this actor at this exact
-        // moment can hold the counter above zero; nothing new increments it
-        // once the pipes are fully drained below) — not a wait for
-        // anything that could legitimately never happen, unlike the old
-        // EOF-callback dependency this replaces.
-        while !live.inFlightIO.isZero {
-            await Task.yield()
-        }
-
         let leftoverStdout = live.stdoutPipe.fileHandleForReading.availableData
         if !leftoverStdout.isEmpty {
             await onStdoutData(id: id, data: leftoverStdout)
