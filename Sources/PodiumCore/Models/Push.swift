@@ -78,6 +78,14 @@ public struct VapidPublicKeyResponse: Codable, Equatable, Sendable {
     public init(publicKey: String) {
         self.publicKey = publicKey
     }
+
+    // `publicKey` is a camelCase literal in Node's response and the client
+    // reads it verbatim (lib/push.ts line 26: `{ publicKey }`) — see
+    // `AnyEncodable`'s doc comment.
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(["publicKey": AnyEncodable(publicKey)])
+    }
 }
 
 /// `POST /api/push/send` request body (routes/push.js).
