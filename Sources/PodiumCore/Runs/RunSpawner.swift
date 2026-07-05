@@ -567,6 +567,20 @@ public actor RunSpawner {
         live.stdoutPipe.fileHandleForReading.readabilityHandler = nil
         live.stderrPipe.fileHandleForReading.readabilityHandler = nil
 
+        // THEN wait for every already-scheduled readabilityHandler Task to
+        // finish on this actor before draining — this is the wait the
+        // InFlightIOCounter exists for (see attachIO's doc comment; it had
+        // been lost, letting finalize outrun in-flight envelope reads on
+        // slow CI: status jumped spawning→completed with envelopes still
+        // queued). Detach-first makes this race-free: no new increments can
+        // arrive once the handlers are gone. Bounded so a pathological
+        // stall can't wedge finalization; actor reentrancy lets the
+        // in-flight tasks run while we sleep.
+        let ioDeadline = Date().addingTimeInterval(2)
+        while !live.inFlightIO.isZero && Date() < ioDeadline {
+            try? await Task.sleep(nanoseconds: 5_000_000)
+        }
+
         let leftoverStdout = live.stdoutPipe.fileHandleForReading.availableData
         if !leftoverStdout.isEmpty {
             await onStdoutData(id: id, data: leftoverStdout)
