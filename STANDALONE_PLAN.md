@@ -256,7 +256,7 @@ Legend: ⬜ todo · 🟦 in progress · ✅ done · ⚠️ done with caveats (se
 | **P5.3** | macOS app: transcript viewer + search + session actions | P3.1 | ✅ |
 | **P5.4** | macOS app: workflows graphs, analytics upgrade, run page, cc-config, import/export UI | P3.4, P4.1, P4.3 | ✅ |
 | **P5.5** | First-run onboarding tour (macOS app; web dashboard gets a lighter variant) | P5.4 | ✅ |
-| **P6.1** | Packaging: macOS .app/DMG script, Linux static-ish binary + systemd unit + install.sh | P5.1 | ⚠️ |
+| **P6.1** | Packaging: macOS .app/DMG script, Linux static-ish binary + systemd unit + install.sh | P5.1 | ✅ |
 | **P6.2a** | Contract E2E: ContractTests harness + fixtures + contract-check.sh + manual browser walk of every web page vs Swift server | P2–P4 (server gated) | 🟦@P |
 | **P6.2b** | Docs: README, MIGRATION, CLAUDE.md rewrite (needs P6.1's install story) | P6.1, P6.2a | ⬜ |
 | **F2** | v1 bugs (Gaël, 2026-07-05, native app): (a) Thinking tab empty on a session that SHOULD have thinking blocks — suspect TranscriptMessageParser thinking extraction or the P5.3 store rewrite's tab filtering; (b) Settings "Re-install hooks" → "error reinstalling" — check PodiumAPI+Search's /api/settings/hooks/reinstall path vs actual SettingsRouter route + CodedErrorResponse decode; (c) Diagnostics tab shows "Diagnostics unavailable" — DiagnosticsView polls its own URLSession; suspect wrong port/base URL when embedded vs client mode, or the reinstall/diagnostics endpoints 404 behind the client-mode server (his Docker Node server has NO /api/diagnostics — in client mode against Node these features CANNOT work; UI should say so, not "error"). NOTE: he runs against the plugin-era Docker Node server today — (b)+(c) may be exactly that; verify in embedded mode first. | P6.2 | ⬜ |
