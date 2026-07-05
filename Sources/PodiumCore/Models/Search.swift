@@ -76,4 +76,29 @@ public struct SearchHit: Codable, Equatable, Sendable {
         self.createdAt = createdAt
         self.highlight = highlight
     }
+
+    /// Node parity (search.js lines 106–153): each hit kind emits exactly
+    /// its own field set — a session hit has NO event keys at all, while an
+    /// event hit carries its nullable SQL columns (`tool_name`, `summary`,
+    /// `session_name`) as explicit JSON `null`, never omitted. A synthesized
+    /// encode can't express that split from one union struct.
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(type, forKey: .type)
+        try container.encode(sessionId, forKey: .sessionId)
+        try container.encode(sessionName, forKey: .sessionName)
+        if type == "event" {
+            try container.encode(eventId, forKey: .eventId)
+            try container.encode(eventType, forKey: .eventType)
+            try container.encode(toolName, forKey: .toolName)
+            try container.encode(summary, forKey: .summary)
+            try container.encode(createdAt, forKey: .createdAt)
+        } else {
+            try container.encode(cwd, forKey: .cwd)
+            try container.encode(status, forKey: .status)
+            try container.encode(cost ?? 0, forKey: .cost)
+            try container.encode(startedAt, forKey: .startedAt)
+            try container.encode(highlight, forKey: .highlight)
+        }
+    }
 }
