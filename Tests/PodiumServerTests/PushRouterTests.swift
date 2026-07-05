@@ -14,6 +14,20 @@ import FoundationNetworking
 /// points `keysPath` at a throwaway temp file, NEVER the user's real
 /// `~/.claude/podium/data/vapid-keys.json` (STANDALONE_PLAN.md §7 quirk).
 final class PushRouterTests: XCTestCase {
+    // Dedicated per-instance session rather than `URLSession.shared`: on
+    // Linux (FoundationNetworking/libcurl) the shared session is a
+    // process-wide singleton whose connection pool/multi-handle persists
+    // across every suite in the same `swift test` binary — suspected
+    // culprit for the "server did not become healthy" CI failures that
+    // start at DiagnosticsRouterTests (alphabetically the first suite to
+    // use URLSession at all in the whole test process) and affect every
+    // subsequent server-booting suite. An ephemeral, per-instance session
+    // avoids depending on `.shared`'s cross-suite state entirely.
+    private let session: URLSession = {
+        let config = URLSessionConfiguration.ephemeral
+        config.httpMaximumConnectionsPerHost = 1
+        return URLSession(configuration: config)
+    }()
     private var tempDir: URL!
     private var store: PodiumStore!
     private var app: PodiumServerApp!
@@ -74,7 +88,7 @@ final class PushRouterTests: XCTestCase {
         var request = URLRequest(url: url)
         request.timeoutInterval = 0.5
         do {
-            let (_, response) = try await URLSession.shared.data(for: request)
+            let (_, response) = try await session.data(for: request)
             return (response as? HTTPURLResponse)?.statusCode == 200
         } catch {
             return false
@@ -83,7 +97,7 @@ final class PushRouterTests: XCTestCase {
 
     private func get(_ path: String) async throws -> (Data, HTTPURLResponse) {
         let url = URL(string: "http://127.0.0.1:\(port!)\(path)")!
-        let (data, response) = try await URLSession.shared.data(from: url)
+        let (data, response) = try await session.data(from: url)
         return (data, response as! HTTPURLResponse)
     }
 
@@ -93,7 +107,7 @@ final class PushRouterTests: XCTestCase {
         request.httpMethod = method
         request.httpBody = body
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         return (data, response as! HTTPURLResponse)
     }
 

@@ -21,6 +21,22 @@ final class DiagnosticsRouterTests: XCTestCase {
     private var app: PodiumServerApp!
     private var serverTask: Task<Void, Error>!
     private var port: Int!
+    // Dedicated per-instance session rather than `URLSession.shared`: on
+    // Linux (FoundationNetworking/libcurl) the shared session is a
+    // process-wide singleton whose connection pool/multi-handle persists
+    // across every suite in the same `swift test` binary. This suite is
+    // alphabetically the first `PodiumServerTests` case that boots a real
+    // HTTP server and is also the first `URLSession` use anywhere in the
+    // whole test process (zero uses in PodiumCoreTests) — see the CI
+    // investigation notes in this repo's fix commit. An ephemeral,
+    // per-instance session avoids depending on `.shared`'s cross-suite
+    // state entirely, regardless of whether that state is the actual
+    // culprit.
+    private let session: URLSession = {
+        let config = URLSessionConfiguration.ephemeral
+        config.httpMaximumConnectionsPerHost = 1
+        return URLSession(configuration: config)
+    }()
 
     override func setUp() async throws {
         await DiagnosticsRecorder.shared.resetForTesting()
@@ -71,7 +87,7 @@ final class DiagnosticsRouterTests: XCTestCase {
         var request = URLRequest(url: url)
         request.timeoutInterval = 0.5
         do {
-            let (_, response) = try await URLSession.shared.data(for: request)
+            let (_, response) = try await session.data(for: request)
             return (response as? HTTPURLResponse)?.statusCode == 200
         } catch {
             return false
@@ -80,7 +96,7 @@ final class DiagnosticsRouterTests: XCTestCase {
 
     private func get(_ path: String) async throws -> (Data, HTTPURLResponse) {
         let url = URL(string: "http://127.0.0.1:\(port!)\(path)")!
-        let (data, response) = try await URLSession.shared.data(from: url)
+        let (data, response) = try await session.data(from: url)
         return (data, response as! HTTPURLResponse)
     }
 
@@ -90,7 +106,7 @@ final class DiagnosticsRouterTests: XCTestCase {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONSerialization.data(withJSONObject: ["hook_type": hookType, "data": data])
-        let (respData, response) = try await URLSession.shared.data(for: request)
+        let (respData, response) = try await session.data(for: request)
         return (respData, response as! HTTPURLResponse)
     }
 

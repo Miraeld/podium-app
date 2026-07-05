@@ -12,6 +12,20 @@ import FoundationNetworking
 /// same-origin guard, validation error codes, and every endpoint's shape.
 /// Follows the same pattern as `WorkflowsRouterTests`/`ReadRoutersTests`.
 final class RunRouterTests: XCTestCase {
+    // Dedicated per-instance session rather than `URLSession.shared`: on
+    // Linux (FoundationNetworking/libcurl) the shared session is a
+    // process-wide singleton whose connection pool/multi-handle persists
+    // across every suite in the same `swift test` binary — suspected
+    // culprit for the "server did not become healthy" CI failures that
+    // start at DiagnosticsRouterTests (alphabetically the first suite to
+    // use URLSession at all in the whole test process) and affect every
+    // subsequent server-booting suite. An ephemeral, per-instance session
+    // avoids depending on `.shared`'s cross-suite state entirely.
+    private let session: URLSession = {
+        let config = URLSessionConfiguration.ephemeral
+        config.httpMaximumConnectionsPerHost = 1
+        return URLSession(configuration: config)
+    }()
     private var tempDir: URL!
     private var store: PodiumStore!
     private var app: PodiumServerApp!
@@ -75,7 +89,7 @@ final class RunRouterTests: XCTestCase {
         var request = URLRequest(url: url)
         request.timeoutInterval = 0.5
         do {
-            let (_, response) = try await URLSession.shared.data(for: request)
+            let (_, response) = try await session.data(for: request)
             return (response as? HTTPURLResponse)?.statusCode == 200
         } catch {
             return false
@@ -101,7 +115,7 @@ final class RunRouterTests: XCTestCase {
         if let origin {
             request.setValue(origin, forHTTPHeaderField: "Origin")
         }
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         return (data, response as! HTTPURLResponse)
     }
 
