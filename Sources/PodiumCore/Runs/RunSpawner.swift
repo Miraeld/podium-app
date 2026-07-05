@@ -411,15 +411,40 @@ public actor RunSpawner {
     // MARK: - IO plumbing
 
     private func attachIO(id: String, stdoutPipe: Pipe, stderrPipe: Pipe) {
+        // Each readabilityHandler invocation schedules an unstructured
+        // `Task` that lands on this actor whenever its executor gets to it
+        // — there is no ordering guarantee between these and the
+        // independent `waitUntilExit()` task's eventual `onProcessTerminated`
+        // call (see that method's doc comment for why it exists). Without
+        // synchronization, "process exited" could land on the actor and
+        // finalize the run BEFORE an already-in-flight readabilityHandler
+        // callback's `Task` gets a turn — silently dropping envelopes (and
+        // their status transitions, e.g. "spawning" -> "running") that were
+        // read from the pipe before the process exited, but not yet
+        // processed. `inFlightIO` is a plain (non-actor-isolated) atomic
+        // counter incremented synchronously in the GCD callback itself —
+        // before the Task is even created — precisely so
+        // `onProcessTerminated` can spin-wait (see there) until it reads
+        // zero, guaranteeing every already-scheduled read has actually run
+        // before finalization proceeds.
+        let inFlightIO = handles[id]?.inFlightIO
         stdoutPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
             let data = handle.availableData
             guard let self else { return }
-            Task { await self.onStdoutData(id: id, data: data) }
+            inFlightIO?.increment()
+            Task {
+                await self.onStdoutData(id: id, data: data)
+                inFlightIO?.decrement()
+            }
         }
         stderrPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
             let data = handle.availableData
             guard let self else { return }
-            Task { await self.onStderrData(id: id, data: data) }
+            inFlightIO?.increment()
+            Task {
+                await self.onStderrData(id: id, data: data)
+                inFlightIO?.decrement()
+            }
         }
     }
 
@@ -508,6 +533,18 @@ public actor RunSpawner {
     private func onProcessTerminated(id: String, code: Int32?, signalDescription: String?) async {
         guard let live = handles[id] else { return }
         live.pendingExit = (code: code, signal: signalDescription)
+
+        // Let any readabilityHandler reads that were already scheduled
+        // before the process's exit was observed actually run first — see
+        // `attachIO`'s doc comment. This is a short, bounded spin (only
+        // in-flight `Task`s already queued on this actor at this exact
+        // moment can hold the counter above zero; nothing new increments it
+        // once the pipes are fully drained below) — not a wait for
+        // anything that could legitimately never happen, unlike the old
+        // EOF-callback dependency this replaces.
+        while !live.inFlightIO.isZero {
+            await Task.yield()
+        }
 
         let leftoverStdout = live.stdoutPipe.fileHandleForReading.availableData
         if !leftoverStdout.isEmpty {
@@ -831,6 +868,36 @@ private final class LockedBox<T>: @unchecked Sendable {
     }
 }
 
+/// Thread-safe counter of readabilityHandler-scheduled reads that haven't
+/// finished running on the actor yet — see `LiveRun.inFlightIO` and
+/// `RunSpawner.onProcessTerminated`'s doc comments for the race this
+/// closes. `increment()` is called synchronously from the GCD
+/// readabilityHandler callback thread (not the actor), so this can't be a
+/// plain `var` on the actor — it needs to be observable before the
+/// corresponding `Task` even starts running.
+final class InFlightIOCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+
+    func increment() {
+        lock.lock()
+        count += 1
+        lock.unlock()
+    }
+
+    func decrement() {
+        lock.lock()
+        count -= 1
+        lock.unlock()
+    }
+
+    var isZero: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return count == 0
+    }
+}
+
 /// Ensures a `CheckedContinuation` is resumed exactly once even though both
 /// the background write's completion and the defensive timeout can race to
 /// resume it. Not `Sendable`-checked by the compiler (continuations aren't
@@ -905,6 +972,11 @@ private final class LiveRun {
     /// that method's doc comment for why this is load-bearing on Linux.
     let stdoutPipe: Pipe
     let stderrPipe: Pipe
+    /// Counts readabilityHandler-scheduled `Task`s that have been created
+    /// but not yet finished running `onStdoutData`/`onStderrData` on the
+    /// actor. `onProcessTerminated` spin-waits for this to hit zero before
+    /// finalizing — see `attachIO`'s doc comment for the race this closes.
+    let inFlightIO = InFlightIOCounter()
     var stdinClosed = false
     var stdoutClosed = false
     var stderrClosed = false
