@@ -542,7 +542,7 @@ public actor RunSpawner {
     private func persistRecord(_ live: LiveRun) {
         guard let store else { return }
         let promptPreview = String(live.prompt.prefix(500))
-        try? store.recordDashboardRun(
+        _ = try? store.recordDashboardRun(
             id: live.id, sessionId: live.sessionId, mode: live.mode, cwd: live.cwd, model: live.model,
             permissionMode: live.permissionMode, effort: live.effort, resumeSessionId: live.resumeSessionId,
             promptPreview: promptPreview.isEmpty ? nil : promptPreview, status: live.status, exitCode: live.exitCode,
@@ -552,7 +552,7 @@ public actor RunSpawner {
 
     private func persistPatch(id: String, sessionId: String?, status: RunStatus?, exitCode: Int?, endedAt: Double?) {
         guard let store else { return }
-        try? store.patchDashboardRun(
+        _ = try? store.patchDashboardRun(
             id: id, sessionId: sessionId, status: status, exitCode: exitCode,
             endedAt: endedAt.map(Self.wireTimestamp)
         )
