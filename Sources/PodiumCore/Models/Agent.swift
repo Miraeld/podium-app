@@ -159,6 +159,21 @@ public struct AgentTreeNode: Codable, Identifiable, Equatable, Sendable {
         self.endedAt = endedAt
         self.children = children
     }
+
+    /// Node parity: nullable columns are explicit JSON `null` (types.ts
+    /// `SessionDrillIn.tree` nodes mark them `X | null`).
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(name, forKey: .name)
+        try container.encode(type, forKey: .type)
+        try container.encode(subagentType, forKey: .subagentType)
+        try container.encode(status, forKey: .status)
+        try container.encode(task, forKey: .task)
+        try container.encode(startedAt, forKey: .startedAt)
+        try container.encode(endedAt, forKey: .endedAt)
+        try container.encode(children, forKey: .children)
+    }
 }
 
 /// `POST /api/agents` request body (routes/agents.js).
