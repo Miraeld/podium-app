@@ -170,6 +170,65 @@ dist/Podium-1.0.dmg. **This is the v1.0 finish line.**
 Ranked by GroupOne-pitch value ÷ effort. **Do them in order. Ship each one
 polished before starting the next** (quality-over-breadth).
 
+### 2.0 ☐ Native UX parity pass  *(M — inserted 2026-07-06 from Gaël's web-vs-app review; runs BEFORE the menu bar extra: fix the core daily experience before adding surfaces)*
+
+Gaël's findings, reviewing the web app side by side with the native app:
+the web app's UX is currently BETTER than the native app's. Specifics:
+(a) web session overview shows agent cards; clicking one jumps to the
+conversation filtered to that agent; (b) the native app STACKS a new
+column per click, shrinking reading space — the web replaces the page,
+which reads better; (c) web dashboard sessions are clickable straight
+into detail w/ the agent list; (d) the native Workflows page "feels
+useless"; (e) native Settings opens directly into the column view,
+breaking flow vs other pages; (f) web settings/config-explorer leads
+with count cards (quick numbers) — better orientation.
+
+PO decisions (binding for the dispatches below):
+- **Kill column accumulation.** One sidebar + ONE detail pane whose
+  content is REPLACED on navigation (NavigationStack push inside the
+  detail pane, Back button + ⌘[ ). This alone fixes (b) and (e).
+- **Workflows (d): do NOT port the web's 12 d3 charts.** Native page
+  becomes a focused per-session orchestration view (agent tree,
+  swimlanes, tool timeline — the /api/workflows/session/:id data it
+  already fetches) plus 2–3 aggregate stat cards, and an "Open full
+  analysis in browser" button (opens localhost web app). Honest cut.
+- Adopt (a), (c), (f) as-is from the web patterns.
+
+```
+TASK 2.0a — Native navigation restructure + web-parity interactions.
+
+Read first: CLAUDE.md (constraints), Sources/PodiumApp/ContentView.swift (current NavigationSplitView shell), SessionDetailView.swift, DashboardView.swift, SettingsView (or the settings entry view), AppState.swift. Then open the WEB app on a live server and click through Dashboard → session → agent → conversation to feel the target (this is the reference UX).
+Goals, in priority order:
+1. Replace column-stacking with a single detail pane using NavigationStack: sidebar selects the section; every drill-in PUSHES in the detail pane (Back + ⌘[ works). No view may open a new accumulating column.
+2. Dashboard: session rows/cards become clickable → push SessionDetail (web parity (c)).
+3. SessionDetail overview: agent list as cards; clicking a card pushes the Conversation/Transcript view pre-filtered to that agent (web parity (a)). Check how the web does the filter (agent id query on the transcript/messages fetch) and mirror the semantics.
+4. Settings: entry page becomes a summary-cards page (counts: sessions, agents, events, db size, hooks status, server mode — data already available via /api/settings/info + /api/stats), each card pushing into its detail section (web parity (e)+(f)).
+5. Workflows: strip to per-session drill-in (tree, swimlanes, timeline — models already exist: WorkflowDetail) + 2–3 aggregate stat cards + "Open full analysis in browser" (NSWorkspace.shared.open on the web URL). Delete what this obsoletes rather than hiding it.
+Constraints: pure SwiftUI, keep @Observable AppState pattern (no new state containers), keep Theme tokens (no hardcoded colors), do not touch PodiumCore/PodiumServer. Keyboard: Back must work with ⌘[. Verify each flow by launching via ./run.sh against a seeded fixture (CLAUDE_HOME override — never the real one).
+DOD: all five goals demoed (list the click paths you exercised), no column accumulation anywhere, swift build + full test suite green, board §7 row.
+[+ fence block §4]
+```
+
+```
+TASK 2.0b — Ambient orb background for the native app (web-parity "Aurora Glass").
+
+Read first: Sources/PodiumApp/Theme.swift (current backgroundGradient + glassCard), the web reference: ~/Desktop/Work/Claude/podium/dashboard/client/src/index.css (body gradient + orb/glow definitions), and the palette note in the memory file podium-brand-palette (dark = gold orb rgba(254,210,58,0.05) tint from top-left; light = blue rgba(37,99,235,0.05) → indigo rgba(99,102,241,0.04)).
+Goal: a reusable OrbBackground SwiftUI view — 2–3 large blurred radial-gradient circles (Canvas or blurred Circles, .blur(radius: 80+)), gold-tinted in dark mode, blue/indigo in light mode, positioned like the web (one top-left, one bottom-right, subtle — opacity ≤ 0.06 equivalent). Applied ONCE at the root behind the NavigationSplitView, UNDER the existing .ultraThinMaterial glass cards so the glass picks up the color bleed exactly like the web's glassmorphism.
+Constraints: static (no animation — battery), must not measurably affect scroll performance (test with a 1k-session list), respects reduced-transparency accessibility setting (fall back to the flat gradient). Touch only Theme.swift + a new OrbBackground.swift + the root view application point.
+DOD: side-by-side screenshot vs the web app in both appearances; build + tests green.
+[+ fence block §4]
+```
+
+```
+TASK 2.0c — Onboarding tour depth pass (Gaël: "very quick, gives not much information, a bit sad").
+
+Read first: Sources/PodiumApp/OnboardingTour.swift (P5.5 — 5-step glass overlay w/ spotlight anchors), STANDALONE_PLAN.md §7 row for P5.5 (the anchor mechanism is load-bearing — marker-baseline ordering in PodiumApp.swift).
+Goal: same mechanism, better content. (1) Rewrite every step's copy: each step = what this page shows + ONE concrete thing to try ("Click a session to see its agents live"). Tone: confident, short, zero filler. (2) Add steps for Run, CC Config, and Diagnostics (and the menu bar extra if 2.1 has landed). (3) Final step links "Show this tour again: Help → Show Tour". Keep it skippable at every step; keep the live legacy-import count on step 1.
+Constraints: no new dependencies, don't touch the anchor/preference-key mechanism beyond adding anchors for the new steps, copy reviewed against the product frame (useful/easy/uncluttered — if a step needs 3 sentences, the step is wrong).
+DOD: tour run-through screen-recorded or screenshotted per step, light + dark; build green.
+[+ fence block §4]
+```
+
 ### 2.1 ☐ Menu bar extra  *(S — highest value/effort ratio)*
 Always-visible presence = the "it's alive" wow in a demo, zero clutter.
 **Model: Sonnet.**
@@ -264,6 +323,7 @@ Neat, not pitch-critical. Re-evaluate only when everything above is done.
 | cc-config symlink-following gap (exact Node parity — joint ticket) | Discovery/CcConfig | when Node side moves |
 | Web-push click-through fields snake_case vs future client camelCase | Push | 2.2c (no consumer yet) |
 | `WorkflowSessionRaw` dead code | PodiumApp Models | 2.7 sweep |
+| Web app over-eager refetch — UI "stutters"/spinner storm on WS events (Gaël 2026-07-06, parked by his call: low investment). Likely fix = debounce refetch-on-WS + skeleton instead of spinner | WebClient (vendored — needs the patches/ + rebuild flow) | only if it still annoys after the switchover |
 | RunSpawner stdin-backpressure question (from CI diagnosis era — likely resolved by the Thread fix, but never explicitly tested with a slow-reading child) | Runs/RunSpawner.swift | 2.2a MUST add a test: child that never reads stdin + 1MB write → sendInput must not block the actor |
 
 ## 4. §8 — The fence block (append to EVERY dispatch prompt, verbatim)
