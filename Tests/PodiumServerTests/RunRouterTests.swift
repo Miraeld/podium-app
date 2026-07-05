@@ -201,7 +201,7 @@ final class RunRouterTests: XCTestCase {
             "cwd": tempDir.path,
         ])
         let (createData, createResponse) = try await request("POST", "/api/run", body: createBody)
-        XCTAssertEqual(createResponse.statusCode, 201)
+        XCTAssertEqual(createResponse.statusCode, 200)
         let created = try JSONDecoder().decode(RunHandle.self, from: createData)
         XCTAssertEqual(created.mode.rawValue, "conversation")
         XCTAssertEqual(created.cwd, tempDir.path)
@@ -264,7 +264,7 @@ final class RunRouterTests: XCTestCase {
 
         let firstBody = try JSONEncoder().encode(["prompt": "block", "mode": "conversation", "cwd": tempDir.path])
         let (firstData, firstResponse) = try await request("POST", "/api/run", body: firstBody)
-        XCTAssertEqual(firstResponse.statusCode, 201)
+        XCTAssertEqual(firstResponse.statusCode, 200)
         let first = try JSONDecoder().decode(RunHandle.self, from: firstData)
 
         await poll {

@@ -642,21 +642,21 @@ final class ModelTests: XCTestCase {
           "mode": "headless",
           "cwd": "/tmp",
           "model": null,
-          "permission_mode": "acceptEdits",
+          "permissionMode": "acceptEdits",
           "effort": null,
           "prompt": "echo hi",
           "argv": ["-p", "echo hi"],
-          "resume_session_id": null,
+          "resumeSessionId": null,
           "status": "running",
-          "started_at": 1704067200000,
-          "ended_at": null,
-          "exit_code": null,
+          "startedAt": 1704067200000,
+          "endedAt": null,
+          "exitCode": null,
           "signal": null,
           "error": null,
-          "session_id": null,
-          "envelope_count": 3,
-          "stdout_tail": "hi\\n",
-          "stderr_tail": ""
+          "sessionId": null,
+          "envelopeCount": 3,
+          "stdoutTail": "hi\\n",
+          "stderrTail": ""
         }
         """
         let handle = try decode(RunHandle.self, json)
@@ -665,7 +665,7 @@ final class ModelTests: XCTestCase {
         XCTAssertEqual(handle.argv, ["-p", "echo hi"])
 
         let obj = try encodeToObject(handle)
-        XCTAssertEqual(obj["started_at"] as? Double, 1704067200000)
+        XCTAssertEqual(obj["startedAt"] as? Double, 1704067200000)
     }
 
     func testRunCreateRequestRoundTrip() throws {
@@ -903,14 +903,14 @@ final class ModelTests: XCTestCase {
             "node_version": "v20.0.0",
             "platform": "darwin",
             "ws_connections": 2,
-            "memory": { "rss": 1000, "heap_total": 500, "heap_used": 300, "external": 50 },
+            "memory": { "rss": 1000, "heapTotal": 500, "heapUsed": 300, "external": 50 },
             "cpu_load": [0.5, 0.4, 0.3],
             "arch": "arm64",
             "total_mem": 17179869184,
             "free_mem": 8589934592,
             "cpus": 8
           },
-          "transcript_cache": { "entries": 5 }
+          "transcript_cache": { "size": 5, "maxSize": 100, "hits": 7, "misses": 3, "keys": ["a", "b"] }
         }
         """
         let info = try decode(SettingsInfoResponse.self, json)
@@ -918,7 +918,9 @@ final class ModelTests: XCTestCase {
         XCTAssertEqual(info.db.pragmas.journalMode, "wal")
         XCTAssertTrue(info.hooks.installed)
         XCTAssertEqual(info.server.arch, "arm64")
-        XCTAssertEqual(info.transcriptCache.entries, 5)
+        XCTAssertEqual(info.transcriptCache.size, 5)
+        XCTAssertEqual(info.transcriptCache.maxSize, 100)
+        XCTAssertEqual(info.server.memory.heapTotal, 500)
     }
 
     // MARK: - Export
