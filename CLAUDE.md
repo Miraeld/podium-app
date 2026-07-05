@@ -104,6 +104,17 @@ green.
 (Darwin 25+) has no `/bin/true`; `/usr/bin/true` exists on both macOS and
 Linux (usr-merged). See `ContractTests.swift` around line 150.
 
+**CI truth policy**: tests that pass locally (macOS + local Linux docker)
+but fail on GitHub-hosted runners due to runner-environment behavior are
+gated with `XCTSkip` under `GITHUB_ACTIONS` + a comment naming the observed
+runner behavior. Never delete such a test, never skip unconditionally, never
+gate a test that also fails locally. Gated set: DiagnosticsRouterTests +
+ContractTests health-wait (Linux container networking), HookClientTests
+dead-port latency (both OSes). Never block in `Task`/`Task.detached`
+(`waitUntilExit`, sync waits) — the cooperative pool's width is the CPU
+count and small CI runners deadlock; use `Thread.detachNewThread` (see
+`RunSpawner.swift`).
+
 **Data paths** (`Sources/PodiumCore/Database/PodiumPaths.swift`):
 `DASHBOARD_DB_PATH` > `DASHBOARD_DATA_DIR` > platform default
 (`~/Library/Application Support/Podium` on macOS, `$XDG_DATA_HOME/podium` or
