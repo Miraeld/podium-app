@@ -140,18 +140,50 @@ public struct SettingsInfoResponse: Codable, Equatable, Sendable {
                 self.external = external
                 self.arrayBuffers = arrayBuffers
             }
+
+            // Node's `process.memoryUsage()` keys are camelCase literals and
+            // the client destructures them verbatim (api.ts line 188) — see
+            // `AnyEncodable`'s doc comment.
+            public func encode(to encoder: Encoder) throws {
+                var container = encoder.singleValueContainer()
+                try container.encode([
+                    "rss": AnyEncodable(rss),
+                    "heapTotal": AnyEncodable(heapTotal),
+                    "heapUsed": AnyEncodable(heapUsed),
+                    "external": AnyEncodable(external),
+                    "arrayBuffers": AnyEncodable(arrayBuffers),
+                ])
+            }
         }
     }
 
     public struct TranscriptCacheStats: Codable, Equatable, Sendable {
-        public var entries: Int
-        public var hits: Int?
-        public var misses: Int?
+        public var size: Int
+        public var maxSize: Int
+        public var hits: Int
+        public var misses: Int
+        public var keys: [String]
 
-        public init(entries: Int, hits: Int? = nil, misses: Int? = nil) {
-            self.entries = entries
+        public init(size: Int, maxSize: Int, hits: Int, misses: Int, keys: [String]) {
+            self.size = size
+            self.maxSize = maxSize
             self.hits = hits
             self.misses = misses
+            self.keys = keys
+        }
+
+        // Node's `cache.stats()` literal (api.ts lines 195–201): the
+        // container key `transcript_cache` stays snake_case but `maxSize`
+        // inside is a camelCase literal — see `AnyEncodable`'s doc comment.
+        public func encode(to encoder: Encoder) throws {
+            var container = encoder.singleValueContainer()
+            try container.encode([
+                "size": AnyEncodable(size),
+                "maxSize": AnyEncodable(maxSize),
+                "hits": AnyEncodable(hits),
+                "misses": AnyEncodable(misses),
+                "keys": AnyEncodable(keys),
+            ])
         }
     }
 }

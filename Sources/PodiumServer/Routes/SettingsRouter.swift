@@ -84,9 +84,11 @@ public enum SettingsRouterMount: RouterMount {
                 cpus: ServerRuntimeInfo.cpuCount
             ),
             transcriptCache: SettingsInfoResponse.TranscriptCacheStats(
-                entries: cacheStats.size,
+                size: cacheStats.size,
+                maxSize: cacheStats.maxSize,
                 hits: cacheStats.hits,
-                misses: cacheStats.misses
+                misses: cacheStats.misses,
+                keys: cacheStats.keys
             )
         )
         return try JSONResponse(response)
