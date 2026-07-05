@@ -90,6 +90,35 @@ public struct DashboardRun: Codable, Identifiable, Equatable, Sendable {
 
     public var startedAtDate: Date? { PodiumDate.parse(startedAt) }
     public var endedAtDate: Date? { endedAt.flatMap(PodiumDate.parse) }
+
+    /// Node parity (run.js history handler): DB snake_case columns arrive as
+    /// explicit JSON `null` when unset, plus the ONE hand-added camelCase
+    /// flag `isLive` (api.ts lines 640–655) — mixed casing in a single
+    /// object, so this uses the `AnyEncodable` dictionary pattern. `isLive`
+    /// is only spliced in by the history endpoint and stays omitted
+    /// elsewhere.
+    public func encode(to encoder: Encoder) throws {
+        var fields: [String: AnyEncodable] = [
+            "id": AnyEncodable(id),
+            "session_id": AnyEncodable(sessionId),
+            "mode": AnyEncodable(mode),
+            "cwd": AnyEncodable(cwd),
+            "model": AnyEncodable(model),
+            "permission_mode": AnyEncodable(permissionMode),
+            "effort": AnyEncodable(effort),
+            "resume_session_id": AnyEncodable(resumeSessionId),
+            "prompt_preview": AnyEncodable(promptPreview),
+            "status": AnyEncodable(status),
+            "exit_code": AnyEncodable(exitCode),
+            "started_at": AnyEncodable(startedAt),
+            "ended_at": AnyEncodable(endedAt),
+        ]
+        if let isLive {
+            fields["isLive"] = AnyEncodable(isLive)
+        }
+        var container = encoder.singleValueContainer()
+        try container.encode(fields)
+    }
 }
 
 /// `GET /api/run/history` response (routes/run.js).
