@@ -90,6 +90,24 @@ public struct WorkflowStats: Codable, Equatable, Sendable {
             self.count = count
         }
     }
+
+    // All keys are literal camelCase and `topFlow` is `{...} | null` in the
+    // client's `WorkflowStats` (types.ts) — see `AnyEncodable`'s doc comment.
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode([
+            "totalSessions": AnyEncodable(totalSessions),
+            "totalAgents": AnyEncodable(totalAgents),
+            "totalSubagents": AnyEncodable(totalSubagents),
+            "avgSubagents": AnyEncodable(avgSubagents),
+            "successRate": AnyEncodable(successRate),
+            "avgDepth": AnyEncodable(avgDepth),
+            "avgDurationSec": AnyEncodable(avgDurationSec),
+            "totalCompactions": AnyEncodable(totalCompactions),
+            "avgCompactions": AnyEncodable(avgCompactions),
+            "topFlow": AnyEncodable(topFlow),
+        ])
+    }
 }
 
 public struct OrchestrationEdge: Codable, Equatable, Sendable {
@@ -157,6 +175,22 @@ public struct OrchestrationData: Codable, Equatable, Sendable {
             self.sessions = sessions
         }
     }
+
+    // Container keys are literal camelCase in the client's
+    // `OrchestrationData` (types.ts) while `subagentTypes` ROWS stay
+    // snake_case (`subagent_type` — SQL column pass-through) via their own
+    // default encode.
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode([
+            "sessionCount": AnyEncodable(sessionCount),
+            "mainCount": AnyEncodable(mainCount),
+            "subagentTypes": AnyEncodable(subagentTypes),
+            "edges": AnyEncodable(edges),
+            "outcomes": AnyEncodable(outcomes),
+            "compactions": AnyEncodable(compactions),
+        ])
+    }
 }
 
 public struct ToolFlowTransition: Codable, Equatable, Sendable {
@@ -186,6 +220,16 @@ public struct ToolFlowData: Codable, Equatable, Sendable {
             self.toolName = toolName
             self.count = count
         }
+    }
+
+    // `toolCounts` is literal camelCase in the client's `ToolFlowData`
+    // (types.ts); its rows keep snake_case `tool_name` via default encode.
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode([
+            "transitions": AnyEncodable(transitions),
+            "toolCounts": AnyEncodable(toolCounts),
+        ])
     }
 }
 
@@ -220,6 +264,23 @@ public struct SubagentEffectivenessItem: Codable, Identifiable, Equatable, Senda
         self.avgDuration = avgDuration
         self.trend = trend
     }
+
+    // Mixed casing within ONE object (types.ts `SubagentEffectivenessItem`):
+    // `subagent_type` is a SQL pass-through, `successRate`/`avgDuration` are
+    // Node-computed camelCase literals, and `avgDuration` is `number | null`.
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode([
+            "subagent_type": AnyEncodable(subagentType),
+            "total": AnyEncodable(total),
+            "completed": AnyEncodable(completed),
+            "errors": AnyEncodable(errors),
+            "sessions": AnyEncodable(sessions),
+            "successRate": AnyEncodable(successRate),
+            "avgDuration": AnyEncodable(avgDuration),
+            "trend": AnyEncodable(trend),
+        ])
+    }
 }
 
 public struct WorkflowPattern: Codable, Equatable, Sendable {
@@ -241,6 +302,16 @@ public struct WorkflowPatternsData: Codable, Equatable, Sendable {
         self.patterns = patterns
         self.soloSessionCount = soloSessionCount
         self.soloPercentage = soloPercentage
+    }
+
+    // Literal camelCase keys (types.ts `WorkflowPatternsData`).
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode([
+            "patterns": AnyEncodable(patterns),
+            "soloSessionCount": AnyEncodable(soloSessionCount),
+            "soloPercentage": AnyEncodable(soloPercentage),
+        ])
     }
 }
 
