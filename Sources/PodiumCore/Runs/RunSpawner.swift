@@ -228,10 +228,14 @@ public actor RunSpawner {
 
         let startedAt = Self.nowMs()
         let normalizedEffort = (effort?.isEmpty == false) ? effort : nil
+        let stdinWriter = StdinWriter(
+            fileDescriptor: stdinPipe.fileHandleForWriting.fileDescriptor,
+            queue: DispatchQueue(label: "podium.run.\(id).stdin")
+        )
         let live = LiveRun(
             id: id, mode: mode, cwd: cwd, model: model, permissionMode: permissionMode,
             effort: normalizedEffort, prompt: prompt, argv: argv, resumeSessionId: resumeSessionId,
-            startedAt: startedAt, process: process, stdinPipe: stdinPipe
+            startedAt: startedAt, process: process, stdinPipe: stdinPipe, stdinWriter: stdinWriter
         )
         // Optimistic; confirmed (or corrected) by the system/init envelope.
         live.sessionId = resumeSessionId
@@ -260,9 +264,9 @@ public actor RunSpawner {
             live.stdinClosed = true
         } else if !trimmedPrompt.isEmpty {
             do {
-                try stdinPipe.fileHandleForWriting.write(contentsOf: Self.userEnvelopeLine(text: prompt))
+                try await stdinWriter.write(Self.userEnvelopeLine(text: prompt))
             } catch {
-                live.stderrBuffer += "[stdin-write-error] \(error.localizedDescription)\n"
+                live.stderrBuffer += "[stdin-write-error] \(String(describing: error))\n"
             }
         }
         // Conversation with an empty prompt (resume scenarios): leave stdin
@@ -285,7 +289,7 @@ public actor RunSpawner {
 
         let messageId = UUID().uuidString.lowercased()
         do {
-            try live.stdinPipe.fileHandleForWriting.write(contentsOf: Self.userEnvelopeLine(text: text, id: messageId))
+            try await live.stdinWriter.write(Self.userEnvelopeLine(text: text, id: messageId))
         } catch {
             live.stdinClosed = true
             throw RunSpawnerError.stdinClosed
@@ -751,6 +755,10 @@ private final class LiveRun {
 
     let process: Process
     let stdinPipe: Pipe
+    /// Non-blocking writer for `stdinPipe.fileHandleForWriting` — see
+    /// `StdinWriter`'s doc comment for why a plain `FileHandle.write` on
+    /// this actor would be a deadlock hazard.
+    let stdinWriter: StdinWriter
     var stdinClosed = false
     var stdoutClosed = false
     var stderrClosed = false
@@ -760,7 +768,7 @@ private final class LiveRun {
     init(
         id: String, mode: RunMode, cwd: String, model: String?, permissionMode: String, effort: String?,
         prompt: String, argv: [String], resumeSessionId: String?, startedAt: Double,
-        process: Process, stdinPipe: Pipe
+        process: Process, stdinPipe: Pipe, stdinWriter: StdinWriter
     ) {
         self.id = id
         self.mode = mode
@@ -774,5 +782,6 @@ private final class LiveRun {
         self.startedAt = startedAt
         self.process = process
         self.stdinPipe = stdinPipe
+        self.stdinWriter = stdinWriter
     }
 }
