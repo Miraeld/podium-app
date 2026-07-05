@@ -364,4 +364,14 @@ public struct RunBinaryResponse: Codable, Equatable, Sendable {
         self.found = found
         self.path = path
     }
+
+    /// Node parity: `res.json({found, path})` always carries `path`, as
+    /// explicit `null` when no claude binary is on PATH — synthesized
+    /// encode would omit it (only visible on machines without claude,
+    /// e.g. CI runners).
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(found, forKey: .found)
+        try container.encode(path, forKey: .path)
+    }
 }
