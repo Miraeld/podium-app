@@ -67,7 +67,13 @@ struct ContentView: View {
         // has settled — see AppState.isInitialLoad's own doc comment for why
         // this flips false exactly once per launch, not on every ⌘R.
         .onChange(of: state.isInitialLoad) { _, stillLoading in
-            if !stillLoading { OnboardingCoordinator.shared.presentIfNeeded() }
+            // Only present over a live server: if the first load FAILED
+            // (lastError set, stats never arrived), the tour would spotlight
+            // empty views and its step-0 poll would hammer a dead endpoint.
+            // The tour re-arms via Help ▸ Show Tour, so skipping here is safe.
+            if !stillLoading && state.lastError == nil && state.stats != nil {
+                OnboardingCoordinator.shared.presentIfNeeded()
+            }
         }
         .background(
             // Layer order (back → front):

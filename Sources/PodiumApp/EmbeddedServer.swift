@@ -67,6 +67,10 @@ final class EmbeddedServer {
     /// - Returns: the resolved mode (also stored in `self.mode`).
     @discardableResult
     func resolveAndStart(configuredHost: String, configuredPort: Int) async -> EmbeddedServerMode {
+        // Re-entrancy guard (v1.0 review finding #1): no current code path
+        // calls this twice, but a second call would re-probe liveness and
+        // could double-start the server / open a second store handle.
+        if let resolved = mode { return resolved }
         let embeddingEnabled = UserDefaults.standard.object(forKey: Self.embeddedServerEnabledKey) == nil
             ? true // default ON
             : UserDefaults.standard.bool(forKey: Self.embeddedServerEnabledKey)
