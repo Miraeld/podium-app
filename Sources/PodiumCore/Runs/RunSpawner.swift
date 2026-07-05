@@ -480,16 +480,49 @@ public actor RunSpawner {
         await broadcaster.broadcast(type: "run_stream", data: jsonObject(["id": .string(id), "envelope": envelope]))
     }
 
+    /// Fires once the child has genuinely exited (confirmed by either
+    /// `Process.terminationHandler` or the independent `waitUntilExit()`
+    /// task in `spawnRun` — see that call site's doc comment for why both
+    /// exist).
+    ///
+    /// Real product bug found and fixed here (proven against the actual
+    /// `podium-server` binary on real Linux via a fake `claude` that echoes
+    /// two lines and exits 0): `swift-corelibs-foundation`'s
+    /// `FileHandle.readabilityHandler` can simply never deliver its final
+    /// empty-`Data` (EOF) callback on Linux for a short-lived child's pipe,
+    /// even though every byte the child wrote WAS already delivered through
+    /// earlier callbacks and the child is confirmed gone. The old
+    /// `maybeFinalize` waited for `stdoutClosed && stderrClosed` (set only
+    /// by that EOF callback) before ever finalizing — so on Linux, a
+    /// perfectly successful run could sit at `"status":"running"` forever,
+    /// never reaching `"completed"`/`"error"`, because the EOF signal this
+    /// code depended on might not exist for that platform.
+    ///
+    /// Fix: once the process has genuinely exited, do one last
+    /// non-blocking-in-practice read of each pipe here (the writer is
+    /// already dead, so `availableData` returns immediately — either
+    /// whatever was left buffered, or empty) to catch any output the
+    /// readability handler hadn't delivered yet, then finalize
+    /// unconditionally. We no longer wait for the EOF callback at all —
+    /// the confirmed process exit is the authoritative signal now.
     private func onProcessTerminated(id: String, code: Int32?, signalDescription: String?) async {
         guard let live = handles[id] else { return }
         live.pendingExit = (code: code, signal: signalDescription)
+
+        let leftoverStdout = live.stdoutPipe.fileHandleForReading.availableData
+        if !leftoverStdout.isEmpty {
+            await onStdoutData(id: id, data: leftoverStdout)
+        }
+        let leftoverStderr = live.stderrPipe.fileHandleForReading.availableData
+        if !leftoverStderr.isEmpty {
+            await onStderrData(id: id, data: leftoverStderr)
+        }
+        live.stdoutClosed = true
+        live.stderrClosed = true
+
         await maybeFinalize(id: id)
     }
 
-    /// Only finalizes once stdout AND stderr have both reported EOF *and*
-    /// the termination handler has fired — avoids racing a still-draining
-    /// pipe against the exit event (both Foundation callbacks can arrive in
-    /// either order).
     private func maybeFinalize(id: String) async {
         guard let live = handles[id], !live.finalized else { return }
         guard live.stdoutClosed, live.stderrClosed, let pending = live.pendingExit else { return }
