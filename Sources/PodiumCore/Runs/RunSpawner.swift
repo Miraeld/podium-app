@@ -131,6 +131,11 @@ public protocol Broadcasting: Sendable {
 public actor RunSpawner {
     static let maxConcurrentDefault = 10_000
     public static let reapAfterNanoseconds: UInt64 = 5 * 60 * 1_000_000_000
+    /// Defensive deadline for a single stdin write (see `StdinWriter`'s doc
+    /// comment). Generous in production — a healthy `claude` child drains
+    /// stdin between turns in well under this — but bounds the worst case
+    /// to a fixed, visible failure instead of an unbounded hang.
+    public static let stdinWriteTimeoutDefault: TimeInterval = 10
     static let stdoutTailChars = 4096
     static let stderrTailChars = 4096
     static let maxEnvelopesPerHandle = 500
@@ -143,6 +148,7 @@ public actor RunSpawner {
     private let broadcaster: Broadcasting
     private let claudeBinary: String
     private let reapDelayNanoseconds: UInt64
+    private let stdinWriteTimeout: TimeInterval
 
     /// - Parameters:
     ///   - store: Persistence target for `dashboard_runs`. Optional and
@@ -159,11 +165,19 @@ public actor RunSpawner {
     ///     before `reap` drops it (run-spawner.js's `REAP_AFTER_MS`, 5 min).
     ///     Overridable so tests can exercise reap behavior without an
     ///     actual 5-minute wait; production always uses the default.
-    public init(store: PodiumStore?, broadcaster: Broadcasting, claudeBinary: String = "claude", reapDelayNanoseconds: UInt64 = RunSpawner.reapAfterNanoseconds) {
+    ///   - stdinWriteTimeout: Defensive deadline for a single stdin write —
+    ///     see `StdinWriter`. Overridable so tests exercising a genuinely
+    ///     stuck pipe don't have to wait the full production deadline.
+    public init(
+        store: PodiumStore?, broadcaster: Broadcasting, claudeBinary: String = "claude",
+        reapDelayNanoseconds: UInt64 = RunSpawner.reapAfterNanoseconds,
+        stdinWriteTimeout: TimeInterval = RunSpawner.stdinWriteTimeoutDefault
+    ) {
         self.store = store
         self.broadcaster = broadcaster
         self.claudeBinary = claudeBinary
         self.reapDelayNanoseconds = reapDelayNanoseconds
+        self.stdinWriteTimeout = stdinWriteTimeout
         // Subprocess stdin writes (sendInput) can hit a broken pipe if the
         // child already exited; without this the default SIGPIPE action
         // (terminate the whole server process) would take Podium down.
@@ -264,7 +278,7 @@ public actor RunSpawner {
             live.stdinClosed = true
         } else if !trimmedPrompt.isEmpty {
             do {
-                try await stdinWriter.write(Self.userEnvelopeLine(text: prompt))
+                try await stdinWriter.write(Self.userEnvelopeLine(text: prompt), timeout: stdinWriteTimeout)
             } catch {
                 live.stderrBuffer += "[stdin-write-error] \(String(describing: error))\n"
             }
@@ -289,7 +303,7 @@ public actor RunSpawner {
 
         let messageId = UUID().uuidString.lowercased()
         do {
-            try await live.stdinWriter.write(Self.userEnvelopeLine(text: text, id: messageId))
+            try await live.stdinWriter.write(Self.userEnvelopeLine(text: text, id: messageId), timeout: stdinWriteTimeout)
         } catch {
             live.stdinClosed = true
             throw RunSpawnerError.stdinClosed
