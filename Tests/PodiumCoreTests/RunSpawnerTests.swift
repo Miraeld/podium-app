@@ -76,7 +76,10 @@ final class RunSpawnerTests: XCTestCase {
         )
         XCTAssertEqual(handle.status.rawValue, "spawning")
 
-        await poll { await spawner.getRun(id: handle.id, includeEnvelopes: false)?.status.rawValue == "completed" }
+        // 15s (not the 5s default): observed flaking on a loaded Linux CI
+        // runner — process spawn/exit-detection (onProcessTerminated →
+        // maybeFinalize) can legitimately take longer than 5s there.
+        await poll(timeout: 15) { await spawner.getRun(id: handle.id, includeEnvelopes: false)?.status.rawValue == "completed" }
 
         let final = await spawner.getRun(id: handle.id, includeEnvelopes: true)
         XCTAssertEqual(final?.status.rawValue, "completed")
@@ -108,7 +111,9 @@ final class RunSpawnerTests: XCTestCase {
             prompt: "hello", mode: .headless, cwd: tempDir.path, model: nil,
             permissionMode: "acceptEdits", resumeSessionId: nil, effort: nil
         )
-        await poll { await spawner.getRun(id: handle.id, includeEnvelopes: false)?.status.rawValue == "error" }
+        // 15s: same loaded-CI-runner timing slack as the headless-success
+        // test above.
+        await poll(timeout: 15) { await spawner.getRun(id: handle.id, includeEnvelopes: false)?.status.rawValue == "error" }
         let final = await spawner.getRun(id: handle.id, includeEnvelopes: false)
         XCTAssertEqual(final?.status.rawValue, "error")
         XCTAssertEqual(final?.exitCode, 1)
