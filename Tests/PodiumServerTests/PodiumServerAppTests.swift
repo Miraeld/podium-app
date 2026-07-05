@@ -32,6 +32,7 @@ final class PodiumServerAppTests: XCTestCase {
 
     override func tearDown() async throws {
         runTask?.cancel()
+        _ = await runTask?.result
         try? FileManager.default.removeItem(at: tempDir)
     }
 

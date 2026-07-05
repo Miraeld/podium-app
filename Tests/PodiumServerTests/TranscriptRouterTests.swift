@@ -44,6 +44,7 @@ final class TranscriptRouterTests: XCTestCase {
 
     override func tearDown() async throws {
         serverTask?.cancel()
+        _ = await serverTask?.result
         ClaudeHome.environment = originalClaudeEnv
         PodiumPaths.environment = originalPathsEnv
         ClaudeHome.resetOverrideCacheForTesting()

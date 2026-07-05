@@ -322,6 +322,69 @@ final class RunSpawnerTests: XCTestCase {
         _ = await spawner.killRun(id: handle.id)
     }
 
+    /// Regression test for a real deadlock hazard: `sendInput` used to call
+    /// `FileHandle.write(contentsOf:)` directly on the `RunSpawner` actor.
+    /// A child that never drains stdin (slow model turn, or one that simply
+    /// never reads it, as here) fills the pipe's kernel buffer (64KB on both
+    /// Darwin/Linux) and blocks the write syscall — which, run on the
+    /// actor's own executor, froze the *entire actor* until the child died,
+    /// including the `readabilityHandler`-dispatched stdout draining that
+    /// would otherwise unblock things. That's not just a test artifact: a
+    /// stalled real `claude` child would have frozen that run (and every
+    /// other actor call routed through the same `RunSpawner`) identically.
+    ///
+    /// Fixed by moving the write to `StdinWriter` (`DispatchIO`, off the
+    /// actor's executor) with a defensive deadline. This test proves the
+    /// actor stays responsive to concurrent calls (`getRun`) for the entire
+    /// window a write is stuck behind a full, undrained pipe — the exact
+    /// property that was missing before.
+    func testStdinBackpressureDoesNotBlockActorFromConcurrentCalls() async throws {
+        let script = try writeFixtureScript("""
+        echo '{"type":"system","subtype":"init","session_id":"deadlock-repro"}'
+        sleep 30
+        """)
+        // Short write timeout (production default is 10s) — this test
+        // deliberately drives a write into a full, undrained pipe and only
+        // cares that the *actor* stays responsive while that write is
+        // pending, not about how long the defensive timeout itself takes.
+        let spawner = RunSpawner(store: nil, broadcaster: RecordingBroadcaster(), claudeBinary: script, stdinWriteTimeout: 2)
+        let handle = try await spawner.spawnRun(
+            prompt: "seed", mode: .conversation, cwd: tempDir.path, model: nil,
+            permissionMode: "acceptEdits", resumeSessionId: nil, effort: nil
+        )
+
+        // Concurrently hammer a *different* actor method while sendInput
+        // pushes enough data to fill the pipe and get stuck behind the
+        // fixture's `sleep 30` (which never reads stdin). If the actor were
+        // deadlocked (pre-fix), every probe would queue up behind the
+        // blocked write and none would complete until the fixture's sleep
+        // ends ~20s later. Post-fix, probes keep completing in microseconds
+        // throughout.
+        let probeTask = Task { () -> Int in
+            var probeCount = 0
+            let deadline = Date().addingTimeInterval(2.5)
+            while Date() < deadline {
+                _ = await spawner.getRun(id: handle.id, includeEnvelopes: false)
+                probeCount += 1
+                try? await Task.sleep(nanoseconds: 20_000_000)
+            }
+            return probeCount
+        }
+
+        // Each line is ~4KB; the ~64KB kernel pipe buffer fills within the
+        // first ~16 writes since the fixture never reads. Send well past
+        // that so at least one write gets stuck behind the full pipe.
+        for i in 0..<40 {
+            _ = try? await spawner.sendInput(id: handle.id, text: String(repeating: "x", count: 4000) + "-\(i)")
+        }
+        let probeCount = await probeTask.value
+        XCTAssertGreaterThan(
+            probeCount, 10,
+            "actor should service many concurrent getRun calls while a stdin write is stuck behind a full, undrained pipe"
+        )
+        _ = await spawner.killRun(id: handle.id)
+    }
+
     // MARK: - Reap after exit
 
     /// run-spawner.js keeps a finished handle around for `REAP_AFTER_MS`

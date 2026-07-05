@@ -27,6 +27,7 @@ final class RunRouterTests: XCTestCase {
 
     override func tearDown() async throws {
         serverTask?.cancel()
+        _ = await serverTask?.result
         try? FileManager.default.removeItem(at: tempDir)
     }
 
