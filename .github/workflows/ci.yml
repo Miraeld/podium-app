@@ -6,10 +6,20 @@ on:
   pull_request:
     branches: [main, develop]
 
+# A new push to the same branch supersedes the previous run — don't let
+# stale runs keep burning runner minutes.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   macos:
     name: macOS (build + test, all products)
     runs-on: macos-latest
+    # A healthy full run is ~15 min. Anything past this is a hang (see
+    # RunSpawner.swift's cooperative-pool note), not a slow run — fail fast
+    # instead of occupying a runner for the 6-hour default.
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - name: Select Xcode
@@ -25,6 +35,7 @@ jobs:
     name: Linux (podium-server + podium-hook)
     runs-on: ubuntu-latest
     container: swift:6.1
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - name: Install system dependencies
@@ -33,7 +44,12 @@ jobs:
           apt-get install -y libsqlite3-dev
       - name: Swift version
         run: swift --version
-      - name: Build cross-platform products
-        run: swift build --product podium-server --product podium-hook
+      # One invocation per product: `swift build --product A --product B`
+      # silently builds ONLY the last product (documented footgun — bit the
+      # P6.1 packaging script too).
+      - name: Build podium-server
+        run: swift build --product podium-server
+      - name: Build podium-hook
+        run: swift build --product podium-hook
       - name: Test
         run: swift test
