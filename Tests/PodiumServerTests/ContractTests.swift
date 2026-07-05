@@ -307,8 +307,16 @@ final class ContractTests: XCTestCase {
             return CFGetTypeID(n) == CFBooleanGetTypeID() ? .bool : .number
         }
         #else
+        // corelibs-Foundation: `value is Bool` matches ANY NSNumber holding
+        // 0 or 1 (bridging), so `ws_connections: 0` would classify as bool
+        // and fail number asserts (burned the 2026-07-05 Linux CI run).
+        // The only reliable bool marker is objCType "c", which is what
+        // JSONSerialization gives genuine JSON true/false.
+        if let n = value as? NSNumber {
+            return String(cString: n.objCType) == "c" ? .bool : .number
+        }
         if value is Bool { return .bool }
-        if value is NSNumber || value is Int || value is Double { return .number }
+        if value is Int || value is Double { return .number }
         #endif
         if value is String { return .string }
         if value is [Any] { return .array }
