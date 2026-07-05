@@ -308,6 +308,18 @@ public actor RunSpawner {
             Task { await self?.onProcessTerminated(id: id, code: code, signalDescription: signalDescription) }
         }
 
+        // Close the PARENT's copies of the child-facing pipe ends now that
+        // the child owns duplicates (classic Unix pipe hygiene). Without
+        // this the stdout/stderr READ ends can never observe EOF — this
+        // process itself still holds a write end — so the blocking
+        // `availableData` drain in `onProcessTerminated` could wedge the
+        // actor forever when it raced the readabilityHandler and lost
+        // (the intermittent reap-test hang on slow CI runners; many-core
+        // dev machines essentially never lose that race).
+        try? stdoutPipe.fileHandleForWriting.close()
+        try? stderrPipe.fileHandleForWriting.close()
+        try? stdinPipe.fileHandleForReading.close()
+
         handles[id] = live
         persistRecord(live)
         attachIO(id: id, stdoutPipe: stdoutPipe, stderrPipe: stderrPipe)
