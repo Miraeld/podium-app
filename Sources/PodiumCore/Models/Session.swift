@@ -74,6 +74,32 @@ public struct Session: Codable, Identifiable, Equatable, Sendable {
         self.updatedAt = updatedAt
     }
 
+    /// Node parity: SQLite rows come back with explicit `null` columns and
+    /// `res.json` serializes them as JSON `null` — the client's types.ts
+    /// marks `name`/`cwd`/`model`/`ended_at`/`metadata` as `X | null`, not
+    /// optional. Swift's synthesized encode would OMIT nil fields instead,
+    /// so the core row fields are encoded explicitly (nil → `null`) and only
+    /// the genuinely response-dependent extras (`agent_count`,
+    /// `last_activity`, …) stay omit-when-absent.
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(name, forKey: .name)
+        try container.encode(status, forKey: .status)
+        try container.encode(cwd, forKey: .cwd)
+        try container.encode(model, forKey: .model)
+        try container.encode(startedAt, forKey: .startedAt)
+        try container.encode(endedAt, forKey: .endedAt)
+        try container.encode(metadata, forKey: .metadata)
+        try container.encodeIfPresent(agentCount, forKey: .agentCount)
+        try container.encodeIfPresent(lastActivity, forKey: .lastActivity)
+        try container.encodeIfPresent(cost, forKey: .cost)
+        try container.encodeIfPresent(awaitingInputSince, forKey: .awaitingInputSince)
+        try container.encodeIfPresent(transcriptPath, forKey: .transcriptPath)
+        try container.encodeIfPresent(githubPrUrl, forKey: .githubPrUrl)
+        try container.encodeIfPresent(updatedAt, forKey: .updatedAt)
+    }
+
     public var startedAtDate: Date? { PodiumDate.parse(startedAt) }
     public var endedAtDate: Date? { endedAt.flatMap(PodiumDate.parse) }
     public var updatedAtDate: Date? { updatedAt.flatMap(PodiumDate.parse) }

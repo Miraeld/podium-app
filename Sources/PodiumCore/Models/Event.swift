@@ -40,6 +40,22 @@ public struct DashboardEvent: Codable, Identifiable, Equatable, Sendable {
         self.createdAt = createdAt
     }
 
+    /// Node parity: nullable SQL columns arrive as explicit JSON `null`
+    /// (types.ts `DashboardEvent` marks them `X | null`). `id` stays
+    /// omit-when-absent — it is only nil on pre-insert write bodies, never
+    /// on rows read back.
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encodeIfPresent(id, forKey: .id)
+        try container.encode(sessionId, forKey: .sessionId)
+        try container.encode(agentId, forKey: .agentId)
+        try container.encode(eventType, forKey: .eventType)
+        try container.encode(toolName, forKey: .toolName)
+        try container.encode(summary, forKey: .summary)
+        try container.encode(data, forKey: .data)
+        try container.encode(createdAt, forKey: .createdAt)
+    }
+
     public var createdAtDate: Date? { PodiumDate.parse(createdAt) }
 }
 

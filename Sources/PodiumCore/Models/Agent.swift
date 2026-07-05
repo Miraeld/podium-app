@@ -74,6 +74,28 @@ public struct Agent: Codable, Identifiable, Equatable, Sendable {
         self.awaitingInputSince = awaitingInputSince
     }
 
+    /// Node parity: nullable SQL columns arrive as explicit JSON `null`
+    /// (types.ts marks them `X | null`, not optional) — Swift's synthesized
+    /// encode would omit them. Only `awaiting_input_since` is a true
+    /// optional in the client and stays omit-when-absent.
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(sessionId, forKey: .sessionId)
+        try container.encode(name, forKey: .name)
+        try container.encode(type, forKey: .type)
+        try container.encode(subagentType, forKey: .subagentType)
+        try container.encode(status, forKey: .status)
+        try container.encode(task, forKey: .task)
+        try container.encode(currentTool, forKey: .currentTool)
+        try container.encode(startedAt, forKey: .startedAt)
+        try container.encode(endedAt, forKey: .endedAt)
+        try container.encode(updatedAt, forKey: .updatedAt)
+        try container.encode(parentAgentId, forKey: .parentAgentId)
+        try container.encode(metadata, forKey: .metadata)
+        try container.encodeIfPresent(awaitingInputSince, forKey: .awaitingInputSince)
+    }
+
     public var startedAtDate: Date? { PodiumDate.parse(startedAt) }
     public var endedAtDate: Date? { endedAt.flatMap(PodiumDate.parse) }
     public var updatedAtDate: Date? { PodiumDate.parse(updatedAt) }
