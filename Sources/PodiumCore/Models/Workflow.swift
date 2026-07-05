@@ -518,6 +518,22 @@ public struct SessionComplexityItem: Codable, Identifiable, Equatable, Sendable 
         self.totalTokens = totalTokens
         self.model = model
     }
+
+    // Literal camelCase keys, with `name`/`model` explicitly `| null`
+    // (types.ts `SessionComplexityItem`).
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode([
+            "id": AnyEncodable(id),
+            "name": AnyEncodable(name),
+            "status": AnyEncodable(status),
+            "duration": AnyEncodable(duration),
+            "agentCount": AnyEncodable(agentCount),
+            "subagentCount": AnyEncodable(subagentCount),
+            "totalTokens": AnyEncodable(totalTokens),
+            "model": AnyEncodable(model),
+        ])
+    }
 }
 
 public struct CompactionImpactData: Codable, Equatable, Sendable {
@@ -548,6 +564,20 @@ public struct CompactionImpactData: Codable, Equatable, Sendable {
             self.sessionId = sessionId
             self.compactions = compactions
         }
+    }
+
+    // Container keys are literal camelCase in the client's
+    // `CompactionImpactData` (types.ts); `perSession` rows keep snake_case
+    // `session_id` via their default encode.
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode([
+            "totalCompactions": AnyEncodable(totalCompactions),
+            "tokensRecovered": AnyEncodable(tokensRecovered),
+            "perSession": AnyEncodable(perSession),
+            "sessionsWithCompactions": AnyEncodable(sessionsWithCompactions),
+            "totalSessions": AnyEncodable(totalSessions),
+        ])
     }
 }
 
