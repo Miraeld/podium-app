@@ -316,12 +316,43 @@ the changelog, download the new build. **60% exists already**:
 `/api/updates/status` + the `update_status` WS broadcast serve it — nothing
 PRODUCES releases today, and nothing DISPLAYS the check.
 
-**Staged, PO decision:**
+**Staged, PO decision (revised 2026-07-06 — NO Apple Developer ID
+available; Gaël needs to prove the product first, so the update path must
+be free):**
 - Stage 1 (below): notify + changelog + download link. No signing needed.
-- Stage 2 (parked, HUMAN gate): in-place auto-update (Sparkle, EdDSA keys)
-  — requires the Apple Developer ID / notarization decision first
-  (~$99/yr; recommended before first GroupOne install regardless, so
-  downloads don't hit Gatekeeper warnings).
+- Stage 2 (free self-updater, NO Developer ID required): the app updates
+  ITSELF. Why this works without notarization: Gatekeeper only evaluates
+  files carrying the com.apple.quarantine xattr, and quarantine is OPT-IN
+  for the downloading process — browsers set it, the app's own URLSession
+  does not (don't add LSFileQuarantineEnabled). So: app downloads
+  Podium-<v>.zip via its own URLSession → verifies an ed25519 signature
+  (CI signs with a GitHub-secret key; app embeds the PUBLIC key —
+  swift-crypto Curve25519.Signing, already a dependency) → unpacks to
+  temp → atomically swaps the .app bundle (rename old aside, move new in,
+  relaunch; if the install dir isn't writable, fall back to "reveal
+  download in Finder") → relaunch. The replaced app is the same ad-hoc
+  build class the user already runs — no new Gatekeeper prompt.
+  Caveats to state honestly in RELEASING.md: (1) FIRST install keeps the
+  one-time right-click→Open friction — unavoidable without notarization;
+  (2) trust root is the embedded pubkey + repo secret, which is real
+  integrity (better than checksum-from-same-server) but not Apple's chain.
+- Later, if GroupOne funds a Developer ID: add notarization to release.yml
+  and keep the same updater — it's a drop-in improvement, nothing thrown
+  away. (Sparkle becomes optional at that point, not required.)
+
+```
+TASK 2.9c — Free self-updater (Stage 2). Model: Sonnet, Opus-class review (it swaps the app bundle on disk — the failure mode is a broken install). AFTER 2.9a + 2.9b ship and one real release exists.
+
+Read first: the Stage 2 rationale above (quarantine opt-in fact, ed25519 scheme), UpdateCheck.swift, 2.9a's release.yml, scripts/package-macos.sh, Package.swift (swift-crypto already pinned).
+Goal:
+1. release.yml additions: zip the .app (ditto -c -k --keepParent), sign the zip with ed25519 (private key from repo secret PODIUM_UPDATE_SIGNING_KEY; document one-time key generation in RELEASING.md), attach Podium-<v>.zip + Podium-<v>.zip.sig as release assets.
+2. App-side Updater (PodiumApp only, macOS): download the .zip asset via its own URLSession to a temp dir (verify NO quarantine xattr lands — assert in tests via xattr check on a fixture download), verify the .sig against the embedded public key BEFORE unpacking (reject loudly on mismatch — this is the security boundary), unpack, validate the bundle (Info.plist version matches the release tag), atomic swap: move current .app to ~/.Trash (or temp) → move new into place → relaunch via a detached /bin/sh -c 'sleep 1; open <path>' + terminate. If the parent dir isn't writable or the app isn't running from a normal location (translocation check), fall back to opening the downloaded zip in Finder with a one-line instruction.
+3. UI: the 2.9b banner gains "Install update" next to "Download"; progress + a clear failure state that NEVER leaves the user without a working app (the old bundle is only moved aside after the new one verified).
+4. Linux: out of scope (systemd unit + install script already handle it; print the one-line update command in the daemon log instead).
+Constraints: no Sparkle, no new dependencies, signature verification is NOT skippable (no env flag to bypass), never delete the old bundle before the new one is verified-in-place.
+DOD: full self-update demo against a real GitHub release (0.9.x fixture → latest), including a tampered-zip test proving the signature gate rejects it; full suite green.
+[+ fence block §4]
+```
 
 ```
 TASK 2.9a — Release pipeline (producer side). Model: Sonnet.
