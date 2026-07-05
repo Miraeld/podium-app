@@ -330,6 +330,18 @@ public struct ModelDelegationData: Codable, Equatable, Sendable {
         self.tokensByModel = tokensByModel
     }
 
+    // Container keys are literal camelCase in the client's
+    // `ModelDelegationData` (types.ts); all rows keep snake_case fields
+    // (`agent_count`, `input_tokens`, …) via their default encodes.
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode([
+            "mainModels": AnyEncodable(mainModels),
+            "subagentModels": AnyEncodable(subagentModels),
+            "tokensByModel": AnyEncodable(tokensByModel),
+        ])
+    }
+
     public struct MainModelCount: Codable, Equatable, Sendable {
         public var model: String
         public var agentCount: Int
@@ -422,6 +434,21 @@ public struct ErrorPropagationData: Codable, Equatable, Sendable {
             self.count = count
         }
     }
+
+    // Container keys are literal camelCase in the client's
+    // `ErrorPropagationData` (types.ts); `byType` rows keep snake_case
+    // `subagent_type` via their default encode.
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode([
+            "byDepth": AnyEncodable(byDepth),
+            "byType": AnyEncodable(byType),
+            "eventErrors": AnyEncodable(eventErrors),
+            "sessionsWithErrors": AnyEncodable(sessionsWithErrors),
+            "totalSessions": AnyEncodable(totalSessions),
+            "errorRate": AnyEncodable(errorRate),
+        ])
+    }
 }
 
 public struct ConcurrencyLane: Codable, Equatable, Sendable {
@@ -435,12 +462,30 @@ public struct ConcurrencyLane: Codable, Equatable, Sendable {
         self.avgEnd = avgEnd
         self.count = count
     }
+
+    // Lane rows themselves are camelCase in the client's `ConcurrencyLane`
+    // (types.ts: `avgStart`/`avgEnd` — Node-computed literals, not SQL).
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode([
+            "name": AnyEncodable(name),
+            "avgStart": AnyEncodable(avgStart),
+            "avgEnd": AnyEncodable(avgEnd),
+            "count": AnyEncodable(count),
+        ])
+    }
 }
 
 public struct ConcurrencyData: Codable, Equatable, Sendable {
     public var aggregateLanes: [ConcurrencyLane]
     public init(aggregateLanes: [ConcurrencyLane]) {
         self.aggregateLanes = aggregateLanes
+    }
+
+    // `aggregateLanes` is literal camelCase (types.ts `ConcurrencyData`).
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(["aggregateLanes": AnyEncodable(aggregateLanes)])
     }
 }
 
