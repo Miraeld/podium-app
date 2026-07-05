@@ -449,6 +449,12 @@ public actor RunSpawner {
         let inFlightIO = handles[id]?.inFlightIO
         stdoutPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
             let data = handle.availableData
+            // EOF is LEVEL-triggered: an EOF'd fd stays "readable" forever,
+            // so without detaching here GCD re-fires this handler in a tight
+            // loop — two spinning GCD threads per finished child flooding
+            // the actor with empty reads until reap (livelocked 2–4-core CI
+            // runners; a many-core dev machine just wasted CPU quietly).
+            if data.isEmpty { handle.readabilityHandler = nil }
             guard let self else { return }
             inFlightIO?.increment()
             Task {
@@ -458,6 +464,7 @@ public actor RunSpawner {
         }
         stderrPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
             let data = handle.availableData
+            if data.isEmpty { handle.readabilityHandler = nil } // see stdout note
             guard let self else { return }
             inFlightIO?.increment()
             Task {
@@ -552,6 +559,13 @@ public actor RunSpawner {
     private func onProcessTerminated(id: String, code: Int32?, signalDescription: String?) async {
         guard let live = handles[id] else { return }
         live.pendingExit = (code: code, signal: signalDescription)
+
+        // Detach the readability handlers BEFORE draining: the process exit
+        // is now the authoritative signal, and leaving them attached both
+        // races this drain for the same bytes and (post-EOF) re-fires
+        // forever — see attachIO's EOF note.
+        live.stdoutPipe.fileHandleForReading.readabilityHandler = nil
+        live.stderrPipe.fileHandleForReading.readabilityHandler = nil
 
         let leftoverStdout = live.stdoutPipe.fileHandleForReading.availableData
         if !leftoverStdout.isEmpty {
