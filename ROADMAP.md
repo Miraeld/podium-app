@@ -308,6 +308,49 @@ purples and cyan "active" states (web uses gold for live). One Haiku-tier
 sweep: grep all Color literals in Sources/PodiumApp, table of hits, replace
 with Theme tokens per the palette memory. Screenshot before/after.
 
+### 2.9 ☐ Update system  *(M — added 2026-07-06 on Gaël's ask. RANK: execute right after 2.2 — it gates safe GroupOne distribution. Numbered 2.9 only to avoid renumbering an in-use file.)*
+
+Goal: tag a GitHub release → users see "Update available" in the app, read
+the changelog, download the new build. **60% exists already**:
+`UpdateCheck.swift` (P4.3) polls the GitHub Releases API and
+`/api/updates/status` + the `update_status` WS broadcast serve it — nothing
+PRODUCES releases today, and nothing DISPLAYS the check.
+
+**Staged, PO decision:**
+- Stage 1 (below): notify + changelog + download link. No signing needed.
+- Stage 2 (parked, HUMAN gate): in-place auto-update (Sparkle, EdDSA keys)
+  — requires the Apple Developer ID / notarization decision first
+  (~$99/yr; recommended before first GroupOne install regardless, so
+  downloads don't hit Gatekeeper warnings).
+
+```
+TASK 2.9a — Release pipeline (producer side). Model: Sonnet.
+
+Read first: .github/workflows/ci.yml (style/conventions incl. timeout-minutes + the --product-per-invocation footgun note), scripts/package-macos.sh, scripts/build-linux.sh, Sources/PodiumCore/Discovery/UpdateCheck.swift (currentAppVersion — env PODIUM_APP_VERSION, falls back "dev").
+Goal: .github/workflows/release.yml triggered on tag push v* :
+1. macOS job: run package-macos.sh with the version STAMPED from the tag (extend the script to accept VERSION: writes CFBundleShortVersionString into the bundle Info.plist AND names the DMG Podium-<version>.dmg). timeout-minutes: 40.
+2. Linux job: build-linux.sh --host inside the swift:6.1 container (mind the docker-in-docker issue — if build-linux.sh insists on docker, use its host-toolchain path since the job ALREADY runs in the swift container), tarball named podium-linux-<version>-<arch>.tar.gz.
+3. Release job (needs both): gh release create for the tag with BOTH assets and --generate-notes (auto changelog from merged PRs/commits).
+Constraints: reuse ci.yml conventions; do NOT touch ci.yml itself; concurrency group per tag; the workflow must be a no-op for non-tag pushes. Verify by dry-running the version-stamping script paths locally (you cannot push a tag — document the manual verification steps you DID run and what the first real tag will prove).
+DOD: workflow file + updated packaging scripts + a RELEASING.md section (5 lines max: how to cut a release = git tag vX.Y.Z && git push --tags).
+[+ fence block §4]
+```
+
+```
+TASK 2.9b — In-app updates UI + changelog (consumer side). Model: Sonnet. AFTER 2.9a.
+
+Read first: Sources/PodiumCore/Discovery/UpdateCheck.swift ENTIRELY (appRepoSlug env resolution + doc comment; GitHubRelease/transport), Sources/PodiumServer/Routes/UpdatesRouter.swift, Models/Updates.swift + the updates assertions in ContractTests (testUpdatesStatusContract — any wire change must keep it green in the SAME commit), the Settings UI entry in Sources/PodiumApp/.
+Goal:
+1. Default appRepoSlug() to "Miraeld/podium-app" (env PODIUM_APP_GITHUB_REPO still overrides; update the stale doc comment saying no remote exists).
+2. currentAppVersion(): prefer the bundle's CFBundleShortVersionString (stamped by 2.9a), then env, then "dev".
+3. Extend GitHubRelease + the API decode with the release NOTES body (markdown) — new optional snake_case wire field on RepoUpdateStatus (release_notes); ContractTests updates test must stay green.
+4. Native UI (Settings → "Updates" card): current version, "Check for updates" (POST /api/updates/check), and when updateAvailable: a banner (Theme.accent) + a changelog sheet rendering the release notes (AttributedString(markdown:) is enough — no new deps) + "Download" button opening releaseUrl in the browser. Also listen for the update_status WS broadcast so the banner appears without a manual check (max one auto-check per app launch — no polling loops).
+5. Linux daemon: log "update available: <version> — <url>" once per process when detected. Web client: NO fork — note in the report whether the vendored UpdateNotifier.tsx could be re-enabled via the patches/ flow, but do not do it.
+Constraints: no auto-download/install (Stage 2), no Sparkle, no new dependencies. Respect the update-check being best-effort (offline must never error the UI — show "couldn't check" quietly).
+DOD: demo path — set env PODIUM_APP_VERSION=0.9.0 with a real 1.0 release published (or a fixture transport in tests) → banner appears, changelog renders, download opens. Unit tests for the version-compare + release_notes decode. Full suite + ContractTests green.
+[+ fence block §4]
+```
+
 ### 2.8 ☐ Quick Look extension  *(parked — revisit after 2.1–2.4 ship)*
 Neat, not pitch-critical. Re-evaluate only when everything above is done.
 
