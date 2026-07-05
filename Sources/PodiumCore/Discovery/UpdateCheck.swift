@@ -117,6 +117,10 @@ public struct RepoUpdateStatus: Codable, Equatable, Sendable {
 /// `latest_sha` repurposed as version tags) while adding the two-repo
 /// breakdown the adapted GitHub-releases check needs.
 public struct UpdatesStatusResponse: Codable, Equatable, Sendable {
+    /// types.ts `UpdateStatusPayload.git_repo` (required): whether the
+    /// server is running from a git checkout (i.e. a `git pull`-style
+    /// self-update is even possible). False for DMG/tarball installs.
+    public var gitRepo: Bool
     public var updateAvailable: Bool
     public var currentSha: String
     public var latestSha: String
@@ -124,7 +128,8 @@ public struct UpdatesStatusResponse: Codable, Equatable, Sendable {
     public var app: RepoUpdateStatus
     public var checkedAt: String
 
-    public init(updateAvailable: Bool, currentSha: String, latestSha: String, podium: RepoUpdateStatus, app: RepoUpdateStatus, checkedAt: String) {
+    public init(gitRepo: Bool, updateAvailable: Bool, currentSha: String, latestSha: String, podium: RepoUpdateStatus, app: RepoUpdateStatus, checkedAt: String) {
+        self.gitRepo = gitRepo
         self.updateAvailable = updateAvailable
         self.currentSha = currentSha
         self.latestSha = latestSha
@@ -182,6 +187,7 @@ public enum UpdateCheck {
         }
 
         return UpdatesStatusResponse(
+            gitRepo: runningFromGitCheckout(),
             updateAvailable: podiumStatus.updateAvailable || appStatus.updateAvailable,
             currentSha: appStatus.currentVersion ?? "dev",
             latestSha: appStatus.latestVersion ?? podiumStatus.latestVersion ?? "unknown",
@@ -189,6 +195,22 @@ public enum UpdateCheck {
             app: appStatus,
             checkedAt: PodiumDate.now()
         )
+    }
+
+    /// Walks up from the process working directory looking for a `.git`
+    /// entry — true when running from a dev checkout, false for packaged
+    /// installs (DMG bundle, Linux tarball).
+    private static func runningFromGitCheckout() -> Bool {
+        var dir = URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true)
+        for _ in 0..<64 {
+            if FileManager.default.fileExists(atPath: dir.appendingPathComponent(".git").path) {
+                return true
+            }
+            let parent = dir.deletingLastPathComponent()
+            if parent.path == dir.path { return false }
+            dir = parent
+        }
+        return false
     }
 
     private static func checkRepo(owner: String, repo: String, currentVersion: String?, transport: GitHubReleaseTransport) async -> RepoUpdateStatus {
