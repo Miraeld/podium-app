@@ -41,6 +41,7 @@
 // any other session).
 
 import Foundation
+import Dispatch
 
 #if canImport(Darwin)
 import Darwin
@@ -602,6 +603,119 @@ public actor RunSpawner {
         var data = (try? JSONEncoder().encode(wire)) ?? Data()
         data.append(0x0A)
         return data
+    }
+}
+
+// MARK: - StdinWriter
+
+/// Errors surfaced by `StdinWriter.write`.
+enum StdinWriteError: Error, Sendable {
+    /// The write did not complete within the deadline — defensive backstop
+    /// only (see header comment on `StdinWriter`); should not fire under
+    /// normal operation now that writes are off the actor's executor.
+    case timedOut
+    /// The kernel reported a write error (POSIX errno), most commonly
+    /// EPIPE because the child already exited without reading stdin.
+    case posix(Int32)
+}
+
+/// Writes to a child process's stdin pipe **without blocking the calling
+/// actor's executor thread**.
+///
+/// `RunSpawner.sendInput`/`spawnRun` used to call
+/// `FileHandle.write(contentsOf:)` directly on the actor. `Pipe` write ends
+/// are backed by a real OS pipe with a bounded kernel buffer (64KB on both
+/// Darwin and Linux); once that buffer is full, `write(2)` blocks the
+/// calling thread until the reader drains it. Because `RunSpawner` is an
+/// `actor`, that thread *is* the actor's executor — a single blocked
+/// `write()` therefore freezes the entire actor, including the
+/// `readabilityHandler`-dispatched `Task { await self.onStdoutData(...) }`
+/// calls that would otherwise drain the child's stdout and unblock things.
+/// A child that pauses reading stdin (slow model turn, backpressure from a
+/// full terminal, or — as in the CI repro — 520 rapid-fire writes outrunning
+/// a shell `read` loop) can deadlock the actor forever; this is a real
+/// production hazard for the run-spawner feature, not just a test artifact.
+///
+/// The fix: hand the write to `DispatchIO`, which performs the actual
+/// `write(2)` syscall(s) on a GCD I/O queue and chunks around backpressure
+/// internally, then resumes a continuation from its completion handler.
+/// The actor `await`s the continuation — it never blocks its own thread, so
+/// stdout keeps draining concurrently and the pipe never deadlocks.
+///
+/// A deadline is layered on top as defense-in-depth: if some future kernel
+/// or platform quirk still stalls the write, the call fails loudly (visible
+/// error, `sendInput` returns `.stdinClosed`) instead of hanging the run —
+/// and, in tests, instead of hanging the whole CI job.
+final class StdinWriter: @unchecked Sendable {
+    private let channel: DispatchIO
+    private let queue: DispatchQueue
+
+    init(fileDescriptor: Int32, queue: DispatchQueue) {
+        self.queue = queue
+        self.channel = DispatchIO(type: .stream, fileDescriptor: fileDescriptor, queue: queue) { _ in
+            // Cleanup handler intentionally empty — the pipe's FileHandle
+            // owns closing the descriptor.
+        }
+        channel.setLimit(lowWater: 1)
+    }
+
+    /// Writes `data` and resumes once the kernel has accepted all of it (or
+    /// reports an error). Never blocks the calling thread.
+    func write(_ data: Data, timeout: TimeInterval = 10) async throws {
+        let dispatchData = data.withUnsafeBytes { DispatchData(bytes: $0) }
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            let box = ContinuationBox(continuation)
+            channel.write(offset: 0, data: dispatchData, queue: queue) { done, _, errno in
+                guard done else { return }
+                if errno == 0 {
+                    box.resume(())
+                } else {
+                    box.resumeThrowing(StdinWriteError.posix(errno))
+                }
+            }
+            // Defensive timeout: fires only if DispatchIO's completion
+            // handler never runs (see class doc). Racing against the box's
+            // "already resumed" guard makes this safe to fire alongside a
+            // legitimate completion without double-resuming.
+            queue.asyncAfter(deadline: .now() + timeout) {
+                box.resumeThrowing(StdinWriteError.timedOut)
+            }
+        }
+    }
+
+    func close() {
+        channel.close(flags: .stop)
+    }
+}
+
+/// Ensures a `CheckedContinuation` is resumed exactly once even though both
+/// the `DispatchIO` completion handler and the defensive timeout can race to
+/// resume it. Not `Sendable`-checked by the compiler (continuations aren't
+/// `Sendable` pre-6.0 in all contexts), so this box takes the unchecked
+/// escape hatch and enforces single-resume itself via a lock.
+private final class ContinuationBox: @unchecked Sendable {
+    private let continuation: CheckedContinuation<Void, Error>
+    private let lock = NSLock()
+    private var resolved = false
+
+    init(_ continuation: CheckedContinuation<Void, Error>) {
+        self.continuation = continuation
+    }
+
+    func resume(_ value: Void) {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !resolved else { return }
+        resolved = true
+        continuation.resume(returning: value)
+    }
+
+    func resumeThrowing(_ error: Error) {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !resolved else { return }
+        resolved = true
+        continuation.resume(throwing: error)
     }
 }
 
