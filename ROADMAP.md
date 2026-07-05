@@ -167,10 +167,17 @@ dist/Podium-1.0.dmg. **This is the v1.0 finish line.**
 
 ## PHASE 2 — v1.1 features (PO-prioritized)
 
-Ranked by GroupOne-pitch value ÷ effort. **Do them in order. Ship each one
-polished before starting the next** (quality-over-breadth).
+Ranked by GroupOne-pitch value ÷ effort. **Ship each one polished before
+starting the next** (quality-over-breadth).
 
-### 2.0 ☐ Native UX parity pass  *(M — inserted 2026-07-06 from Gaël's web-vs-app review; runs BEFORE the menu bar extra: fix the core daily experience before adding surfaces)*
+**EXECUTION ORDER (Gaël, 2026-07-06 — section numbers are historical, do
+NOT follow them):** first **2.9a → 2.9b** (update system — it's the
+distribution channel; everything else is fixes that need a way to reach
+users), then **2.0** (UX parity), then 2.1, 2.2a/b/c, 2.9c
+(self-updater — needs a real release to update FROM, so it lands after
+at least one 2.9a-cut release), 2.3, 2.4, and the rest as numbered.
+
+### 2.0 ☐ Native UX parity pass  *(M — inserted 2026-07-06 from Gaël's web-vs-app review; runs after 2.9a/b, before the menu bar extra)*
 
 Gaël's findings, reviewing the web app side by side with the native app:
 the web app's UX is currently BETTER than the native app's. Specifics:
@@ -308,7 +315,7 @@ purples and cyan "active" states (web uses gold for live). One Haiku-tier
 sweep: grep all Color literals in Sources/PodiumApp, table of hits, replace
 with Theme tokens per the palette memory. Screenshot before/after.
 
-### 2.9 ☐ Update system  *(M — added 2026-07-06 on Gaël's ask. RANK: execute right after 2.2 — it gates safe GroupOne distribution. Numbered 2.9 only to avoid renumbering an in-use file.)*
+### 2.9 ☐ Update system  *(M — added 2026-07-06 on Gaël's ask. RANK: FIRST in Phase 2 (Gaël's call: "the update thing should be a priority, others are more like fixes") — it is the distribution channel that lets every later fix reach users. Numbered 2.9 only to avoid renumbering an in-use file.)*
 
 Goal: tag a GitHub release → users see "Update available" in the app, read
 the changelog, download the new build. **60% exists already**:
@@ -418,6 +425,7 @@ FENCES — non-negotiable:
   README close-out. CI green + P6.2 ✅ is a clean stopping point.
 - **One day:** Phase 1 (F2 + QA sweep + main branch), switchover with Gaël
   in the evening. **v1.0 done-done.**
-- **v1.1 week:** 2.1 → 2.2a/b/c → 2.3 → 2.4, one at a time, each polished.
+- **v1.1 week:** 2.9a/b (update channel) → 2.0 (UX parity) → 2.1 →
+  2.2a/b/c → 2.9c → 2.3 → 2.4, one at a time, each polished.
 - Always end a session with: board updated, §7 logged, HANDOVER.md
   resealed, everything pushed, CI verdict known.
