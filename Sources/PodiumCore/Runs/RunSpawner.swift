@@ -254,6 +254,28 @@ public actor RunSpawner {
         // Optimistic; confirmed (or corrected) by the system/init envelope.
         live.sessionId = resumeSessionId
 
+        // `Process.terminationHandler` is the documented/primary signal on
+        // Darwin and normally fires reliably there. On Linux,
+        // swift-corelibs-foundation's `Process` has a long-standing gap:
+        // `terminationHandler` can simply never fire for a child whose
+        // stdio pipes are still attached, even though the child has
+        // genuinely exited (confirmed directly against the real
+        // `podium-server` binary on real Linux: a fake `claude` that echoes
+        // two lines and exits 0 gets both envelopes delivered — proving
+        // stdout WAS being read — yet the run sat at `"status":"running"`
+        // forever; `ps`/the OS agreed the child was gone). Relying solely
+        // on `terminationHandler` is therefore a real product bug on
+        // Linux, not just a test-timing issue — every headless/
+        // conversation run would hang at "running" indefinitely there.
+        //
+        // Fix: `waitUntilExit()` is a blocking, portable call implemented
+        // via `waitpid(2)` on both platforms, and is NOT known to have the
+        // same reliability gap. Run it on a background thread (it must
+        // never run on this actor — it blocks until the child exits) as a
+        // second, authoritative path to the same `onProcessTerminated`
+        // finalization `terminationHandler` already feeds. Both paths are
+        // safe to race: `maybeFinalize` guards on `live.finalized`, so
+        // whichever fires first wins and the other becomes a no-op.
         process.terminationHandler = { [weak self] proc in
             let reason = proc.terminationReason
             let status = proc.terminationStatus
@@ -268,6 +290,15 @@ public actor RunSpawner {
             throw RunSpawnerError.badCwd("failed to spawn \(claudeBinary): \(error.localizedDescription)")
         }
         live.pid = process.processIdentifier
+
+        Task.detached { [weak self] in
+            process.waitUntilExit()
+            let reason = process.terminationReason
+            let status = process.terminationStatus
+            let code: Int32? = (reason == .exit) ? status : nil
+            let signalDescription: String? = (reason == .uncaughtSignal) ? "\(status)" : nil
+            await self?.onProcessTerminated(id: id, code: code, signalDescription: signalDescription)
+        }
 
         handles[id] = live
         persistRecord(live)
