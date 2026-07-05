@@ -702,15 +702,19 @@ final class StdinWriter: @unchecked Sendable {
                 }
             }
             // Defensive timeout: fires only if the background write never
-            // completes/reports (see class doc). Racing against the box's
-            // "already resolved" guard makes this safe alongside a
-            // legitimate completion without double-resuming — but note the
-            // background `write(2)` call itself is NOT cancelled; it will
-            // keep running on `queue` even after this fires, and could
-            // still (harmlessly, since nothing awaits it) eventually block
-            // that background thread until the pipe drains or the process
-            // dies.
-            queue.asyncAfter(deadline: .now() + timeout) {
+            // completes/reports (see class doc). Deliberately scheduled on
+            // the global concurrent queue, NOT `queue` — `queue`'s only
+            // worker can be fully occupied by the blocking `write(2)` call
+            // above, so a timeout enqueued there would never get a chance
+            // to run until the write itself finishes, making it a no-op.
+            // Racing against the box's "already resolved" guard makes this
+            // safe alongside a legitimate completion without
+            // double-resuming — but note the background `write(2)` call
+            // itself is NOT cancelled; it keeps running on `queue` even
+            // after this fires, and could still (harmlessly, since nothing
+            // awaits it) eventually block that background thread until the
+            // pipe drains or the process dies.
+            DispatchQueue.global().asyncAfter(deadline: .now() + timeout) {
                 box.resumeThrowing(StdinWriteError.timedOut)
             }
         }
