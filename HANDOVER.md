@@ -59,6 +59,19 @@ that a remote exists.
   error states, light/dark pass on new views (tour, diagnostics, config
   editor); (2) README/MIGRATION docs (part of P6.2 scope); (3) create main
   branch + set default; (4) HUMAN items below.
+- **FIRST THING NEXT SESSION — CI run 28723470203 (commit c089058) FAILED
+  BOTH JOBS, details unfetched (token limit hit).** Jobs 85176675624 +
+  85176675618. Prior fixes already landed: timing flakes (07340c0) + dead
+  glassSurface removal (c7b373b). So this is a THIRD, unseen issue — could
+  be more old-SDK symbols on CI's older Xcode, another slow-runner timing
+  case, or a Linux-env gap. `gh run view --job <id> --log-failed | grep
+  error:` and fix forward. P6.1 ⚠️→✅ still gated on first green Linux run.
+  Then F2 (board): Gaël's 3 native-app v1 bugs — Thinking tab empty,
+  reinstall-hooks error, Diagnostics unavailable (suspect: app is in CLIENT
+  mode against the plugin-era Node Docker which lacks those endpoints —
+  verify embedded mode first, and make client-mode UI degrade gracefully).
+  Then P6.2a (@P lane), then the supervised switchover (remove the prod
+  Docker container AS PART of it — Gaël's standing decision).
 - **CI update (2026-07-05 ~02:00):** first runs FAILED on two timing flakes
   (not product bugs): Linux DiagnosticsRouterTests 5s health-wait too tight
   for CI containers → 30s; macOS reap test's 50ms reap delay outlasted by
