@@ -292,13 +292,20 @@ public actor RunSpawner {
         }
         live.pid = process.processIdentifier
 
-        Task.detached { [weak self] in
+        // A dedicated OS thread, NOT `Task.detached`: `waitUntilExit()`
+        // blocks its thread for the child's whole lifetime, and a detached
+        // task runs on Swift concurrency's cooperative pool whose width is
+        // the CPU count. On small machines (2–4 core CI runners) a few
+        // concurrent runs park every pool thread and DEADLOCK the entire
+        // process — this froze both the macOS and Linux CI jobs mid-suite
+        // for hours while never reproducing on a many-core dev machine.
+        Thread.detachNewThread { [weak self] in
             process.waitUntilExit()
             let reason = process.terminationReason
             let status = process.terminationStatus
             let code: Int32? = (reason == .exit) ? status : nil
             let signalDescription: String? = (reason == .uncaughtSignal) ? "\(status)" : nil
-            await self?.onProcessTerminated(id: id, code: code, signalDescription: signalDescription)
+            Task { await self?.onProcessTerminated(id: id, code: code, signalDescription: signalDescription) }
         }
 
         handles[id] = live
