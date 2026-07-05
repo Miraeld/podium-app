@@ -633,8 +633,8 @@ enum StdinWriteError: Error, Sendable {
     /// only (see header comment on `StdinWriter`); should not fire under
     /// normal operation now that writes are off the actor's executor.
     case timedOut
-    /// The kernel reported a write error (POSIX errno), most commonly
-    /// EPIPE because the child already exited without reading stdin.
+    /// The kernel reported a write error (`errno`), most commonly EPIPE
+    /// because the child already exited without reading stdin.
     case posix(Int32)
 }
 
@@ -655,76 +655,133 @@ enum StdinWriteError: Error, Sendable {
 /// a shell `read` loop) can deadlock the actor forever; this is a real
 /// production hazard for the run-spawner feature, not just a test artifact.
 ///
-/// The fix: hand the write to `DispatchIO`, which performs the actual
-/// `write(2)` syscall(s) on a GCD I/O queue and chunks around backpressure
-/// internally, then resumes a continuation from its completion handler.
-/// The actor `await`s the continuation — it never blocks its own thread, so
-/// stdout keeps draining concurrently and the pipe never deadlocks.
+/// The fix: run the actual blocking `write(2)` syscall on a dedicated
+/// serial `DispatchQueue` (one per run, created alongside the pipe) instead
+/// of on the actor. The queue only ever services this one pipe's writes, so
+/// blocking *it* is harmless and does not starve anything else — the actor
+/// `await`s a continuation that the background queue resumes once the write
+/// returns, so the actor's own executor is never occupied by the syscall
+/// and stays free to keep draining stdout concurrently.
+///
+/// An earlier version of this fix used `DispatchIO` (GCD's async file I/O
+/// channel) for the write. That was reverted after it reproduced a rare
+/// `libdispatch` internal crash (`EXC_BREAKPOINT`/SIGTRAP in
+/// `_dispatch_source_merge_evt`) under this suite's heavy per-test
+/// create/close churn of many short-lived `DispatchIO` channels — a
+/// `DispatchQueue` + plain POSIX `write(2)` has none of `DispatchIO`'s
+/// dispatch-source-based lifecycle and doesn't hit that path.
 ///
 /// A deadline is layered on top as defense-in-depth: if some future kernel
 /// or platform quirk still stalls the write, the call fails loudly (visible
 /// error, `sendInput` returns `.stdinClosed`) instead of hanging the run —
 /// and, in tests, instead of hanging the whole CI job.
 final class StdinWriter: @unchecked Sendable {
-    private let channel: DispatchIO
+    private let fileDescriptor: Int32
     private let queue: DispatchQueue
+    private let closed = LockedBox(false)
 
     init(fileDescriptor: Int32, queue: DispatchQueue) {
+        self.fileDescriptor = fileDescriptor
         self.queue = queue
-        self.channel = DispatchIO(type: .stream, fileDescriptor: fileDescriptor, queue: queue) { _ in
-            // Cleanup handler intentionally empty — the pipe's FileHandle
-            // owns closing the descriptor.
-        }
-        channel.setLimit(lowWater: 1)
     }
 
     /// Writes `data` and resumes once the kernel has accepted all of it (or
-    /// reports an error). Never blocks the calling thread.
+    /// reports an error). Never blocks the calling thread — the blocking
+    /// `write(2)` loop runs on `queue`, a serial background queue dedicated
+    /// to this one pipe.
     func write(_ data: Data, timeout: TimeInterval = 10) async throws {
-        let dispatchData = data.withUnsafeBytes { DispatchData(bytes: $0) }
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            let box = ContinuationBox(continuation)
-            channel.write(offset: 0, data: dispatchData, queue: queue) { done, _, errno in
-                guard done else { return }
-                if errno == 0 {
-                    box.resume(())
+        if closed.value { throw StdinWriteError.posix(EBADF) }
+        let box = ContinuationBox<Void>()
+        return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            box.assign(continuation)
+            queue.async { [fileDescriptor] in
+                if let failureErrno = Self.writeAll(data, to: fileDescriptor) {
+                    box.resumeThrowing(StdinWriteError.posix(failureErrno))
                 } else {
-                    box.resumeThrowing(StdinWriteError.posix(errno))
+                    box.resume(())
                 }
             }
-            // Defensive timeout: fires only if DispatchIO's completion
-            // handler never runs (see class doc). Racing against the box's
-            // "already resumed" guard makes this safe to fire alongside a
-            // legitimate completion without double-resuming.
+            // Defensive timeout: fires only if the background write never
+            // completes/reports (see class doc). Racing against the box's
+            // "already resolved" guard makes this safe alongside a
+            // legitimate completion without double-resuming — but note the
+            // background `write(2)` call itself is NOT cancelled; it will
+            // keep running on `queue` even after this fires, and could
+            // still (harmlessly, since nothing awaits it) eventually block
+            // that background thread until the pipe drains or the process
+            // dies.
             queue.asyncAfter(deadline: .now() + timeout) {
                 box.resumeThrowing(StdinWriteError.timedOut)
             }
         }
     }
 
+    /// Blocking POSIX write loop — handles partial writes and EINTR. Must
+    /// only ever be called on `queue`, never on the actor. Returns `nil` on
+    /// success, or the failing `errno` otherwise.
+    private static func writeAll(_ data: Data, to fd: Int32) -> Int32? {
+        var remaining = data
+        while !remaining.isEmpty {
+            let written: Int = remaining.withUnsafeBytes { buffer -> Int in
+                guard let base = buffer.baseAddress else { return 0 }
+                #if canImport(Darwin)
+                return Darwin.write(fd, base, buffer.count)
+                #else
+                return Glibc.write(fd, base, buffer.count)
+                #endif
+            }
+            if written < 0 {
+                let err = errno
+                if err == EINTR { continue }
+                return err
+            }
+            if written == 0 { return EPIPE }
+            remaining.removeFirst(written)
+        }
+        return nil
+    }
+
+    /// Marks the writer closed so any future `write` calls fail fast
+    /// instead of touching a descriptor that may be reused elsewhere.
+    /// Doesn't itself close the file descriptor — `Pipe`/`FileHandle` owns
+    /// that (see `RunSpawner.reap`).
     func close() {
-        channel.close(flags: .stop)
+        closed.value = true
+    }
+}
+
+/// Minimal `NSLock`-backed mutable box, used for tiny cross-thread flags
+/// that don't warrant a full actor (`StdinWriter.closed`).
+private final class LockedBox<T>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _value: T
+    init(_ value: T) { self._value = value }
+    var value: T {
+        get { lock.lock(); defer { lock.unlock() }; return _value }
+        set { lock.lock(); defer { lock.unlock() }; _value = newValue }
     }
 }
 
 /// Ensures a `CheckedContinuation` is resumed exactly once even though both
-/// the `DispatchIO` completion handler and the defensive timeout can race to
+/// the background write's completion and the defensive timeout can race to
 /// resume it. Not `Sendable`-checked by the compiler (continuations aren't
-/// `Sendable` pre-6.0 in all contexts), so this box takes the unchecked
-/// escape hatch and enforces single-resume itself via a lock.
-private final class ContinuationBox: @unchecked Sendable {
-    private let continuation: CheckedContinuation<Void, Error>
+/// unconditionally `Sendable`), so this box takes the unchecked escape
+/// hatch and enforces single-resume itself via a lock.
+private final class ContinuationBox<Value>: @unchecked Sendable {
+    private var continuation: CheckedContinuation<Value, Error>?
     private let lock = NSLock()
     private var resolved = false
 
-    init(_ continuation: CheckedContinuation<Void, Error>) {
+    func assign(_ continuation: CheckedContinuation<Value, Error>) {
+        lock.lock()
+        defer { lock.unlock() }
         self.continuation = continuation
     }
 
-    func resume(_ value: Void) {
+    func resume(_ value: Value) {
         lock.lock()
         defer { lock.unlock() }
-        guard !resolved else { return }
+        guard !resolved, let continuation else { return }
         resolved = true
         continuation.resume(returning: value)
     }
@@ -732,7 +789,7 @@ private final class ContinuationBox: @unchecked Sendable {
     func resumeThrowing(_ error: Error) {
         lock.lock()
         defer { lock.unlock() }
-        guard !resolved else { return }
+        guard !resolved, let continuation else { return }
         resolved = true
         continuation.resume(throwing: error)
     }
