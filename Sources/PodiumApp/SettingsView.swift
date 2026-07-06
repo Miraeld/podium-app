@@ -263,46 +263,19 @@ struct DataManagementTab: View {
     @State private var isExporting = false
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 16) {
-                dbOverviewSection
-                cleanupSection
-                exportSection
-                dangerZoneSection
-            }
-            .padding(16)
-        }
-    }
-
-    // DB overview: sessions/agents/events counts from state.stats
-    private var dbOverviewSection: some View {
-        GroupBox("Database Overview") {
-            if let s = state.stats {
-                Grid(alignment: .leading, horizontalSpacing: 20, verticalSpacing: 8) {
-                    GridRow {
-                        Text("Sessions").foregroundStyle(.secondary)
-                        Text("\(s.totalSessions)").monospacedDigit()
-                        Text("Agents").foregroundStyle(.secondary)
-                        Text("\(s.totalAgents)").monospacedDigit()
-                    }
-                    GridRow {
-                        Text("Events").foregroundStyle(.secondary)
-                        Text(Theme.formatTokens(s.totalEvents)).monospacedDigit()
-                        Text("WS Connections").foregroundStyle(.secondary)
-                        Text("\(s.wsConnections)").monospacedDigit()
-                    }
+        Form {
+            Section("Database") {
+                if let s = state.stats {
+                    LabeledContent("Sessions") { Text("\(s.totalSessions)").monospacedDigit() }
+                    LabeledContent("Agents") { Text("\(s.totalAgents)").monospacedDigit() }
+                    LabeledContent("Events") { Text(Theme.formatTokens(s.totalEvents)).monospacedDigit() }
+                    LabeledContent("WS Connections") { Text("\(s.wsConnections)").monospacedDigit() }
+                } else {
+                    Text("Loading\u{2026}").foregroundStyle(.secondary)
                 }
-                .font(.callout)
-            } else {
-                Text("Loading\u{2026}").foregroundStyle(.secondary)
             }
-        }
-    }
 
-    // Cleanup: two steppers + Run button
-    private var cleanupSection: some View {
-        GroupBox("Session Cleanup") {
-            VStack(alignment: .leading, spacing: 12) {
+            Section("Session Cleanup") {
                 Stepper("Abandon sessions idle for \(abandonHours)h", value: $abandonHours, in: 1...168)
                 Stepper("Purge sessions older than \(purgedays) days", value: $purgedays, in: 1...365)
                 HStack {
@@ -324,47 +297,39 @@ struct DataManagementTab: View {
                     }
                 }
             }
-        }
-    }
 
-    // Export
-    private var exportSection: some View {
-        GroupBox("Export Data") {
-            HStack {
-                Text("Download a full JSON export of all sessions, agents, and events.")
-                    .font(.callout).foregroundStyle(.secondary)
-                Spacer()
-                Button(isExporting ? "Exporting\u{2026}" : "Export JSON") {
-                    isExporting = true
-                    Task {
-                        do {
-                            let data = try await state.downloadExport()
-                            let panel = NSSavePanel()
-                            panel.nameFieldStringValue = "podium-export-\(Date().formatted(.iso8601.year().month().day())).json"
-                            panel.allowedContentTypes = [.json]
-                            if panel.runModal() == .OK, let url = panel.url {
-                                try data.write(to: url)
-                            }
-                        } catch {}
-                        isExporting = false
+            Section("Export") {
+                LabeledContent {
+                    Button(isExporting ? "Exporting\u{2026}" : "Export JSON") {
+                        isExporting = true
+                        Task {
+                            do {
+                                let data = try await state.downloadExport()
+                                let panel = NSSavePanel()
+                                panel.nameFieldStringValue = "podium-export-\(Date().formatted(.iso8601.year().month().day())).json"
+                                panel.allowedContentTypes = [.json]
+                                if panel.runModal() == .OK, let url = panel.url {
+                                    try data.write(to: url)
+                                }
+                            } catch {}
+                            isExporting = false
+                        }
                     }
+                    .disabled(isExporting)
+                } label: {
+                    Text("Full JSON export")
+                    Text("All sessions, agents, and events.").font(.caption).foregroundStyle(.secondary)
                 }
-                .disabled(isExporting)
             }
-        }
-    }
 
-    // Danger zone
-    private var dangerZoneSection: some View {
-        GroupBox {
-            VStack(alignment: .leading, spacing: 10) {
-                Text("Danger Zone")
-                    .font(.callout.weight(.semibold))
-                    .foregroundStyle(.red)
-                Text("These actions are permanent and cannot be undone.")
-                    .font(.caption).foregroundStyle(.secondary)
-                Button("Clear All Data\u{2026}", role: .destructive) {
-                    showDangerAlert = true
+            Section("Danger Zone") {
+                LabeledContent {
+                    Button("Clear All Data\u{2026}", role: .destructive) {
+                        showDangerAlert = true
+                    }
+                } label: {
+                    Text("Wipe the database").foregroundStyle(.red)
+                    Text("Permanent — cannot be undone.").font(.caption).foregroundStyle(.secondary)
                 }
                 .alert("Clear All Data?", isPresented: $showDangerAlert) {
                     Button("Clear Everything", role: .destructive) {
@@ -381,7 +346,7 @@ struct DataManagementTab: View {
                 }
             }
         }
-        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(.red.opacity(0.3), lineWidth: 1))
+        .formStyle(.grouped)
     }
 }
 
