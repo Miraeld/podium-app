@@ -82,18 +82,85 @@ for health, and loads the live dashboard against your real DB.
 ## Build (release installers)
 
 ```bash
+tauri/prepare-sidecar.sh   # rebuild + restage the sidecar AND WebClient/dist
+cd tauri
 cargo tauri build
 ```
 
 Produces (per `tauri.conf.json` `bundle.targets`):
 
-- macOS: `Podium.app` + a `.dmg` under
-  `src-tauri/target/release/bundle/`
+- macOS: `Podium.app` + `Podium_<version>_aarch64.dmg` under
+  `src-tauri/target/release/bundle/{macos,dmg}/`
 - Linux: `.AppImage` + `.deb` (built on/in a Linux toolchain — see T1.3)
 
-> macOS code signing / vibrancy / `.dmg` polish is T1.2; Linux packaging is
-> T1.3. This T1.1 scaffold wires the targets in config but only the macOS
-> `dev` + `app`/`dmg` path is verified here.
+### macOS signing (T1.2 — ad-hoc only, no paid Developer ID)
+
+`tauri.conf.json`'s `bundle.macOS.signingIdentity` is `"-"` (ad-hoc). There
+is no Apple Developer ID on this project, so the app is **not notarized**.
+A downloaded/copied ad-hoc `.app` hits Gatekeeper on first launch. One-time
+fix after installing to `/Applications`:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/Podium.app
+```
+
+(or right-click the app → Open → confirm in the dialog, instead of
+double-clicking). This is a permanent, one-time step per machine — once the
+quarantine flag is cleared, subsequent launches work normally.
+
+### Native glass (vibrancy)
+
+The window uses the `window-vibrancy` crate (pinned to `0.6`, matching the
+version `tauri` itself vendors internally under `macos-private-api` — a
+mismatched semver pulls a second copy of the same Cocoa shims and the
+linker fails with "symbol multiply defined") to apply an `NSVisualEffectView`
+with the `HudWindow` material behind the window, the same material the old
+SwiftUI app used (`Sources/PodiumApp/VisualEffect.swift`). The window is
+also `transparent: true` (requires `app.macOSPrivateApi: true` in
+`tauri.conf.json`) so the webview doesn't paint an opaque backing over the
+vibrancy — the web dashboard's own CSS glass (`backdrop-filter`) then
+composites on top of the native wallpaper blur.
+
+**Manual verification** (structural checks don't prove the visual look):
+launch `/Applications/Podium.app`, and confirm the window shows the blurred
+desktop wallpaper behind translucent regions of the dashboard, not a flat
+opaque background. `defaults write com.apple.universalaccess
+reduceTransparency -bool true` (System Settings → Accessibility →
+Display → Reduce Transparency) should make it fall back to a flat color
+gracefully, matching the web CSS's own reduced-motion/transparency handling.
+
+### The `--web-dist` wire-up (bug found + fixed during T1.2 DOD)
+
+`podium-server`'s static file resolver
+(`Sources/PodiumServer/Static/StaticFileHandler.swift`) only knows two
+places to find `WebClient/dist`: the `$PODIUM_WEB_DIST` env override, or
+`<bundle>/Contents/Resources/WebClient/dist` — the **old SwiftUI app's**
+bundle layout. A Tauri `.app` has neither: the sidecar binary lives at
+`Contents/MacOS/podium-server` with no `WebClient/dist` alongside it, so
+without this wiring `/` 404s and the window shows nothing but the vibrancy
+blur (looks like a "glass panel with no content" bug — it's actually a
+missing-assets bug).
+
+Fixed entirely within `tauri/` (no Swift server changes — `podium-server`
+already has a `--web-dist <path>` CLI flag from day one):
+
+1. `prepare-sidecar.sh` copies `WebClient/dist` → `src-tauri/web-dist/`
+   (gitignored build artifact, same treatment as the staged sidecar binary).
+2. `tauri.conf.json`'s `bundle.resources` includes `"web-dist/"`, so Tauri
+   copies it into `Contents/Resources/web-dist/` in the final bundle,
+   preserving the `assets/` subdirectory (a `"web-dist/*"` or
+   `"web-dist/**/*"` glob mapped to a single flat destination silently
+   flattens subdirectories — use the plain directory-path array form
+   instead: `"resources": ["web-dist/"]`).
+3. `main.rs` resolves `app.path().resource_dir()` and, if
+   `<resource_dir>/web-dist` exists, passes
+   `--web-dist <resource_dir>/web-dist` when spawning the sidecar. If the
+   resource is missing (e.g. `prepare-sidecar.sh` wasn't re-run before a
+   build), it logs a warning and continues — the API still works, only the
+   web UI 404s, rather than panicking.
+
+**Always re-run `tauri/prepare-sidecar.sh` before `cargo tauri build`** if
+`Sources/PodiumServerCLI` or `WebClient/dist` changed.
 
 ## Verify no orphaned server
 
@@ -122,6 +189,8 @@ tauri/
     ├── tauri.conf.json    # externalBin: bin/podium-server; targets: dmg/app/appimage/deb
     ├── icon-source.png    # 1024² source for `cargo tauri icon`
     ├── bin/               # staged sidecar (git-ignored)
+    ├── web-dist/          # staged copy of WebClient/dist (git-ignored), bundled as a
+    │                      #   Tauri resource so podium-server can find it via --web-dist
     ├── icons/             # generated icon set (git-ignored)
-    └── src/main.rs        # the whole shell (~170 lines): spawn/reuse, health-poll, navigate, cleanup
+    └── src/main.rs        # the shell: spawn/reuse, health-poll, vibrancy, navigate, cleanup
 ```
