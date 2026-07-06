@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Podium</title>
+  <style>
+    html, body {
+      margin: 0;
+      height: 100%;
+      background: #0b0b0e;
+      color: #ddd;
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+  </style>
+</head>
+<body>
+  <!--
+    This placeholder is only ever seen for a split second (or on a sidecar
+    failure). Once main.rs confirms GET /api/health is 200, it navigates
+    the window straight to http://localhost:<port>, which is podium-server
+    itself serving WebClient/dist — the real dashboard. No web assets are
+    bundled here on purpose; see tauri/README.md.
+  -->
+  <p>Starting Podium…</p>
+</body>
+</html>

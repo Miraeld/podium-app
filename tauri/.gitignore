@@ -1,0 +1,19 @@
+# Rust build output
+/src-tauri/target/
+
+# Node (Tauri CLI via npm, if used instead of the global cargo-tauri binary)
+/node_modules/
+package-lock.json
+
+# Sidecar binary — copied here from ../.build/release/podium-server by
+# scripts/prepare-sidecar.sh (or manually, see README.md). Not source, and
+# it's a ~27MB platform-specific artifact — never commit it.
+/src-tauri/bin/
+
+# Generated icon set (from `cargo tauri icon icon-source.png`) — regenerate
+# on demand rather than tracking derived PNGs/ICNS/ICO.
+/src-tauri/icons/
+/src-tauri/icon-source.png
+
+# Tauri build metadata
+/src-tauri/gen/
