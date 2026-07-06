@@ -120,15 +120,28 @@ struct ThemeBackground: View {
 
     // Dark: gold #FED23A top-left, warm gold #FFDF5A bottom-right.
     // Light: blue #2563EB top-left, indigo #6366F1 bottom-right.
-    private var topOrb: Color {
+    // A RadialGradient (bright core → clear) is the orb: it produces its own
+    // soft falloff, unlike a solid disc that a heavy blur would flatten into
+    // nothing. Core opacity is high because the gradient fades it to zero.
+    private var topCore: Color {
         colorScheme == .dark
-            ? Color(red: 254/255, green: 210/255, blue: 58/255).opacity(0.13)
-            : Color(red: 37/255, green: 99/255, blue: 235/255).opacity(0.12)
+            ? Color(red: 254/255, green: 210/255, blue: 58/255).opacity(0.28)
+            : Color(red: 37/255, green: 99/255, blue: 235/255).opacity(0.20)
     }
-    private var bottomOrb: Color {
+    private var bottomCore: Color {
         colorScheme == .dark
-            ? Color(red: 255/255, green: 223/255, blue: 90/255).opacity(0.08)
-            : Color(red: 99/255, green: 102/255, blue: 241/255).opacity(0.10)
+            ? Color(red: 255/255, green: 223/255, blue: 90/255).opacity(0.18)
+            : Color(red: 99/255, green: 102/255, blue: 241/255).opacity(0.16)
+    }
+
+    private func orb(_ core: Color, at point: UnitPoint, radius: CGFloat) -> some View {
+        RadialGradient(
+            gradient: Gradient(colors: [core, core.opacity(0)]),
+            center: point,
+            startRadius: 0,
+            endRadius: radius
+        )
+        .ignoresSafeArea()
     }
 
     var body: some View {
@@ -136,21 +149,12 @@ struct ThemeBackground: View {
             Color.clear.ignoresSafeArea()
         } else {
             GeometryReader { geo in
-                let side = max(geo.size.width, geo.size.height)
+                let r = max(geo.size.width, geo.size.height) * 0.7
                 ZStack {
-                    Circle()
-                        .fill(topOrb)
-                        .frame(width: side * 0.95)
-                        .blur(radius: 130)
-                        .offset(x: -geo.size.width * 0.30, y: -geo.size.height * 0.34)
-                    Circle()
-                        .fill(bottomOrb)
-                        .frame(width: side * 0.85)
-                        .blur(radius: 140)
-                        .offset(x: geo.size.width * 0.34, y: geo.size.height * 0.40)
+                    orb(topCore, at: UnitPoint(x: 0.05, y: 0.0), radius: r)
+                    orb(bottomCore, at: UnitPoint(x: 0.95, y: 1.0), radius: r)
                 }
-                .frame(width: geo.size.width, height: geo.size.height)
-                .clipped()
+                .blur(radius: 30) // just enough to kill gradient banding
             }
             .ignoresSafeArea()
             .allowsHitTesting(false)
