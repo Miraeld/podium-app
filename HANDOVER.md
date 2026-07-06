@@ -61,19 +61,23 @@ via Tauri.**
   "Idle" label, update-popup re-prompt fix, **Kanban removed from nav**.
 - **ROADMAP.md rewritten** around the Tauri pivot.
 
-## In flight
+## In flight / just landed
 
-- **T1.1 — Tauri scaffold + podium-server sidecar** is being implemented by a
-  background **Sonnet agent** (dispatched this session; name `tauri-sidecar`).
-  It's creating a `tauri/` dir at repo root, wiring the sidecar (spawn → wait
-  for /api/health → load localhost → clean up, no orphans). **Next step when
-  it reports: verify its result** (does the window load the live dashboard? no
-  orphaned podium-server process?), then review + iterate. If it hit a wall,
-  read its report and continue T1.1 yourself per ROADMAP T1.1.
+- **T1.1 — Tauri scaffold + sidecar: WORKING** (committed `b49a978`, in
+  `tauri/`). The native Tauri window renders the LIVE web dashboard served by
+  the podium-server sidecar — **the pivot is validated.** Run it:
+  `cd tauri && ./prepare-sidecar.sh && cargo tauri dev` (prepare-sidecar.sh
+  builds `swift build -c release --product podium-server` and copies it to
+  src-tauri/bin/podium-server-<triple>; the 26MB binary is gitignored). See
+  `tauri/README.md` for exact commands.
+- **One T1.1 DoD item left to verify:** the no-orphan cleanup — after closing
+  the window, `lsof -iTCP:4820 -sTCP:LISTEN` + `pgrep -fl podium-server` must
+  be empty (the main.rs only kills the sidecar IF it spawned it, not a reused
+  server). Confirm this, then T1.1 is fully done.
 
 ## Next up (ROADMAP §9 order)
 
-1. Finish/verify **T1.1** (Tauri sidecar MVP).
+1. Verify T1.1 orphan cleanup (above).
 2. **T1.2** mac `.dmg` + vibrancy (glass), **T1.3** Linux `.AppImage`, **T1.4**
    tray + notifications.
 3. **T2.1** update popup + **T2.2** onboarding tour → moved into the web client.
