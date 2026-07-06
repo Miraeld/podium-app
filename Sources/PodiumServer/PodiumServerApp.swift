@@ -126,7 +126,18 @@ public struct PodiumServerApp: Sendable {
         let wsRouter = router
         let app = Application(
             router: router,
-            server: .http1WebSocketUpgrade(webSocketRouter: wsRouter),
+            // autoPing DISABLED: hummingbird-websocket's auto-ping loop
+            // (`WebSocketHandler.runAutoPingLoop`, swift-websocket) crashes in
+            // `swift_task_dealloc` when a connection closes with a `Task.sleep`
+            // pending — a task-allocator corruption that aborted the whole app
+            // both mid-use (any tab disconnect) and on quit. Disabling it
+            // deletes the crashing code path entirely. Liveness is unaffected:
+            // the web/native clients own their own reconnect, and half-open
+            // connections are a minor resource concern vs a hard crash.
+            server: .http1WebSocketUpgrade(
+                webSocketRouter: wsRouter,
+                configuration: .init(ws: .init(autoPing: .disabled))
+            ),
             configuration: .init(address: .hostname(host, port: port)),
             onServerRunning: { @Sendable _ in await onListening() },
             logger: logger
