@@ -129,13 +129,13 @@ struct ThemeBackground: View {
     // root); it used to be stacked 2–3× per page, which read as "too much".
     private var topCore: Color {
         colorScheme == .dark
-            ? Color(red: 254/255, green: 210/255, blue: 58/255).opacity(0.24)  // gold
-            : Color(red: 37/255, green: 99/255, blue: 235/255).opacity(0.20)   // blue
+            ? Color(red: 254/255, green: 210/255, blue: 58/255).opacity(0.15)  // gold
+            : Color(red: 37/255, green: 99/255, blue: 235/255).opacity(0.14)   // blue
     }
     private var bottomCore: Color {
         // Indigo #6366F1 in BOTH themes — the web's shared bottom-right hue.
         Color(red: 99/255, green: 102/255, blue: 241/255)
-            .opacity(colorScheme == .dark ? 0.20 : 0.18)
+            .opacity(colorScheme == .dark ? 0.13 : 0.12)
     }
 
     private func orb(_ core: Color, at point: UnitPoint, radius: CGFloat) -> some View {
