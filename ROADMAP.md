@@ -398,6 +398,70 @@ DOD: demo path — set env PODIUM_APP_VERSION=0.9.0 with a real 1.0 release publ
 ### 2.8 ☐ Quick Look extension  *(parked — revisit after 2.1–2.4 ship)*
 Neat, not pitch-critical. Re-evaluate only when everything above is done.
 
+### 2.10 ☐ Recommendations engine  *(L — MARQUEE FEATURE, added 2026-07-06 on Gaël's idea. The single strongest GroupOne pitch: "Podium watches how you work and tells you how to work better." Rank: after 2.0 UX parity + 2.9 update system are solid — it needs the app to feel finished first, but it's the differentiator, so don't let it slip past 2.3/2.4.)*
+
+**The idea (Gaël):** a `Recommendations` view that analyses the local
+session/agent/event history and surfaces actionable suggestions — e.g.
+*"You've used a near-identical prompt in 100 of 150 sessions — consider a
+`/skill` or slash-command."* **Hard constraint: it must work with NO
+embedded AI** (no LLM, no embeddings, no network, no API key) so it lights
+up for every GroupOne user out of the box. Everything below is pure
+heuristics/SQL over data Podium already stores.
+
+**Feasibility (confirmed): fully doable offline.** All raw material is in
+the SQLite DB (prompts via UserPromptSubmit events + transcripts, tool
+calls, cwds, agents, errors) and the aggregation machinery already exists
+(WorkflowAggregator, PodiumStore+Workflows). The engine is just a rule set.
+
+**The honest limit:** no-AI matching is LEXICAL (same/similar wording), so
+it catches repeated *pastes* (the bulk of the value) but not paraphrases.
+Set that expectation in the UI copy; the optional AI-polish stage (2.10c)
+closes the gap on demand.
+
+```
+TASK 2.10a — RecommendationEngine (PodiumCore, offline, NO AI). Model: Sonnet, Opus-class review (heuristics + thresholds are easy to get spammy — the reviewer's job is to kill noisy rules).
+
+Read first: CLAUDE.md; Sources/PodiumCore/Workflows/WorkflowAggregator.swift + Database/PodiumStore+Workflows.swift (the existing aggregation pattern to mirror); Ingest/ (how UserPromptSubmit + tool events land); Models/Event.swift + Session.swift.
+Goal: a `RecommendationEngine` (new PodiumCore/Recommendations/ dir) that runs a catalog of RULES against the store and returns `[Recommendation]`, ranked by confidence×impact. Each Recommendation: id, kind (enum), title, body (templated plain text — NO AI phrasing), evidence (e.g. "seen in 100 of 150 sessions"), suggestedAction (freeform string, e.g. "Create a skill: /<slug>"), and a strength score. Codable, snake_case wire, contract-test friendly.
+RULE CATALOG (v1 — implement these, each = a query + threshold + template):
+  1. repeated_prompt: normalize prompts (lowercase, trim, collapse whitespace, strip trailing punctuation), group by normalized hash AND by fuzzy near-dup (token-set Jaccard ≥ 0.8 or shared 8-gram shingles — classic, no ML), count distinct sessions. Fire when a cluster spans ≥ N sessions (default 5, and ≥ some % of sessions). Suggest a slash-command/skill; propose a crude slug from the prompt's first salient tokens.
+  2. repeated_tool_sequence: reuse tool-flow transitions; frequent A→B→C chains → suggest a hook/script.
+  3. project_no_config: a cwd with ≥ N sessions but no project CLAUDE.md/.claude config → suggest onboarding that project.
+  4. high_error_rate: subagent_type or tool with error rate ≥ threshold over ≥ N runs.
+  5. high_abandon_rate: % of sessions ending abandoned ≥ threshold → suggest smaller scopes.
+  6. file_hotspot: same file edited across ≥ N sessions.
+Thresholds live in one struct with sane defaults; every rule must be individually suppressible. NO rule may fire on thin data (guard minimum sample sizes) — a spammy recommendations list is worse than none.
+Tests: unit tests per rule with seeded fixtures proving fire/no-fire at the threshold boundary, and that normalization clusters obvious dupes. Deterministic ordering.
+Do NOT build UI or routes here. Do NOT add any AI/network dependency.
+[+ fence block §4]
+```
+
+```
+TASK 2.10b — /api/recommendations route + Recommendations view. Model: Sonnet. AFTER 2.10a.
+Read first: 2.10a's engine; Sources/PodiumServer/Routes/ (thin-router pattern, JSONResponse); a couple existing PodiumApp views (DashboardView for card style, ConfigExplorerView SettingsSurfaceView for the tile/card look); ContentView Sidebar (add a nav row).
+Goal: (1) GET /api/recommendations → runs the engine, returns {recommendations:[…]} (snake_case; add a ContractTests case). (2) New sidebar entry "Recommendations" (Discover section, icon lightbulb) + NavDestination case + detail view. (3) The view: a ranked list of recommendation cards — title, evidence line, the templated body, and the suggested action; each card dismissible (persist dismissed ids in UserDefaults like the update popup); empty state ("Not enough history yet — keep working and Podium will spot patterns"). Match the app's glass-card look; respect the orbs/theme.
+Constraints: no AI. The view only renders what the engine produced. Keep ContractTests green (new endpoint + any wire change in the SAME commit).
+DOD: demo against the real 1551-session DB — screenshot the populated list; confirm the repeated_prompt rule surfaces a real cluster from Gaël's history. Full suite + ContractTests green.
+[+ fence block §4]
+```
+
+```
+TASK 2.10c — OPTIONAL "✨ Improve with AI" (opt-in, uses the USER's own Claude, NO embedded key). Model: Sonnet. AFTER 2.10a/b ship and prove useful. GATED — only build if Gaël wants the AI polish; the offline engine must stand alone without it.
+Read first: 2.10a/b; Sources/PodiumCore/Runs/RunSpawner.swift (Podium spawns the user's own `claude` — that's the AI path, no API key stored by Podium); the answer-from-popup work if 2.2 landed.
+Goal: a per-recommendation "✨ Improve with AI" button that, for a repeated_prompt cluster, spawns a headless Podium run asking the user's own Claude to (a) propose a good skill/command name and (b) draft the skill's content from the clustered prompts, then shows the draft for the user to save into ~/.claude/skills. Purely on-demand; nothing runs automatically; no data leaves the machine except through the user's own already-authenticated Claude.
+Constraints: Podium NEVER stores or asks for an API key — it only drives the user's local `claude` binary via RunSpawner. If no claude binary is found (GET /api/run/binary → found:false), the button is disabled with a tooltip. Feature-flag it so it can ship dark.
+DOD: end-to-end demo — pick a repeated_prompt recommendation, click Improve with AI, get a named skill draft back, save it. Full suite green.
+[+ fence block §4]
+```
+
+**PO notes:**
+- Ship 2.10a+b as the product; 2.10c is a bonus that must never be a
+  dependency (the constraint is "works without AI").
+- The demo that sells this: run it against Gaël's real 1551-session DB and
+  let it find an actual repeated prompt he didn't realize he was pasting.
+- Watch the noise. One good recommendation beats ten obvious ones — the
+  review pass on 2.10a exists specifically to be ruthless about thresholds.
+
 ---
 
 ## PHASE 3 — Tech-debt ledger (fold into adjacent work, never a dedicated sprint)
