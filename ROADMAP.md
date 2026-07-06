@@ -173,9 +173,8 @@ starting the next** (quality-over-breadth).
 **EXECUTION ORDER (Gaël, 2026-07-06 — section numbers are historical, do
 NOT follow them):** first **2.9a → 2.9b** (update system — it's the
 distribution channel; everything else is fixes that need a way to reach
-users), then **2.0** (UX parity), then 2.1, 2.2a/b/c, 2.9c
-(self-updater — needs a real release to update FROM, so it lands after
-at least one 2.9a-cut release), 2.3, 2.4, and the rest as numbered.
+users), then **2.0** (UX parity), then 2.1, 2.2a/b/c, 2.3, 2.4, and the rest
+as numbered. (2.9c self-updater: PARKED — Stage 1 is the v1 system.)
 
 ### 2.0 ☐ Native UX parity pass  *(M — inserted 2026-07-06 from Gaël's web-vs-app review; runs after 2.9a/b, before the menu bar extra)*
 
@@ -326,7 +325,12 @@ PRODUCES releases today, and nothing DISPLAYS the check.
 **Staged, PO decision (revised 2026-07-06 — NO Apple Developer ID
 available; Gaël needs to prove the product first, so the update path must
 be free):**
-- Stage 1 (below): notify + changelog + download link. No signing needed.
+- Stage 1 (below) **IS the v1 update system** (Gaël 2026-07-06, after
+  liking Clawd on desk's approach: popup "new update available" with
+  Dismiss / Update, where Update opens the GitHub release page and the
+  user downloads + replaces manually). Simple beats clever here — do NOT
+  build more than this until manual-replace friction is actually observed
+  in GroupOne.
 - Stage 2 (free self-updater, NO Developer ID required): the app updates
   ITSELF. Why this works without notarization: Gatekeeper only evaluates
   files carrying the com.apple.quarantine xattr, and quarantine is OPT-IN
@@ -348,7 +352,7 @@ be free):**
   away. (Sparkle becomes optional at that point, not required.)
 
 ```
-TASK 2.9c — Free self-updater (Stage 2). Model: Sonnet, Opus-class review (it swaps the app bundle on disk — the failure mode is a broken install). AFTER 2.9a + 2.9b ship and one real release exists.
+TASK 2.9c — Free self-updater (Stage 2). ***PARKED (Gaël 2026-07-06): Stage 1's open-the-release-page flow is the v1 system; only revive this if GroupOne users actually complain about manual replace.*** Model: Sonnet, Opus-class review (it swaps the app bundle on disk — the failure mode is a broken install). AFTER 2.9a + 2.9b ship and one real release exists.
 
 Read first: the Stage 2 rationale above (quarantine opt-in fact, ed25519 scheme), UpdateCheck.swift, 2.9a's release.yml, scripts/package-macos.sh, Package.swift (swift-crypto already pinned).
 Goal:
@@ -382,7 +386,9 @@ Goal:
 1. Default appRepoSlug() to "Miraeld/podium-app" (env PODIUM_APP_GITHUB_REPO still overrides; update the stale doc comment saying no remote exists).
 2. currentAppVersion(): prefer the bundle's CFBundleShortVersionString (stamped by 2.9a), then env, then "dev".
 3. Extend GitHubRelease + the API decode with the release NOTES body (markdown) — new optional snake_case wire field on RepoUpdateStatus (release_notes); ContractTests updates test must stay green.
-4. Native UI (Settings → "Updates" card): current version, "Check for updates" (POST /api/updates/check), and when updateAvailable: a banner (Theme.accent) + a changelog sheet rendering the release notes (AttributedString(markdown:) is enough — no new deps) + "Download" button opening releaseUrl in the browser. Also listen for the update_status WS broadcast so the banner appears without a manual check (max one auto-check per app launch — no polling loops).
+4. Native UI, two surfaces (reference UX: Clawd on desk, per Gaël):
+   (a) PROACTIVE POPUP — on launch (one auto-check per launch, no polling) when updateAvailable: an alert/sheet "New update available — Podium <version>" with the release notes summary and exactly two buttons: "Dismiss" and "Update". Update opens releaseUrl (the GitHub release page) in the browser — the user downloads and replaces manually, that's the whole flow. Dismiss remembers the version in UserDefaults and never re-prompts for THAT version (nagging is a defect); the next release prompts again.
+   (b) Settings → "Updates" card as the persistent home: current version, "Check for updates" button (POST /api/updates/check), banner when available (Theme.accent), full changelog sheet (AttributedString(markdown:) — no new deps), same Update-opens-release-page button. Also listen for the update_status WS broadcast.
 5. Linux daemon: log "update available: <version> — <url>" once per process when detected. Web client: NO fork — note in the report whether the vendored UpdateNotifier.tsx could be re-enabled via the patches/ flow, but do not do it.
 Constraints: no auto-download/install (Stage 2), no Sparkle, no new dependencies. Respect the update-check being best-effort (offline must never error the UI — show "couldn't check" quietly).
 DOD: demo path — set env PODIUM_APP_VERSION=0.9.0 with a real 1.0 release published (or a fixture transport in tests) → banner appears, changelog renders, download opens. Unit tests for the version-compare + release_notes decode. Full suite + ContractTests green.
@@ -426,6 +432,6 @@ FENCES — non-negotiable:
 - **One day:** Phase 1 (F2 + QA sweep + main branch), switchover with Gaël
   in the evening. **v1.0 done-done.**
 - **v1.1 week:** 2.9a/b (update channel) → 2.0 (UX parity) → 2.1 →
-  2.2a/b/c → 2.9c → 2.3 → 2.4, one at a time, each polished.
+  2.2a/b/c → 2.3 → 2.4, one at a time, each polished.
 - Always end a session with: board updated, §7 logged, HANDOVER.md
   resealed, everything pushed, CI verdict known.
