@@ -290,6 +290,15 @@ final class AppState {
                 updateWidgetSnapshot()
             }
 
+        case "update_status":
+            // Broadcast from another client's (or this one's) manual
+            // POST /api/updates/check — refreshes the Settings banner live.
+            // Never triggers the proactive popup (that's launch-only).
+            if let s = try? JSONDecoder.podium.decode(WSUpdateStatusMsg.self, from: data).data {
+                updateStatus = s
+                updateCheckFailed = false
+            }
+
         default: break
         }
     }
@@ -562,5 +571,6 @@ private struct WSSessionMsg: Decodable { let data: Session? }
 private struct WSAgentMsg: Decodable { let data: Agent? }
 private struct WSEventMsg: Decodable { let data: DashboardEvent? }
 private struct WSStatsMsg: Decodable { let data: Stats? }
+private struct WSUpdateStatusMsg: Decodable { let data: UpdatesStatusResponse? }
 
 #endif
