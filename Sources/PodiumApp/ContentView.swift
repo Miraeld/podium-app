@@ -1,5 +1,6 @@
 #if os(macOS)
 import SwiftUI
+import PodiumCore
 
 // MARK: - Navigation Destination
 
@@ -200,20 +201,22 @@ struct Sidebar: View {
         .listStyle(.sidebar)
         .frame(minWidth: Theme.sidebarWidth)
         .overlay(alignment: .bottom) {
-            // Footer: server info
-            if let stats = state.stats {
-                VStack(alignment: .leading, spacing: 4) {
-                    Divider()
-                    HStack {
-                        Image(systemName: "dot.radiowaves.left.and.right")
-                            .font(.caption)
-                        Text("\(stats.wsConnections) listener\(stats.wsConnections == 1 ? "" : "s")")
-                            .font(.caption)
-                    }
-                    .foregroundStyle(.tertiary)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
+            // Footer: live listener count + app version (always shown).
+            VStack(alignment: .leading, spacing: 4) {
+                Divider()
+                HStack {
+                    Image(systemName: "dot.radiowaves.left.and.right")
+                        .font(.caption)
+                    Text("\(state.stats?.wsConnections ?? 0) listener\((state.stats?.wsConnections ?? 0) == 1 ? "" : "s")")
+                        .font(.caption)
+                    Spacer()
+                    Text("v\(UpdateCheck.currentAppVersion())")
+                        .font(.caption2)
+                        .monospacedDigit()
                 }
+                .foregroundStyle(.tertiary)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
             }
         }
     }
