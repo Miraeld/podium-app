@@ -55,7 +55,7 @@ cat > "$INFO_PLIST" << PLIST
   <key>CFBundleName</key>             <string>Podium</string>
   <key>CFBundleExecutable</key>       <string>PodiumApp</string>
   <key>CFBundlePackageType</key>      <string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>1.0</string>
+  <key>CFBundleShortVersionString</key><string>0.5.1</string>
   <key>LSMinimumSystemVersion</key>   <string>14.0</string>
   <key>NSHighResolutionCapable</key>  <true/>
   <key>NSPrincipalClass</key>         <string>NSApplication</string>
