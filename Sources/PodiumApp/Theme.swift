@@ -118,20 +118,22 @@ struct ThemeBackground: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
-    // Dark: gold #FED23A top-left, warm gold #FFDF5A bottom-right.
-    // Light: blue #2563EB top-left, indigo #6366F1 bottom-right.
+    // Matches the web dashboard's 155deg body gradient exactly (index.css):
+    //   dark:  gold #FED23A (top-left) → indigo #6366F1 (bottom-right)
+    //   light: blue #2563EB (top-left) → indigo #6366F1 (bottom-right)
     // A RadialGradient (bright core → clear) is the orb: it produces its own
     // soft falloff, unlike a solid disc that a heavy blur would flatten into
-    // nothing. Core opacity is high because the gradient fades it to zero.
+    // nothing. Core opacity is higher than the web's 0.05 because these sit
+    // behind the window's .behindWindow vibrancy, which mutes them.
     private var topCore: Color {
         colorScheme == .dark
-            ? Color(red: 254/255, green: 210/255, blue: 58/255).opacity(0.55)
-            : Color(red: 37/255, green: 99/255, blue: 235/255).opacity(0.38)
+            ? Color(red: 254/255, green: 210/255, blue: 58/255).opacity(0.55)  // gold
+            : Color(red: 37/255, green: 99/255, blue: 235/255).opacity(0.38)   // blue
     }
     private var bottomCore: Color {
-        colorScheme == .dark
-            ? Color(red: 255/255, green: 223/255, blue: 90/255).opacity(0.38)
-            : Color(red: 99/255, green: 102/255, blue: 241/255).opacity(0.32)
+        // Indigo #6366F1 in BOTH themes — the web's shared bottom-right hue.
+        Color(red: 99/255, green: 102/255, blue: 241/255)
+            .opacity(colorScheme == .dark ? 0.38 : 0.32)
     }
 
     private func orb(_ core: Color, at point: UnitPoint, radius: CGFloat) -> some View {
