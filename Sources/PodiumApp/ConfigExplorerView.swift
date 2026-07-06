@@ -721,27 +721,38 @@ struct SettingsSurfaceView: View {
     private func overviewCard(_ overview: CcOverview) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             SectionHeader(title: "Overview")
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                overviewStat("Skills", overview.counts.skills.user + overview.counts.skills.project)
-                overviewStat("Agents", overview.counts.agents.user + overview.counts.agents.project)
-                overviewStat("Commands", overview.counts.commands.user + overview.counts.commands.project)
-                overviewStat("Output Styles", overview.counts.outputStyles.user + overview.counts.outputStyles.project)
-                overviewStat("Plugins", overview.counts.plugins)
-                overviewStat("Marketplaces", overview.counts.marketplaces)
-                overviewStat("MCP Servers", overview.counts.mcpServers.user + overview.counts.mcpServers.project)
-                overviewStat("Keybindings", overview.counts.keybindings)
-                overviewStat("Memory Files", overview.counts.memory)
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 3), spacing: 12) {
+                overviewStat("Skills", overview.counts.skills.user + overview.counts.skills.project, "sparkles")
+                overviewStat("Agents", overview.counts.agents.user + overview.counts.agents.project, "person.2")
+                overviewStat("Commands", overview.counts.commands.user + overview.counts.commands.project, "terminal")
+                overviewStat("Output Styles", overview.counts.outputStyles.user + overview.counts.outputStyles.project, "paintbrush")
+                overviewStat("Plugins", overview.counts.plugins, "puzzlepiece.extension")
+                overviewStat("Marketplaces", overview.counts.marketplaces, "bag")
+                overviewStat("MCP Servers", overview.counts.mcpServers.user + overview.counts.mcpServers.project, "server.rack")
+                overviewStat("Keybindings", overview.counts.keybindings, "keyboard")
+                overviewStat("Memory Files", overview.counts.memory, "book")
             }
         }
         .padding(16)
         .glassCard()
     }
 
-    private func overviewStat(_ label: String, _ value: Int) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text("\(value)").font(.title3.weight(.semibold))
-            Text(label).font(.caption2).foregroundStyle(.secondary)
+    private func overviewStat(_ label: String, _ value: Int, _ icon: String) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon)
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(Theme.accent)
+                .frame(width: 30, height: 30)
+                .background(Theme.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+            VStack(alignment: .leading, spacing: 1) {
+                Text("\(value)").font(.title3.weight(.semibold)).monospacedDigit()
+                Text(label).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+            }
+            Spacer(minLength: 0)
         }
+        .padding(10)
+        .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 10))
+        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.white.opacity(0.06), lineWidth: 0.5))
     }
 
     private func settingsSourceCard(_ source: CcSettingsSource) -> some View {
