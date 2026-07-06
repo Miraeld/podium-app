@@ -1,73 +1,113 @@
-# Handover prompt — paste this into a fresh Claude session to continue
+# HANDOVER — Podium
 
-> Keep this file updated: the orchestrator refreshes the "Live state" section
-> after every task completion. Last update: 2026-07-05 ~01:30 CEST (Fable 5,
-> interactive session — endgame; repo now on GitHub with live CI).
+> Cold-start briefing for the next session. Last sealed: 2026-07-06 (Fable 5,
+> interactive). Repo: /Users/gaelrobin/Desktop/PodiumSwiftApp, branch
+> `develop`, remote github.com/Miraeld/podium-app (public, CI live).
 
-## Paste-ready prompt
+## Paste-ready cold-start prompt
 
 ```
-You are taking over as orchestrator of the "Podium Standalone" project in
-/Users/gaelrobin/Desktop/PodiumSwiftApp (branch develop, remote
-github.com/Miraeld/podium-app — public, CI live on push/PR).
-
-Read STANDALONE_PLAN.md — start with §0 (resume protocol, binding), then §5
-(task board), §7 (run log, bottom-up), §4 + §6b (working agreements + product
-decisions). Then HANDOVER.md "Live state" below.
-
-Your job: verify/close the open items below (P6.2a is the other session's
-lane — coordinate via the board, don't re-dispatch it), finish P6.1's
-remaining verification, then the v1 close-out list. Quality over breadth
-(agreement #8). Pull before every board edit; push after every commit now
-that a remote exists.
+You're taking over the Podium project (/Users/gaelrobin/Desktop/PodiumSwiftApp,
+branch develop). Read HANDOVER.md then ROADMAP.md at the repo root — the
+project just PIVOTED: we're retiring the SwiftUI app and shipping the web
+dashboard as ONE native app on Mac + Linux via Tauri (server bundled as a
+sidecar). ROADMAP.md is fully rewritten around this; work its phases in order
+(§9 has the execution order). Verify build/tests actually pass before
+continuing. Same rules as always (global + project CLAUDE.md, the fence block
+in ROADMAP §7). Don't re-do "Done" items.
 ```
 
-## Live state (refresh me on every board change)
+## State (verify before trusting)
 
-- **2026-07-05 (late) — CI FULLY GREEN: run 28755002211, both jobs ✅.** The
-  "flaky CI" was FOUR stacked real RunSpawner bugs (cooperative-pool
-  deadlock from waitUntilExit in Task.detached; pipe write-ends never
-  closed → EOF-less blocking drain; readabilityHandler never detached at
-  EOF → GCD spin-storm until reap; the documented inFlightIO wait LOST
-  from onProcessTerminated → finalize outran envelope reads) + two
-  runner-env gates (Linux container networking, dead-port latency) + one
-  Linux test-classifier fix (corelibs 0/1 NSNumber→Bool bridging;
-  objCType=='c' is the real bool marker). Full story: §7 run log rows
-  dated 2026-07-05.
-- **P6.2a contract suite: 29/29 green, ours now** (@P lane dead, adopted).
-  Six wire-parity bug families fixed (workflows camelCase, explicit nulls,
-  settings info shape, vapid publicKey, updates git_repo, search/run
-  families). ContractTests is the wire gate — keep it green.
-- **P6.2b docs: DONE** (README/MIGRATION/CLAUDE.md rewritten). README's
-  "Verified compatibility" holds a placeholder until the browser walk.
-- **Local: 463/463.** Suite runtime dropped 18.7s→14.2s when the EOF storm
-  died — regressions there are a smell.
-- **NEXT WORK COMES FROM ROADMAP.md** (repo root) — the full PO plan with
-  copy-paste dispatch prompts. Phase 0: 0.2 contract-check.sh, 0.3 browser
-  walk, 0.4 README close-out. Phase 1: F2 bugs (likely client-mode
-  degradation), QA sweep, main branch, THE SWITCHOVER (human, with Gaël).
-  Phase 2 features ranked. Don't re-plan — execute.
-- **CI truth policy (Gaël, binding):** local-green + runner-red ⇒
-  GITHUB_ACTIONS-gated XCTSkip with the observed mechanism in a comment.
-  Never delete, never gate unconditionally, never gate a local failure.
-- **New global skill `/orch-fable`** (~/.claude/skills/orch-fable, model:
-  opus) — run it at session start to orchestrate Fable-style after Fable
-  retires. ROADMAP.md §3 has the per-repo operating rules.
-- **HUMAN (Gaël) checklist:** unchanged — prod `podium` Docker container
-  (UNHEALTHY since ~07-04) is his only live dashboard until the
-  switchover; its DB bind-mount is the data the app takes over. Remove it
-  only AS PART of the supervised switchover (ROADMAP 1.4). DMG ready at
-  dist/Podium-1.0.dmg.
-- **Open minor debts:** tracked in ROADMAP.md Phase 3 ledger (PushNotifier
-  Sendable warning; audit LinuxDesktopNotifier/GitContext/RunBinaryLocator
-  waitUntilExit call sites; cold-cache import; cc-config symlink gap;
-  WorkflowSessionRaw dead code; stdin-backpressure test for 2.2a).
-- **Environment quirks (still true):** auto-commit hook commits the WHOLE
-  dirty tree on any agent save — authorship = `git show <sha> -- <file>`.
-  Agents finish then idle without reporting — ping before assuming death.
-  A USER INTERRUPT kills running background agents. /Applications/
-  Podium.app (old install) can shadow the dev bundle. ClaudeHome.current()
-  defaults to the REAL ~/.claude — tests need CLAUDE_HOME + PodiumPaths
-  HOME overrides (ContractTests shows the pattern). /usr/bin/true, never
-  /bin/true (Darwin 25 removed it). NEVER touch: ~/.claude/podium/data,
-  Gaël's running PodiumApp, his prod podium container.
+- **Branch develop @ `e5599d8`** (WebSocket auto-ping crash fix). Working tree
+  should be clean except whatever the T1.1 Tauri agent is writing under
+  `tauri/` (see In flight).
+- **Build/tests: `swift build` clean, `swift test` = 465/465, ContractTests
+  29/29** (as of this seal — re-run to confirm).
+- **Releases shipped:** v0.5.0, v0.5.1, v0.5.2 (SwiftUI DMG + Linux tarball,
+  via .github/workflows/release.yml — the pipeline works, 3 green runs). 0.5.2
+  is the latest release.
+- **The SwiftUI app (PodiumApp) is FROZEN** — being retired in the pivot. No
+  new SwiftUI feature work; only the crash fix landed (unreleased, on develop).
+
+## THE PIVOT (the one thing to internalize)
+
+The vendored **web dashboard** (React, served by podium-server, at
+`http://localhost:4820`) is far more complete/polished than the SwiftUI app we
+were building. Decision: **consolidate on the web UI, ship it as a native app
+via Tauri.**
+- **1.0.0 = a Tauri app (macOS + Linux)** bundling `podium-server` as a
+  sidecar, showing the web UI in a native window. Windows later.
+- Swift **server stays 100%** (backend + sidecar); SwiftUI app **retired**.
+- Full plan + dispatch prompts: **ROADMAP.md** (rewritten 2026-07-06). Old
+  SwiftUI-era tasks are cleared (ROADMAP §5). Recommendations demoted to
+  post-1.0 (§6; full spec preserved in git commit 48c37a4).
+
+## Done this session
+
+- **Shipped v0.5.0 → v0.5.2** via the (now-proven) release pipeline; each cut
+  a GitHub Release with DMG + Linux tarball + auto notes.
+- **Supervised switchover DONE**: stopped the plugin-era Docker, copied its
+  465MB dashboard.db into the app's data dir; app now self-hosts the full 1551
+  sessions. Original untouched at ~/.claude/podium/data (backup).
+- **Fixed the crash saga** — root-caused to WebSocket auto-ping
+  (`swift-websocket` `runAutoPingLoop` -> `swift_task_dealloc` abort on any WS
+  disconnect). 0.5.2 fixed the on-quit trigger (graceful-shutdown wait);
+  `e5599d8` fixed it for good by **disabling autoPing** in
+  `Sources/PodiumServer/PodiumServerApp.swift`. Not released (SwiftUI frozen)
+  but on develop → carries into the Tauri sidecar.
+- **0.5.1/0.5.2 polish** (now largely moot post-pivot but shipped): Data
+  settings rebuilt, dashboard card alignment, toolbar padding, Diagnostics
+  "Idle" label, update-popup re-prompt fix, **Kanban removed from nav**.
+- **ROADMAP.md rewritten** around the Tauri pivot.
+
+## In flight
+
+- **T1.1 — Tauri scaffold + podium-server sidecar** is being implemented by a
+  background **Sonnet agent** (dispatched this session; name `tauri-sidecar`).
+  It's creating a `tauri/` dir at repo root, wiring the sidecar (spawn → wait
+  for /api/health → load localhost → clean up, no orphans). **Next step when
+  it reports: verify its result** (does the window load the live dashboard? no
+  orphaned podium-server process?), then review + iterate. If it hit a wall,
+  read its report and continue T1.1 yourself per ROADMAP T1.1.
+
+## Next up (ROADMAP §9 order)
+
+1. Finish/verify **T1.1** (Tauri sidecar MVP).
+2. **T1.2** mac `.dmg` + vibrancy (glass), **T1.3** Linux `.AppImage`, **T1.4**
+   tray + notifications.
+3. **T2.1** update popup + **T2.2** onboarding tour → moved into the web client.
+4. **T3.1** Tauri release pipeline → **T2.3** built-in updater → **T3.4** QA
+   both platforms → **T3.2** delete SwiftUI target → **T3.3** docs → tag 1.0.0.
+
+## Gotchas (carry forward — still valid)
+
+- **Model tiering matters for cost:** Gaël is token-conscious. Do
+  implementation/exploration via **Sonnet agents** (esp. greenfield like the
+  Tauri work); keep Opus/Fable for review + root-causing. T1.1 was dispatched
+  to Sonnet for exactly this reason.
+- **Auto-commit hook** commits the whole dirty tree on any agent save — commit
+  file-lists misattribute; real authorship = `git show <sha> -- <file>`. Your
+  explicit `git commit` will often say "nothing to commit" because the hook
+  already committed — just `git push`.
+- **ContractTests is the wire gate** (`swift test --filter ContractTests`, 29
+  tests) — keep green after ANY server/model change; the web client (now the
+  ONLY UI) depends on exact wire format. snake_case via PodiumJSON; camelCase
+  exception families use the AnyEncodable dict pattern; errors are
+  CodedErrorResponse; never mix snake_case CodingKeys with .convertFromSnakeCase.
+- **`/usr/bin/true` not `/bin/true`** in tests (Darwin 25 removed /bin/true).
+- **CI truth policy:** local-green + GH-runner-red ⇒ GITHUB_ACTIONS-gated
+  XCTSkip with the mechanism documented; never gate a local failure.
+- **podium-server already serves the web UI** (WebClient/dist + API over HTTP)
+  — the Tauri window just navigates to localhost; no separate asset bundling.
+- **Data paths:** DASHBOARD_DB_PATH > DASHBOARD_DATA_DIR > platform default
+  (macOS ~/Library/Application Support/Podium). The 465MB live DB is there.
+- **NEVER touch:** ~/.claude/podium/data (old Docker DB, kept as backup),
+  Gaël's running app, WebClient/dist except via WebClient/patches + rebuild.
+- **Code signing:** no Apple Developer ID ($99 not funded). Mac installs need
+  the one-time `xattr -dr com.apple.quarantine <app>` or right-click→Open.
+  Tauri's built-in updater doesn't need it; first-install Gatekeeper step is
+  unavoidable without notarization.
+- **Open bug (debt ledger):** live sessions can show as "Abandoned"/not
+  "active" — verify podium-hook reaches the embedded/sidecar server
+  post-switchover; sweep-vs-live status logic. Server-side, carries to Tauri.
