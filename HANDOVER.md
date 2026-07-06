@@ -70,16 +70,15 @@ via Tauri.**
   builds `swift build -c release --product podium-server` and copies it to
   src-tauri/bin/podium-server-<triple>; the 26MB binary is gitignored). See
   `tauri/README.md` for exact commands.
-- **One T1.1 DoD item left to verify:** the no-orphan cleanup — after closing
-  the window, `lsof -iTCP:4820 -sTCP:LISTEN` + `pgrep -fl podium-server` must
-  be empty (the main.rs only kills the sidecar IF it spawned it, not a reused
-  server). Confirm this, then T1.1 is fully done.
+- **T1.1 is fully DONE** — orphan cleanup verified 2026-07-07 (`pgrep -fl
+  podium-server` empty after window close). No open items.
 
 ## Next up (ROADMAP §9 order)
 
-1. Verify T1.1 orphan cleanup (above).
-2. **T1.2** mac `.dmg` + vibrancy (glass), **T1.3** Linux `.AppImage`, **T1.4**
-   tray + notifications.
+1. **T1.2** mac `.dmg` + vibrancy (glass) — turn `cargo tauri build` into an
+   installable Podium.dmg + native glass. Dispatch Sonnet (ROADMAP T1.2).
+2. **T1.3** Linux `.AppImage` (the real-Linux-app milestone), **T1.4** tray +
+   notifications.
 3. **T2.1** update popup + **T2.2** onboarding tour → moved into the web client.
 4. **T3.1** Tauri release pipeline → **T2.3** built-in updater → **T3.4** QA
    both platforms → **T3.2** delete SwiftUI target → **T3.3** docs → tag 1.0.0.
