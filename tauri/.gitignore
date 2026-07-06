@@ -16,9 +16,11 @@ package-lock.json
 /src-tauri/web-dist/
 
 # Generated icon set (from `cargo tauri icon icon-source.png`) — regenerate
-# on demand rather than tracking derived PNGs/ICNS/ICO.
+# on demand rather than tracking derived PNGs/ICNS/ICO. icon-source.png
+# itself IS tracked (see below) — it's the one real source asset, not a
+# derived artifact; every fresh clone/worktree needs it to run
+# `cargo tauri icon` and previously had no way to get it.
 /src-tauri/icons/
-/src-tauri/icon-source.png
 
 # Tauri build metadata
 /src-tauri/gen/
