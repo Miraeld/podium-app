@@ -50,10 +50,15 @@ struct ConfigExplorerView: View {
 
             Divider().opacity(0.4)
 
-            itemColumn
-                .frame(width: 300)
+            // Settings is a single surface with no list of items — showing
+            // the 300px item column there leaves a dead empty gap, so the
+            // detail (SettingsSurfaceView) spans the full remaining width.
+            if selectedCategory != .settings {
+                itemColumn
+                    .frame(width: 300)
 
-            Divider().opacity(0.4)
+                Divider().opacity(0.4)
+            }
 
             detailColumn
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
