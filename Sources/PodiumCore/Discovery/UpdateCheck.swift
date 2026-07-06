@@ -176,12 +176,16 @@ public enum UpdateCheck {
     /// `CFBundleShortVersionString` (stamped into `Info.plist` by the
     /// release pipeline — TASK 2.9a's packaging script), which is only
     /// meaningful in a real `.app` bundle context (macOS `PodiumApp`).
-    /// Non-bundle contexts (podium-server on Linux, `swift test`, raw
-    /// executables with no `Info.plist`) fall through to the
-    /// `PODIUM_APP_VERSION` env var, then `"dev"`.
+    /// Guarded by `bundleIdentifier` starting with our own reverse-DNS
+    /// prefix so non-bundle contexts — podium-server on Linux, `swift
+    /// test`/`swift build` executables, or the xctest runner itself (whose
+    /// own `Bundle.main` is `com.apple.dt.xctest.tool` with an unrelated
+    /// version string) — correctly fall through to the `PODIUM_APP_VERSION`
+    /// env var, then `"dev"`.
     public static func currentAppVersion() -> String {
         #if canImport(AppKit) || canImport(UIKit)
-        if let bundleVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String, !bundleVersion.isEmpty {
+        if let bundleId = Bundle.main.bundleIdentifier, bundleId == "com.gaelrobin.PodiumApp",
+           let bundleVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String, !bundleVersion.isEmpty {
             return bundleVersion
         }
         #endif
