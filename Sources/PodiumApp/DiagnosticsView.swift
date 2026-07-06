@@ -84,7 +84,7 @@ struct DiagnosticsView: View {
             Spacer()
             if let diagnostics {
                 StatusDot(color: statusColor(diagnostics.hooks.status), active: diagnostics.hooks.status == "ok")
-                Text(diagnostics.hooks.status.uppercased())
+                Text(statusLabel(diagnostics.hooks.status).uppercased())
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(statusColor(diagnostics.hooks.status))
             }
@@ -136,7 +136,7 @@ struct DiagnosticsView: View {
                     Text("Status").foregroundStyle(.secondary)
                     HStack(spacing: 6) {
                         StatusDot(color: statusColor(hooks.status))
-                        Text(hooks.status.capitalized)
+                        Text(statusLabel(hooks.status).capitalized)
                     }
                 }
                 GridRow {
@@ -239,6 +239,13 @@ struct DiagnosticsView: View {
         case "stale": return Theme.color(for: "abandoned")
         default: return .secondary
         }
+    }
+
+    /// "unknown" from the server just means no hook events have hit this
+    /// server process yet (fresh launch, nothing running) — "Idle" reads as
+    /// waiting rather than broken.
+    private func statusLabel(_ status: String) -> String {
+        status == "unknown" ? "Idle" : status
     }
 
     private func lastEventDescription(_ timestamp: String?) -> String {
