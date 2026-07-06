@@ -159,24 +159,33 @@ public enum UpdateCheck {
     public static let podiumOwner = "wp-media"
     public static let podiumRepo = "podium"
 
-    /// This app's own repo. No git remote is configured for
-    /// PodiumSwiftApp at the time of writing (a personal/local project), so
-    /// the slug is resolved from an env var with a sensible placeholder
-    /// default — set `PODIUM_APP_GITHUB_REPO=owner/repo` once this project
-    /// gets a real GitHub remote to make the "app" half of the status
-    /// meaningful. Until then `app.checked` is `false` and `app.error`
-    /// explains why.
+    /// This app's own repo. Defaults to `"Miraeld/podium-app"` (the real
+    /// GitHub remote this standalone app now ships releases from — see
+    /// `.github/workflows/release.yml`, TASK 2.9a). Set
+    /// `PODIUM_APP_GITHUB_REPO=owner/repo` to override (e.g. pointing a dev
+    /// build at a fork for testing).
     public static func appRepoSlug() -> String? {
         let env = ProcessInfo.processInfo.environment["PODIUM_APP_GITHUB_REPO"]
-        guard let env, !env.isEmpty, env.contains("/") else { return nil }
-        return env
+        if let env, !env.isEmpty, env.contains("/") {
+            return env
+        }
+        return "Miraeld/podium-app"
     }
 
-    /// Current running version string. Resolved from `PODIUM_APP_VERSION`
-    /// env (set by packaging) falling back to `"dev"` for local builds —
-    /// there is no compiled-in version constant yet (P6.1 packaging task).
+    /// Current running version string. Prefers the app bundle's
+    /// `CFBundleShortVersionString` (stamped into `Info.plist` by the
+    /// release pipeline — TASK 2.9a's packaging script), which is only
+    /// meaningful in a real `.app` bundle context (macOS `PodiumApp`).
+    /// Non-bundle contexts (podium-server on Linux, `swift test`, raw
+    /// executables with no `Info.plist`) fall through to the
+    /// `PODIUM_APP_VERSION` env var, then `"dev"`.
     public static func currentAppVersion() -> String {
-        ProcessInfo.processInfo.environment["PODIUM_APP_VERSION"] ?? "dev"
+        #if canImport(AppKit) || canImport(UIKit)
+        if let bundleVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String, !bundleVersion.isEmpty {
+            return bundleVersion
+        }
+        #endif
+        return ProcessInfo.processInfo.environment["PODIUM_APP_VERSION"] ?? "dev"
     }
 
     /// Runs both repo checks and assembles the combined response. Never
@@ -243,7 +252,8 @@ public enum UpdateCheck {
         }
         return RepoUpdateStatus(
             repo: "\(owner)/\(repo)", checked: true, currentVersion: currentVersion, latestVersion: release.tagName,
-            updateAvailable: updateAvailable, releaseUrl: release.htmlUrl, publishedAt: release.publishedAt, error: nil
+            updateAvailable: updateAvailable, releaseUrl: release.htmlUrl, publishedAt: release.publishedAt, error: nil,
+            releaseNotes: release.body
         )
     }
 
