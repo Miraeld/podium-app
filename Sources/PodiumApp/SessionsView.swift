@@ -202,7 +202,6 @@ struct SessionsView: View {
                 SessionDetailView(sessionId: id)
             } else {
                 ZStack {
-                    ThemeBackground()
                     EmptyStateView(
                         icon: "list.bullet.rectangle.portrait",
                         title: "Select a Session",

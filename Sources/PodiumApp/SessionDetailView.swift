@@ -23,8 +23,6 @@ struct SessionDetailView: View {
 
     var body: some View {
         ZStack {
-            ThemeBackground()
-
             if let session {
                 VStack(spacing: 0) {
                     // Header

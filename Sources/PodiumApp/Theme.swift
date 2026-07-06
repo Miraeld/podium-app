@@ -125,15 +125,17 @@ struct ThemeBackground: View {
     // soft falloff, unlike a solid disc that a heavy blur would flatten into
     // nothing. Core opacity is higher than the web's 0.05 because these sit
     // behind the window's .behindWindow vibrancy, which mutes them.
+    // Subtle: this layer is now applied exactly ONCE (at the ContentView
+    // root); it used to be stacked 2–3× per page, which read as "too much".
     private var topCore: Color {
         colorScheme == .dark
-            ? Color(red: 254/255, green: 210/255, blue: 58/255).opacity(0.55)  // gold
-            : Color(red: 37/255, green: 99/255, blue: 235/255).opacity(0.38)   // blue
+            ? Color(red: 254/255, green: 210/255, blue: 58/255).opacity(0.24)  // gold
+            : Color(red: 37/255, green: 99/255, blue: 235/255).opacity(0.20)   // blue
     }
     private var bottomCore: Color {
         // Indigo #6366F1 in BOTH themes — the web's shared bottom-right hue.
         Color(red: 99/255, green: 102/255, blue: 241/255)
-            .opacity(colorScheme == .dark ? 0.38 : 0.32)
+            .opacity(colorScheme == .dark ? 0.20 : 0.18)
     }
 
     private func orb(_ core: Color, at point: UnitPoint, radius: CGFloat) -> some View {
