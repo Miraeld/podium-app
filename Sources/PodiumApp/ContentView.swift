@@ -181,7 +181,6 @@ struct Sidebar: View {
             }
             Section {
                 SidebarRow(icon: "magnifyingglass", label: "Search", value: .search)
-                SidebarRow(icon: "rectangle.split.3x1.fill", label: "Kanban", value: .kanban)
                 SidebarRow(icon: "arrow.triangle.branch", label: "Workflows", value: .workflows)
                 SidebarRow(icon: "square.and.arrow.down", label: "Import", value: .importSession)
                 SidebarRow(icon: "terminal", label: "Run", value: .run)
