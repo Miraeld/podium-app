@@ -176,8 +176,9 @@ public enum UpdateCheck {
     /// `CFBundleShortVersionString` (stamped into `Info.plist` by the
     /// release pipeline — TASK 2.9a's packaging script), which is only
     /// meaningful in a real `.app` bundle context (macOS `PodiumApp`).
-    /// Guarded by `bundleIdentifier` starting with our own reverse-DNS
-    /// prefix so non-bundle contexts — podium-server on Linux, `swift
+    /// Guarded by an exact `bundleIdentifier` match against the packaged
+    /// app's id (`com.gaelrobin.PodiumApp`, see scripts/package-macos.sh and
+    /// run.sh) so non-bundle contexts — podium-server on Linux, `swift
     /// test`/`swift build` executables, or the xctest runner itself (whose
     /// own `Bundle.main` is `com.apple.dt.xctest.tool` with an unrelated
     /// version string) — correctly fall through to the `PODIUM_APP_VERSION`
