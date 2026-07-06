@@ -299,8 +299,28 @@ final class EmbeddedServer {
     func shutdown() {
         guard case .embedded = mode else { return }
         logger.info("Shutting down embedded server.")
-        runTask?.cancel()
+        let task = runTask
+        runTask = nil
+        task?.cancel()
         ServerInfoWriter.remove()
+
+        // `Task.cancel()` only *requests* Hummingbird's graceful shutdown; it
+        // runs asynchronously (the ServiceGroup closes WebSocket connections
+        // and NIO channels, which in turn cancels their auto-ping
+        // `Task.sleep` loops in HummingbirdWebSocket). If we returned here,
+        // AppKit would `exit()` the process while those tasks are still live
+        // and tear down the Swift concurrency runtime mid-flight — which
+        // aborts inside `swift_task_dealloc` (the intermittent crash-on-quit,
+        // triggered from `WebSocketHandler.runAutoPingLoop`). So block the
+        // main thread briefly for the server task to actually finish
+        // unwinding. Bounded (3s) so a wedged shutdown can never hang quit.
+        guard let task else { return }
+        let done = DispatchSemaphore(value: 0)
+        Task.detached {
+            _ = await task.value
+            done.signal()
+        }
+        _ = done.wait(timeout: .now() + 3.0)
     }
 }
 
