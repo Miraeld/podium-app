@@ -108,11 +108,53 @@ enum Theme {
 
 // MARK: - Adaptive background view
 // The window-level NSVisualEffectView (see AppDelegate.applyVibrancy) provides
-// the full .behindWindow frosted glass for the whole window. This view is kept
-// as a transparent placeholder so ZStack structure in views remains valid.
+// the full .behindWindow frosted glass. On top of that this view paints the
+// "Aurora Glass" ambient orbs (TASK 2.0b) — the same effect the web dashboard
+// has: two large, soft, static radial glows the ultraThinMaterial glass cards
+// pick up as a colour bleed. Gold on dark, blue→indigo on light, matching the
+// brand palette. Static (no animation) for battery, non-interactive, and it
+// falls back to nothing under the Reduce Transparency accessibility setting.
 struct ThemeBackground: View {
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
+    // Dark: gold #FED23A top-left, warm gold #FFDF5A bottom-right.
+    // Light: blue #2563EB top-left, indigo #6366F1 bottom-right.
+    private var topOrb: Color {
+        colorScheme == .dark
+            ? Color(red: 254/255, green: 210/255, blue: 58/255).opacity(0.13)
+            : Color(red: 37/255, green: 99/255, blue: 235/255).opacity(0.12)
+    }
+    private var bottomOrb: Color {
+        colorScheme == .dark
+            ? Color(red: 255/255, green: 223/255, blue: 90/255).opacity(0.08)
+            : Color(red: 99/255, green: 102/255, blue: 241/255).opacity(0.10)
+    }
+
     var body: some View {
-        Color.clear.ignoresSafeArea()
+        if reduceTransparency {
+            Color.clear.ignoresSafeArea()
+        } else {
+            GeometryReader { geo in
+                let side = max(geo.size.width, geo.size.height)
+                ZStack {
+                    Circle()
+                        .fill(topOrb)
+                        .frame(width: side * 0.95)
+                        .blur(radius: 130)
+                        .offset(x: -geo.size.width * 0.30, y: -geo.size.height * 0.34)
+                    Circle()
+                        .fill(bottomOrb)
+                        .frame(width: side * 0.85)
+                        .blur(radius: 140)
+                        .offset(x: geo.size.width * 0.34, y: geo.size.height * 0.40)
+                }
+                .frame(width: geo.size.width, height: geo.size.height)
+                .clipped()
+            }
+            .ignoresSafeArea()
+            .allowsHitTesting(false)
+        }
     }
 }
 

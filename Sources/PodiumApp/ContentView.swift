@@ -28,6 +28,7 @@ struct ContentView: View {
     }()
 
     var body: some View {
+        @Bindable var state = state
         NavigationSplitView(columnVisibility: $columnVisibility) {
             Sidebar(selection: $selection)
                 .tint(Theme.accent)
@@ -53,6 +54,11 @@ struct ContentView: View {
         .tint(Theme.accent)
         .overlayPreferenceValue(OnboardingAnchorKey.self) { anchors in
             OnboardingOverlayView(anchors: anchors)
+        }
+        // TASK 2.9b: proactive "New update available" popup, one per launch.
+        .sheet(isPresented: $state.showUpdatePopup) {
+            UpdateAvailablePopup()
+                .environment(state)
         }
         .onChange(of: columnVisibility) { _, v in
             UserDefaults.standard.set(v != .detailOnly, forKey: "sidebar_visible")

@@ -26,6 +26,9 @@ struct SettingsView: View {
             HooksTab()
                 .environment(state)
                 .tabItem { Label("Hooks", systemImage: "bolt.fill") }
+            UpdatesTab()
+                .environment(state)
+                .tabItem { Label("Updates", systemImage: "arrow.down.circle") }
         }
         .frame(width: 560, height: 500)
     }
