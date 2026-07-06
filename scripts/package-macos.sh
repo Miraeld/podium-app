@@ -11,6 +11,12 @@
 # Usage:
 #   scripts/package-macos.sh              # build + .app + DMG under dist/
 #   scripts/package-macos.sh --no-dmg     # build + .app only, skip DMG
+#   VERSION=1.2.3 scripts/package-macos.sh   # stamp a specific version
+#                                              # (release.yml sets this from
+#                                              # the pushed git tag). Absent
+#                                              # VERSION preserves the old
+#                                              # default (run.sh's Info.plist
+#                                              # template, or "1.0").
 #
 # Output:
 #   dist/PodiumApp.app
@@ -41,8 +47,16 @@ cd "$SCRIPT_DIR"
 # Version strings — mirrors install.sh's convention: short version is
 # human-facing (read from run.sh's Info.plist template), build number is the
 # git commit count so LaunchServices reliably notices each new install.
-SHORT_VERSION="$(grep -m1 CFBundleShortVersionString "$SCRIPT_DIR/run.sh" 2>/dev/null | sed -E 's/.*<string>([^<]+)<\/string>.*/\1/' || true)"
-[ -z "${SHORT_VERSION:-}" ] && SHORT_VERSION="1.0"
+#
+# VERSION env/arg overrides the human-facing version (release.yml stamps
+# this from the pushed tag, e.g. "1.2.3" from "v1.2.3"). Absent VERSION,
+# behavior is unchanged: read from run.sh's template, falling back to "1.0".
+if [ -n "${VERSION:-}" ]; then
+  SHORT_VERSION="$VERSION"
+else
+  SHORT_VERSION="$(grep -m1 CFBundleShortVersionString "$SCRIPT_DIR/run.sh" 2>/dev/null | sed -E 's/.*<string>([^<]+)<\/string>.*/\1/' || true)"
+  [ -z "${SHORT_VERSION:-}" ] && SHORT_VERSION="1.0"
+fi
 BUILD_NUMBER="$(git rev-list --count HEAD 2>/dev/null || echo 1)"
 
 echo "▶ Release build (PodiumApp $SHORT_VERSION build $BUILD_NUMBER)…"

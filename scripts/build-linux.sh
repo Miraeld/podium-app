@@ -18,7 +18,7 @@
 #                                      # (fails fast if not running on Linux)
 #
 # Output:
-#   dist-linux/podium-linux-<version>.tar.gz
+#   dist-linux/podium-linux-<version>-<arch>.tar.gz
 #     bin/podium-server
 #     bin/podium-hook
 #     share/podium/web/            (WebClient/dist)
@@ -50,7 +50,10 @@ fi
 
 cd "$SCRIPT_DIR"
 
-VERSION="$(git rev-parse --short HEAD 2>/dev/null || echo dev)"
+# VERSION can be stamped from outside (release.yml passes the git tag, e.g.
+# "1.2.3" derived from "v1.2.3") — falls back to the short commit SHA for
+# local/dev runs, preserving the previous default behavior exactly.
+VERSION="${VERSION:-$(git rev-parse --short HEAD 2>/dev/null || echo dev)}"
 
 if [ "$MODE" = "docker" ]; then
   command -v docker >/dev/null 2>&1 || { echo "✗ docker not found (use --host to build with the local toolchain instead)"; exit 1; }
@@ -83,7 +86,8 @@ if [ ! -d "$SCRIPT_DIR/WebClient/dist" ]; then
 fi
 
 echo "▶ Assembling tarball…"
-PKG_NAME="podium-linux-$VERSION"
+ARCH="$(uname -m)"
+PKG_NAME="podium-linux-$VERSION-$ARCH"
 PKG_DIR="$DIST_DIR/$PKG_NAME"
 rm -rf "$PKG_DIR"
 mkdir -p "$PKG_DIR/bin" "$PKG_DIR/share/podium"

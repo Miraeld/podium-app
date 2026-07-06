@@ -1,0 +1,98 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+# One release build per tag — tags are one-shot, but this still guards
+# against a rapid re-push of the same tag (force-push) racing itself.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  macos:
+    name: macOS (package + DMG)
+    runs-on: macos-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app
+      - name: Swift version
+        run: swift --version
+      - name: Strip leading "v" from tag
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+      - name: Package macOS app + DMG
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: scripts/package-macos.sh
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-dmg
+          path: dist/Podium-*.dmg
+          if-no-files-found: error
+
+  linux:
+    name: Linux (tarball)
+    runs-on: ubuntu-latest
+    container: swift:6.1
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install system dependencies
+        run: |
+          apt-get update
+          apt-get install -y libsqlite3-dev
+      - name: Swift version
+        run: swift --version
+      - name: Strip leading "v" from tag
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+      # Already running inside the swift:6.1 container (see ci.yml) — use
+      # build-linux.sh's --host path, not --docker (no docker-in-docker).
+      # Also mind the documented footgun this script itself works around:
+      # `swift build --product A --product B` silently builds only the
+      # LAST product — one invocation per product.
+      - name: Build + package Linux tarball
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: scripts/build-linux.sh --host
+      - name: Upload Linux artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-tarball
+          path: dist-linux/podium-linux-*.tar.gz
+          if-no-files-found: error
+
+  release:
+    name: Publish GitHub release
+    needs: [macos, linux]
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download macOS artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-dmg
+          path: artifacts
+      - name: Download Linux artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-tarball
+          path: artifacts
+      - name: Create GitHub release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            artifacts/Podium-*.dmg \
+            artifacts/podium-linux-*.tar.gz \
+            --title "${{ github.ref_name }}" \
+            --generate-notes
