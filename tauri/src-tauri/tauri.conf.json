@@ -27,6 +27,9 @@
   "bundle": {
     "active": true,
     "targets": ["dmg", "app", "appimage", "deb"],
+    "category": "Utility",
+    "shortDescription": "Real-time observer for Claude Code agent sessions",
+    "longDescription": "Podium watches your Claude Code agent sessions in real time, backed by a local SQLite database and a bundled podium-server sidecar. No cloud, no browser tab — a native window on macOS and Linux.",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -39,6 +42,14 @@
     "macOS": {
       "signingIdentity": "-",
       "minimumSystemVersion": "12.0"
+    },
+    "linux": {
+      "deb": {
+        "depends": ["libwebkit2gtk-4.1-0", "libgtk-3-0"]
+      },
+      "appimage": {
+        "bundleMediaFramework": false
+      }
     }
   }
 }

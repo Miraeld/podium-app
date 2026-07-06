@@ -91,7 +91,7 @@ Produces (per `tauri.conf.json` `bundle.targets`):
 
 - macOS: `Podium.app` + `Podium_<version>_aarch64.dmg` under
   `src-tauri/target/release/bundle/{macos,dmg}/`
-- Linux: `.AppImage` + `.deb` (built on/in a Linux toolchain — see T1.3)
+- Linux: `.AppImage` + `.deb` (built inside a container — see below)
 
 ### macOS signing (T1.2 — ad-hoc only, no paid Developer ID)
 
@@ -162,6 +162,31 @@ already has a `--web-dist <path>` CLI flag from day one):
 **Always re-run `tauri/prepare-sidecar.sh` before `cargo tauri build`** if
 `Sources/PodiumServerCLI` or `WebClient/dist` changed.
 
+> macOS code signing / vibrancy / `.dmg` polish is T1.2 (done, see above).
+> Linux packaging (T1.3, done) is built inside a container — see
+> [`linux-build/README.md`](linux-build/README.md) for the exact
+> Docker/OrbStack commands. You cannot build (or run) the Linux GUI app
+> directly on macOS — Tauri Linux needs WebKitGTK + a Linux userland.
+
+### Linux: `.AppImage` + `.deb` (T1.3)
+
+```bash
+docker build -t podium-tauri-linux-build -f tauri/linux-build/Dockerfile .
+docker run --rm -v "$PWD:/src" -w /src podium-tauri-linux-build \
+  bash tauri/linux-build/build-in-container.sh
+```
+
+Builds the Linux `podium-server` sidecar (same `swift:6.1` container path as
+`scripts/build-linux.sh`), stages it under `src-tauri/bin/` with the Rust
+target-triple naming Tauri expects, and runs `cargo tauri build --bundles
+appimage,deb` — all inside the container, output lands on the host at
+`tauri/src-tauri/target/release/bundle/{appimage,deb}/`.
+
+Full details, the cross-arch (x86_64 via QEMU) note, and — since a headless
+macOS host cannot render a Linux GUI window — the exact manual verification
+steps on a real Linux desktop/VM: see
+[`tauri/linux-build/README.md`](linux-build/README.md).
+
 ## Verify no orphaned server
 
 After closing the window:
@@ -181,6 +206,10 @@ tauri/
 ├── .gitignore             # ignores target/, staged sidecar, generated icons
 ├── package.json           # optional npm entry (@tauri-apps/cli); cargo-tauri works standalone
 ├── prepare-sidecar.sh     # build podium-server + stage it as an externalBin
+├── linux-build/           # T1.3: reproducible Docker recipe for the Linux .AppImage/.deb
+│   ├── Dockerfile         #   swift:6.1 base + Rust + webkitgtk + tauri-cli
+│   ├── build-in-container.sh  # builds sidecar + runs `cargo tauri build` inside it
+│   └── README.md          # exact commands, cross-arch note, manual GUI-verify steps
 ├── src/
 │   └── index.html         # tiny "Starting…" placeholder (window navigates to localhost after health)
 └── src-tauri/
