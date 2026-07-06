@@ -31,12 +31,17 @@ public struct GitHubRelease: Sendable, Equatable {
     public let htmlUrl: String
     public let publishedAt: String?
     public let prerelease: Bool
+    /// Markdown release notes body (GitHub API `body` field). `nil` when the
+    /// release has no notes, or when decoded from a fixture/transport that
+    /// doesn't populate it.
+    public let body: String?
 
-    public init(tagName: String, htmlUrl: String, publishedAt: String?, prerelease: Bool) {
+    public init(tagName: String, htmlUrl: String, publishedAt: String?, prerelease: Bool, body: String? = nil) {
         self.tagName = tagName
         self.htmlUrl = htmlUrl
         self.publishedAt = publishedAt
         self.prerelease = prerelease
+        self.body = body
     }
 }
 
@@ -63,7 +68,7 @@ public struct URLSessionGitHubReleaseTransport: GitHubReleaseTransport {
             let (data, response) = try await URLSession.shared.data(for: request)
             guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { return nil }
             guard let json = try? JSONDecoder().decode(GitHubReleaseAPIResponse.self, from: data) else { return nil }
-            return GitHubRelease(tagName: json.tagName, htmlUrl: json.htmlUrl, publishedAt: json.publishedAt, prerelease: json.prerelease ?? false)
+            return GitHubRelease(tagName: json.tagName, htmlUrl: json.htmlUrl, publishedAt: json.publishedAt, prerelease: json.prerelease ?? false, body: json.body)
         } catch {
             return nil
         }
@@ -75,12 +80,14 @@ private struct GitHubReleaseAPIResponse: Decodable {
     let htmlUrl: String
     let publishedAt: String?
     let prerelease: Bool?
+    let body: String?
 
     enum CodingKeys: String, CodingKey {
         case tagName = "tag_name"
         case htmlUrl = "html_url"
         case publishedAt = "published_at"
         case prerelease
+        case body
     }
 }
 
@@ -95,10 +102,16 @@ public struct RepoUpdateStatus: Codable, Equatable, Sendable {
     public var releaseUrl: String?
     public var publishedAt: String?
     public var error: String?
+    /// Markdown release notes body (GitHub release `body`). Optional,
+    /// snake_case wire field `release_notes` — added so the native UI can
+    /// render a changelog without a second network round trip. `nil` when
+    /// unchecked, unreachable, or the release simply has no notes.
+    public var releaseNotes: String?
 
     public init(
         repo: String, checked: Bool, currentVersion: String?, latestVersion: String?,
-        updateAvailable: Bool, releaseUrl: String?, publishedAt: String?, error: String? = nil
+        updateAvailable: Bool, releaseUrl: String?, publishedAt: String?, error: String? = nil,
+        releaseNotes: String? = nil
     ) {
         self.repo = repo
         self.checked = checked
@@ -108,6 +121,7 @@ public struct RepoUpdateStatus: Codable, Equatable, Sendable {
         self.releaseUrl = releaseUrl
         self.publishedAt = publishedAt
         self.error = error
+        self.releaseNotes = releaseNotes
     }
 }
 
