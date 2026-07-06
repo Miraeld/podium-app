@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Podium",
-  "version": "0.1.0",
-  "identifier": "com.groupone.podium",
+  "version": "0.5.2",
+  "identifier": "com.gaelrobin.PodiumApp",
   "build": {
     "frontendDist": "../src"
   },
@@ -15,12 +15,14 @@
         "width": 1280,
         "height": 800,
         "minWidth": 900,
-        "minHeight": 600
+        "minHeight": 600,
+        "transparent": true
       }
     ],
     "security": {
       "csp": null
-    }
+    },
+    "macOSPrivateApi": true
   },
   "bundle": {
     "active": true,
@@ -32,6 +34,11 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "externalBin": ["bin/podium-server"]
+    "externalBin": ["bin/podium-server"],
+    "resources": ["web-dist/"],
+    "macOS": {
+      "signingIdentity": "-",
+      "minimumSystemVersion": "12.0"
+    }
   }
 }

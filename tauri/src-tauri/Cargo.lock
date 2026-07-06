@@ -2243,6 +2243,7 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-shell",
  "ureq",
+ "window-vibrancy",
 ]
 
 [[package]]

@@ -102,16 +102,46 @@ fn main() {
                 println!("podium-server already running on port {port}; reusing it.");
             } else {
                 let data_dir = default_data_dir();
+                let mut args: Vec<String> = vec![
+                    "--port".into(),
+                    port.to_string(),
+                    "--data-dir".into(),
+                    data_dir.to_string_lossy().into_owned(),
+                ];
+
+                // podium-server's static-file resolver (StaticFileHandler.swift)
+                // only knows the OLD SwiftUI .app layout
+                // (Contents/Resources/WebClient/dist) or $PODIUM_WEB_DIST — a
+                // Tauri .app bundle has neither, so point it explicitly at the
+                // WebClient/dist copy staged into the bundle's resource dir by
+                // prepare-sidecar.sh (tauri.conf.json bundle.resources
+                // "web-dist/*" -> "web-dist/"). Falls back gracefully (server
+                // just 404s on '/' but the API still works) if resolution
+                // fails, rather than panicking.
+                match handle.path().resource_dir() {
+                    Ok(resource_dir) => {
+                        let web_dist = resource_dir.join("web-dist");
+                        if web_dist.is_dir() {
+                            args.push("--web-dist".into());
+                            args.push(web_dist.to_string_lossy().into_owned());
+                        } else {
+                            eprintln!(
+                                "web-dist resource not found at {web_dist:?}; \
+                                 dashboard UI will 404 (API still works). \
+                                 Did prepare-sidecar.sh run before this build?"
+                            );
+                        }
+                    }
+                    Err(err) => {
+                        eprintln!("failed to resolve resource dir (non-fatal): {err}");
+                    }
+                }
+
                 let sidecar = handle
                     .shell()
                     .sidecar("podium-server")
                     .expect("failed to resolve podium-server sidecar")
-                    .args([
-                        "--port",
-                        &port.to_string(),
-                        "--data-dir",
-                        &data_dir.to_string_lossy(),
-                    ]);
+                    .args(args);
 
                 let (mut _rx, child) = sidecar.spawn().expect("failed to spawn podium-server sidecar");
 
@@ -128,6 +158,23 @@ fn main() {
             }
 
             if let Some(window) = app.get_webview_window("main") {
+                // Native glass: blur the desktop wallpaper behind the window
+                // via NSVisualEffectView, matching the old SwiftUI app's
+                // `.hudWindow` / `.behindWindow` combo (Sources/PodiumApp/
+                // VisualEffect.swift). The webview itself is made transparent
+                // via tauri.conf.json's window `transparent: true`, so the
+                // web dashboard's own CSS glass (backdrop-filter) composites
+                // on top of this rather than an opaque white/black backing.
+                #[cfg(target_os = "macos")]
+                {
+                    use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial};
+                    if let Err(err) =
+                        apply_vibrancy(&window, NSVisualEffectMaterial::HudWindow, None, None)
+                    {
+                        eprintln!("failed to apply macOS vibrancy (non-fatal): {err}");
+                    }
+                }
+
                 let url = format!("http://127.0.0.1:{port}").parse().expect("invalid URL");
                 window
                     .navigate(url)

@@ -10,6 +10,11 @@ package-lock.json
 # it's a ~27MB platform-specific artifact — never commit it.
 /src-tauri/bin/
 
+# Staged WebClient/dist copy (bundled as a Tauri resource so podium-server
+# can find it via --web-dist inside the .app — see prepare-sidecar.sh).
+# Derived from the vendored WebClient/dist; never commit a second copy.
+/src-tauri/web-dist/
+
 # Generated icon set (from `cargo tauri icon icon-source.png`) — regenerate
 # on demand rather than tracking derived PNGs/ICNS/ICO.
 /src-tauri/icons/
