@@ -58,7 +58,6 @@ struct ConfigExplorerView: View {
             detailColumn
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .background(ThemeBackground())
         .navigationTitle("CC Config Explorer")
         .task { await reloadItems() }
         .onChange(of: selectedCategory) { _, _ in
@@ -379,7 +378,6 @@ struct SkillDetailView: View {
             }
             .padding(20)
         }
-        .background(ThemeBackground())
         .onAppear { editedBody = item.preview; isDirty = false }
         .onChange(of: item.id) { _, _ in editedBody = item.preview; isDirty = false; statusMessage = nil }
     }
@@ -478,7 +476,6 @@ struct MdDetailView: View {
             }
             .padding(20)
         }
-        .background(ThemeBackground())
         .onAppear { editedBody = item.preview; isDirty = false }
         .onChange(of: item.id) { _, _ in editedBody = item.preview; isDirty = false; statusMessage = nil }
     }
@@ -585,7 +582,6 @@ struct MemoryDetailView: View {
             }
             .padding(20)
         }
-        .background(ThemeBackground())
         .onAppear { editedBody = item.preview; isDirty = false }
         .onChange(of: item.id) { _, _ in editedBody = item.preview; isDirty = false; statusMessage = nil }
     }
@@ -637,7 +633,6 @@ struct McpDetailView: View {
             }
             .padding(20)
         }
-        .background(ThemeBackground())
     }
 
     private func detailRow(_ label: String, _ value: String) -> some View {
@@ -693,7 +688,6 @@ struct SettingsSurfaceView: View {
             }
             .padding(20)
         }
-        .background(ThemeBackground())
         .task {
             guard !loaded else { return }
             loaded = true
@@ -849,7 +843,6 @@ struct BackupDetailView: View {
             }
             .padding(20)
         }
-        .background(ThemeBackground())
     }
 
     private func row(_ label: String, _ value: String) -> some View {
@@ -911,7 +904,6 @@ struct ConfigEmptyDetail: View {
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(ThemeBackground())
     }
 }
 
