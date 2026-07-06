@@ -125,13 +125,13 @@ struct ThemeBackground: View {
     // nothing. Core opacity is high because the gradient fades it to zero.
     private var topCore: Color {
         colorScheme == .dark
-            ? Color(red: 254/255, green: 210/255, blue: 58/255).opacity(0.28)
-            : Color(red: 37/255, green: 99/255, blue: 235/255).opacity(0.20)
+            ? Color(red: 254/255, green: 210/255, blue: 58/255).opacity(0.55)
+            : Color(red: 37/255, green: 99/255, blue: 235/255).opacity(0.38)
     }
     private var bottomCore: Color {
         colorScheme == .dark
-            ? Color(red: 255/255, green: 223/255, blue: 90/255).opacity(0.18)
-            : Color(red: 99/255, green: 102/255, blue: 241/255).opacity(0.16)
+            ? Color(red: 255/255, green: 223/255, blue: 90/255).opacity(0.38)
+            : Color(red: 99/255, green: 102/255, blue: 241/255).opacity(0.32)
     }
 
     private func orb(_ core: Color, at point: UnitPoint, radius: CGFloat) -> some View {
@@ -149,12 +149,15 @@ struct ThemeBackground: View {
             Color.clear.ignoresSafeArea()
         } else {
             GeometryReader { geo in
-                let r = max(geo.size.width, geo.size.height) * 0.7
+                // Tighter radius = a concentrated glow in each corner that
+                // reads through the window's .behindWindow vibrancy, rather
+                // than a whole-screen wash that the wallpaper overpowers.
+                let r = max(geo.size.width, geo.size.height) * 0.55
                 ZStack {
-                    orb(topCore, at: UnitPoint(x: 0.05, y: 0.0), radius: r)
-                    orb(bottomCore, at: UnitPoint(x: 0.95, y: 1.0), radius: r)
+                    orb(topCore, at: UnitPoint(x: 0.0, y: -0.05), radius: r)
+                    orb(bottomCore, at: UnitPoint(x: 1.0, y: 1.05), radius: r)
                 }
-                .blur(radius: 30) // just enough to kill gradient banding
+                .blur(radius: 20)
             }
             .ignoresSafeArea()
             .allowsHitTesting(false)
