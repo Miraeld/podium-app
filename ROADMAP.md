@@ -1,501 +1,315 @@
-# Podium — Post-v1.0 Roadmap & Dispatch Plan
+# Podium — Roadmap to 1.0.0 (Tauri consolidation)
 
-> **Author:** Fable 5, acting PO (2026-07-05).
-> **Audience:** the next orchestrator session (any model — see `/orch-fable`
-> skill), or Gaël dispatching Sonnet agents directly. Every task below carries
-> a **copy-paste-ready agent prompt**. Nothing here requires conversation
-> context: this file + the repo are the whole briefing.
->
-> **How to use:** work top-to-bottom inside a phase; phases are strictly
-> ordered. Before dispatching anything, read "Operating rules" once. Update
-> the checkbox + STANDALONE_PLAN.md §7 run log after every task.
+> **Author:** Fable 5, acting PO. **Rewritten 2026-07-06** after the big
+> pivot (below). Supersedes the previous SwiftUI-era roadmap.
+> **Audience:** the next orchestrator / dispatched agents. Self-contained —
+> this file + the repo are the whole briefing. Work phases top-to-bottom.
 
 ---
 
-## 1. Where the product stands (2026-07-05)
+## 0. THE PIVOT — read this first
 
-**v1.0 implementation is DONE.** All of STANDALONE_PLAN.md phases 0–5 + F1 +
-P6.1 (packaging) shipped. P6.2a contract suite adopted, completed and green
-(29/29; six wire-parity bug families fixed on the way). P6.2b docs written
-(README, MIGRATION, CLAUDE.md). Full local suite: **463/463**.
+**Discovery (2026-07-06):** the vendored **web dashboard** (React, served by
+the Swift server, visible at `http://localhost:4820`) is dramatically more
+complete and polished than the native **SwiftUI app** we'd been building —
+richer Workflows, Analytics, CC Config, Settings, everything. We had been
+polishing the *weaker* of two UIs, and reimplementing in SwiftUI what already
+existed and worked better on the web.
 
-CI: real hang root-caused and fixed (RunSpawner `waitUntilExit` was parking
-Swift-concurrency cooperative-pool threads — deadlocked 2–4-core runners,
-never reproduced on a many-core dev Mac). Remaining CI reds are **runner-
-environment artifacts**, policy below.
+**Decision:** stop maintaining two UIs. Consolidate on the web UI and ship it
+as **ONE native desktop app on every platform, via Tauri.**
 
-**Not implementation work, still open:**
-- Phase 0 (CI truth + P6.2 close) and Phase 1 (v1.0 close-out) below.
-- The **supervised switchover** (HUMAN + orchestrator together): stop the
-  plugin-era Docker, app takes over `dashboard.db`. Steps in MIGRATION.md.
-  Gaël's standing decision: remove the prod container AS PART of the
-  switchover, never before.
+- **1.0.0 = a Tauri native app on macOS + Linux** that bundles the existing
+  Swift `podium-server` as a sidecar process and shows the web dashboard in a
+  native window. Experience: **download → move to Applications → open →
+  agents appear live.** Same on Mac and Linux.
+- **Windows** is a near-free follow-up (Tauri targets it too) — deprioritized;
+  the server already runs, so it's not blocking.
+- **The Swift server stays 100%** (`podium-server`, `PodiumCore`,
+  `PodiumServer`, ingestion, contract tests, packaging of the binary) — it
+  becomes the bundled backend.
+- **The SwiftUI app (`PodiumApp`, ~40 view files) is retired** once the Tauri
+  shell reaches parity.
 
-## 2. Binding product frame (do not re-litigate)
+Everything SwiftUI-specific from the old plan is dropped — see §5 so nothing
+vanishes silently.
 
-From STANDALONE_PLAN.md §6b + Gaël's memory notes:
+## 1. Why Tauri (plain terms, for the record)
 
-1. Podium is pitched inside **GroupOne** as a standalone product:
-   **useful, easy, uncluttered, sexy.** The objection to kill: *"too
-   complicated."* Bar: download → open → agents appear live. Any step
-   needing a README explanation is a **defect**, not a docs task.
-2. **Quality over breadth.** Nothing ships half-working. Harden between
-   phases. One polished feature beats three drafts.
-3. **Cost features stay de-emphasized** (team subscription; not a pain
-   point). No budget alerts. Don't grow the cost UI.
-4. **Linux gets the macOS niceties wherever possible** (esp. notifications).
-5. Explicitly REJECTED (don't propose again): iOS companion, Raycast/Alfred,
-   session-diff views, cost budget alerts.
+A **"shell"** = a native app window that displays a web page with no browser
+chrome — to the user it's just an app.
 
-## 3. Operating rules for the orchestrator
+**Tauri** builds one shell from one codebase and emits native installers for
+every OS: `.dmg` (mac), `.AppImage`/`.deb` (linux), `.msi` (windows). It can
+bundle an external binary as a **"sidecar"** — we bundle `podium-server`,
+Tauri launches it on open and kills it on quit. The window then just points
+at `http://localhost:<port>`, which the server already serves (the web UI is
+served BY podium-server today — no separate asset bundling needed). Native
+tray, notifications, and macOS window vibrancy (**glass survives**) are all
+cross-platform. Tauri also ships a **built-in signed auto-updater** — this
+replaces the entire custom self-update saga we were speccing.
 
-- **Board discipline:** `git pull` before editing STANDALONE_PLAN.md; push
-  after every commit. Log every task outcome in §7 (one row, dense).
-- **Model tiering:** Sonnet for implementation and doc drafts; Haiku only
-  for mechanical greps/renames; Opus/Fable-class for review, root-causing,
-  and anything touching wire format or concurrency.
-- **Every dispatch prompt must include the fence block** (§8 below) and name
-  the exact files the agent may touch.
-- **Verify agents' claims yourself** (build + run the relevant tests) before
-  flipping a board status. Agents die silently; commits misattribute
-  (auto-commit hook commits the whole dirty tree — real authorship =
-  `git show <sha> -- <file>`).
-- **Wire-format gate:** `swift test --filter ContractTests` must stay 29/29
-  green after ANY router/model change. Full suite before every push.
-- **CI truth policy (Gaël's call, 2026-07-05):** a test that passes locally
-  (macOS + local Linux docker) but fails/hangs on GitHub-hosted runners is
-  gated with `XCTSkip` under `GITHUB_ACTIONS` — with a comment explaining
-  the exact runner behavior. It still runs everywhere real. Never delete the
-  test; never skip unconditionally; never skip a test that also fails
-  locally. Current gated set: DiagnosticsRouterTests (Linux container
-  networking), ContractTests health-wait (same), HookClientTests dead-port
-  latency (both OSes).
+**Bonus (robustness):** the server runs as a *separate process*, so a server
+crash no longer kills the app window — the shell can detect and restart it.
+That shrinks the blast radius of bugs like the WebSocket auto-ping crash from
+"whole app dies" to "server blips and restarts."
 
----
+**Fallback:** if Rust/Tauri proves painful, Electron does the same job
+(heavier, ~150 MB, less native). Try Tauri first — it's purpose-built for
+"native window + local web UI + bundled backend binary."
 
-## PHASE 0 — CI green + P6.2 closed  *(½ day, mostly Sonnet)*
+## 2. Product frame (unchanged, binding)
 
-### 0.1 ☑ First fully-green CI run — DONE 2026-07-05, run 28755002211 (both jobs green)
-Already in flight when this file was written: HookClient dead-port skip
-pushed; watch `gh run list`. If the Linux job surfaces one more
-runner-environment failure, gate it per the CI truth policy (same XCTSkip
-pattern, same comment style) and push once. **DOD: one run with both jobs
-green on GitHub.** No agent needed — orchestrator does this directly.
+Podium is pitched inside **GroupOne** as a standalone product: **useful,
+easy, uncluttered, sexy.** The objection to kill is *"too complicated."*
+Acceptance bar: **download → open → your agents appear live, zero manual
+steps.** Any step that needs a README to explain is a defect. Cost features
+stay de-emphasized. Linux gets the same first-class experience as macOS —
+which the Tauri pivot finally makes true (a real Linux app, not a browser
+tab).
 
-### 0.2 ☐ `scripts/contract-check.sh`
-The last mechanical piece of P6.2a. **Model: Sonnet.**
+## 3. Transition strategy (how we don't break the current thing)
 
-```
-TASK — scripts/contract-check.sh for PodiumSwiftApp (repo root: this repo, branch develop).
+- **0.5.x (current SwiftUI app): FROZEN.** Only critical fixes ship (the
+  crash, §4.0). No new SwiftUI feature work — that era is over.
+- **1.0.0 (Tauri app): all new energy goes here.**
+- At 1.0 we cut over: the Tauri app becomes THE product; the SwiftUI target
+  is deleted. The web UI and Swift server carry across unchanged.
 
-Read first: Tests/PodiumServerTests/ContractTests.swift (header comment + bootServer/seedViaHooks), STANDALONE_PLAN.md §6 "P6.2", scripts/package-macos.sh (style reference for our shell scripts — set -euo pipefail, step echo style).
+## 4. Operating rules (unchanged essentials)
 
-Goal: a self-contained smoke script a human (or CI, later) can run against a REAL podium-server binary — the out-of-process complement to the in-process ContractTests. It must:
-1. Build the release binary if missing (swift build -c release --product podium-server).
-2. Boot it on a random high port with CLAUDE_HOME + DASHBOARD_DATA_DIR pointed at a mktemp fixture dir (NEVER the real ~/.claude — see ClaudeHome.current() gotcha in CLAUDE.md).
-3. Seed via POST /api/hooks/event with the same recorded-style hook sequence ContractTests.seedViaHooks uses (SessionStart → PreToolUse/PostToolUse → Agent spawn → SubagentStop → Stop → SessionEnd; write the JSON bodies inline in the script).
-4. curl every GET endpoint ContractTests covers and assert with jq: (a) HTTP 200, (b) spot-check one casing-sensitive key per family — sessions.started_at, workflows stats.totalSessions, settings info transcript_cache.maxSize, push vapid publicKey, run/binary path key present (null ok), updates git_repo. Fail loud with the endpoint name + actual body on mismatch.
-5. Kill the server (trap EXIT), clean the temp dir, print PASS/FAIL summary + count.
-Constraints: bash + curl + jq only (no python). Must run on macOS AND Linux. Exit non-zero on any failure. Do not touch any file except creating scripts/contract-check.sh. Do not commit.
-Verify: run it yourself, paste the PASS output into your report. Then run `swift test --filter ContractTests` and confirm 29/29 (you changed nothing that affects it, prove it anyway).
-[+ fence block §8]
-```
-
-### 0.3 ☐ Browser walk of every web page (the human-eyes half of P6.2a)
-**Model: Sonnet + Playwright/preview tooling, or Gaël manually (30 min).**
-PO note: automated agent walk is worth trying once; if tooling friction eats
->1h, fall back to Gaël + a checklist — this is a one-time verification, not
-a regression suite (ContractTests is the regression suite).
-
-```
-TASK — Manual E2E browser walk of the Podium web dashboard against the SWIFT server.
-
-Read first: STANDALONE_PLAN.md §6 "P6.2" item 2, README.md "Verified compatibility".
-Setup: build + boot podium-server (release) on a fresh port with a COPY of a realistic dashboard.db if available (ask; otherwise seed via scripts/contract-check.sh's hook sequence, then also spawn one real run from the Run page). Open http://localhost:<port> in a real browser.
-Walk EVERY page: Dashboard, Sessions, SessionDetail (incl. transcript tab + thinking blocks), ActivityFeed, Analytics, Workflows (all 12 d3 charts render with data), Search, Run (spawn a headless run with claude binary present; watch live envelopes), Kanban, Import, CcConfig (every sub-tab), Settings (server info card renders — heapTotal/maxSize fields).
-For each page record: renders? console errors? data correct vs API response? interactions work (filters, search, pagination, buttons)?
-Output: a table in a new file P6.2A-WALK.md (page | status ✅/⚠️/❌ | notes), plus for each ❌ a precise repro + suspected layer (client expectation vs server response — check the network tab response against client/src/lib/types.ts before blaming either).
-Fix NOTHING yourself. Report only. Do not commit anything except P6.2A-WALK.md.
-[+ fence block §8]
-```
-
-### 0.4 ☐ Close-out edits
-After 0.2 + 0.3: fill README's "Verified compatibility" placeholder with the
-walk results, flip P6.2a/P6.2b ✅ on the board, log §7. Orchestrator, 10 min.
+- Board discipline: `git pull` before editing this file; push after every
+  commit; log outcomes.
+- Model tiering: Sonnet implements; Opus/Fable-class reviews + anything
+  touching the sidecar lifecycle, wire format, or concurrency.
+- Wire-format gate: `swift test --filter ContractTests` stays green after any
+  server change. The web client depends on it — now more than ever, since
+  it's the only UI.
+- CI truth policy (Gaël, 2026-07-05): local-green + runner-red ⇒
+  `GITHUB_ACTIONS`-gated `XCTSkip` with the mechanism documented.
+- Every dispatch prompt ends with the fence block (§7).
 
 ---
 
-## PHASE 1 — v1.0 close-out  *(1 day incl. human time)*
+## 4.0 ☐ DO NOW — fix the WebSocket auto-ping crash (independent of the pivot)
 
-### 1.1 ☐ F2 — Gaël's three native-app bugs (board entry F2)
-**PO judgment:** suspect all three are CLIENT-MODE artifacts (app talking to
-the plugin-era Node Docker, which lacks the new endpoints). That's why the
-task is *diagnose in embedded mode first*, and the likely deliverable is
-graceful degradation, not three bug fixes. **Model: Sonnet.**
+Root-caused 2026-07-06: the intermittent crashes (both on-quit and mid-use)
+are a `swift_task_dealloc` fatal error inside `WebSocketHandler.runAutoPingLoop()`
+(the `hummingbird-websocket` dependency's auto-ping loop). It fires whenever a
+dashboard WebSocket connection closes while its `Task.sleep` is pending — i.e.
+every time a tab disconnects. The 0.5.2 shutdown-wait fix only covered the
+on-quit trigger.
 
-```
-TASK — F2: triage + fix the three native-app v1 bugs (STANDALONE_PLAN.md §5 board entry F2 has the full symptom list — read it first).
-
-Bugs as reported: (a) Thinking tab empty on a session that should have thinking blocks; (b) Settings "Re-install hooks" → "error reinstalling"; (c) Diagnostics tab "Diagnostics unavailable".
-MANDATORY first step — reproduce in EMBEDDED mode: launch the app via ./run.sh with a fixture CLAUDE_HOME/DASHBOARD_DATA_DIR and NO other server on the port (the app must self-host; verify via the connection indicator + lsof). Also reproduce in CLIENT mode against a Node-era server if available.
-Hypothesis to test for (b)+(c): in client mode against the plugin-era Node server those endpoints (POST /api/settings/hooks/reinstall, GET /api/diagnostics) do not exist → the UI shows raw errors. If confirmed: the fix is graceful degradation — the UI must detect capability absence (404/decode failure) and show "Available when Podium hosts its own server" (copy tone: calm, one line), NOT an error state. NO retry loops.
-For (a): trace the real transcript through TranscriptMessageParser thinking extraction and the SessionDetail thinking-tab filter (suspect the P5.3 store rewrite's tab filtering). Write a failing unit test from a real thinking-block JSONL line BEFORE fixing.
-Files: Sources/PodiumApp/** (UI), Sources/PodiumCore/Transcripts/** if (a) is a parser bug. Server routes are NOT in scope — if you believe the server is wrong, STOP and report instead.
-DOD: each bug either fixed-with-test or explained-with-evidence (repro steps + exact failing layer). swift test fully green incl. ContractTests 29/29. Update the F2 board row with the outcome.
-[+ fence block §8]
-```
-
-### 1.2 ☐ Final v1 QA sweep
-**Model: Sonnet.** Empty/error states + light/dark pass on the new surfaces
-(tour, diagnostics, config explorer, replay, exporter). Board "v1 close-out"
-item 1. Deliverable: QA report + trivial fixes inline; anything structural
-becomes a board entry, not a drive-by fix. *(Prompt: reuse the maestro:qa
-pattern — boot app with empty fixture DB, then with the walk DB; screenshot
-each view in both appearances; table of findings.)*
-
-### 1.3 ☐ `main` branch + default
-`git checkout -b main && git push -u origin main`, set GitHub default to
-`main`, keep develop as integration. Plan convention expects PRs → main.
-Orchestrator directly, 5 min. **After** 0.1 (CI green proof on develop).
-
-### 1.4 ☐ THE SWITCHOVER *(HUMAN — Gaël + orchestrator live)*
-MIGRATION.md is the script. Copy-first, verify, only then `docker rm` the
-prod container (it's currently UNHEALTHY anyway since ~07-04). DMG ready at
-dist/Podium-1.0.dmg. **This is the v1.0 finish line.**
+**Fix:** disable auto-ping in the server's WebSocket config — deletes the
+crashing code path entirely. In `Sources/PodiumServer/PodiumServerApp.swift`,
+the `.http1WebSocketUpgrade(webSocketRouter:)` call takes a `configuration:`
+(`WebSocketServerConfiguration`) with an `autoPing:` field — set it to
+`.disabled`. Verify the exact API against `.build/checkouts/hummingbird-websocket`.
+Liveness is a non-issue: the web client reconnects on its own, and half-open
+connections are a minor resource concern vs a crash. Benefits BOTH the current
+0.5.x app AND the future Tauri sidecar. Ship as **0.5.3**. Model: Sonnet;
+verify by running the app with the dashboard open for a while + quit cycles.
 
 ---
 
-## PHASE 2 — v1.1 features (PO-prioritized)
+## PHASE T1 — Tauri shell MVP  *(the core of the pivot)*
 
-Ranked by GroupOne-pitch value ÷ effort. **Ship each one polished before
-starting the next** (quality-over-breadth).
+Goal at end of T1: a native app on macOS + Linux that, when opened, boots the
+bundled server and shows the live dashboard. "Download → open → works."
 
-**EXECUTION ORDER (Gaël, 2026-07-06 — section numbers are historical, do
-NOT follow them):** first **2.9a → 2.9b** (update system — it's the
-distribution channel; everything else is fixes that need a way to reach
-users), then **2.0** (UX parity), then 2.1, 2.2a/b/c, 2.3, 2.4, and the rest
-as numbered. (2.9c self-updater: PARKED — Stage 1 is the v1 system.)
-
-### 2.0 ☐ Native UX parity pass  *(M — inserted 2026-07-06 from Gaël's web-vs-app review; runs after 2.9a/b, before the menu bar extra)*
-
-Gaël's findings, reviewing the web app side by side with the native app:
-the web app's UX is currently BETTER than the native app's. Specifics:
-(a) web session overview shows agent cards; clicking one jumps to the
-conversation filtered to that agent; (b) the native app STACKS a new
-column per click, shrinking reading space — the web replaces the page,
-which reads better; (c) web dashboard sessions are clickable straight
-into detail w/ the agent list; (d) the native Workflows page "feels
-useless"; (e) native Settings opens directly into the column view,
-breaking flow vs other pages; (f) web settings/config-explorer leads
-with count cards (quick numbers) — better orientation.
-
-PO decisions (binding for the dispatches below):
-- **Kill column accumulation.** One sidebar + ONE detail pane whose
-  content is REPLACED on navigation (NavigationStack push inside the
-  detail pane, Back button + ⌘[ ). This alone fixes (b) and (e).
-- **Workflows (d): do NOT port the web's 12 d3 charts.** Native page
-  becomes a focused per-session orchestration view (agent tree,
-  swimlanes, tool timeline — the /api/workflows/session/:id data it
-  already fetches) plus 2–3 aggregate stat cards, and an "Open full
-  analysis in browser" button (opens localhost web app). Honest cut.
-- Adopt (a), (c), (f) as-is from the web patterns.
+### T1.1 ☐ Scaffold Tauri + bundle podium-server as a sidecar
+**Model: Sonnet, Opus-class review (sidecar lifecycle is the load-bearing part).**
 
 ```
-TASK 2.0a — Native navigation restructure + web-parity interactions.
+TASK T1.1 — Tauri app skeleton with podium-server as a sidecar.
 
-Read first: CLAUDE.md (constraints), Sources/PodiumApp/ContentView.swift (current NavigationSplitView shell), SessionDetailView.swift, DashboardView.swift, SettingsView (or the settings entry view), AppState.swift. Then open the WEB app on a live server and click through Dashboard → session → agent → conversation to feel the target (this is the reference UX).
-Goals, in priority order:
-1. Replace column-stacking with a single detail pane using NavigationStack: sidebar selects the section; every drill-in PUSHES in the detail pane (Back + ⌘[ works). No view may open a new accumulating column.
-2. Dashboard: session rows/cards become clickable → push SessionDetail (web parity (c)).
-3. SessionDetail overview: agent list as cards; clicking a card pushes the Conversation/Transcript view pre-filtered to that agent (web parity (a)). Check how the web does the filter (agent id query on the transcript/messages fetch) and mirror the semantics.
-4. Settings: entry page becomes a summary-cards page (counts: sessions, agents, events, db size, hooks status, server mode — data already available via /api/settings/info + /api/stats), each card pushing into its detail section (web parity (e)+(f)).
-5. Workflows: strip to per-session drill-in (tree, swimlanes, timeline — models already exist: WorkflowDetail) + 2–3 aggregate stat cards + "Open full analysis in browser" (NSWorkspace.shared.open on the web URL). Delete what this obsoletes rather than hiding it.
-Constraints: pure SwiftUI, keep @Observable AppState pattern (no new state containers), keep Theme tokens (no hardcoded colors), do not touch PodiumCore/PodiumServer. Keyboard: Back must work with ⌘[. Verify each flow by launching via ./run.sh against a seeded fixture (CLAUDE_HOME override — never the real one).
-DOD: all five goals demoed (list the click paths you exercised), no column accumulation anywhere, swift build + full test suite green, board §7 row.
-[+ fence block §4]
+Read first: CLAUDE.md; Sources/PodiumServerCLI/main.swift (the podium-server CLI — flags: --port, --data-dir, --no-hooks; it ALREADY serves the web UI over HTTP + the API); scripts/package-macos.sh + build-linux.sh (how the server binary is built per-platform); Sources/PodiumCore/Discovery/ (server-info file / port discovery). Skim the Tauri v2 docs on "sidecar / embedding external binaries" and "shell/process plugin".
+Goal: a new `tauri/` directory at repo root containing a minimal Tauri v2 app that:
+1. Bundles `podium-server` as a sidecar (externalBin), per-platform (macOS arm64 first; wire Linux x86_64/arm64 targets in config even if built later).
+2. On launch: spawns the sidecar with a chosen port + a data-dir (default the same platform path PodiumPaths uses: macOS ~/Library/Application Support/Podium; Linux ~/.local/share/podium — so it reads the user's existing DB), waits for GET /api/health to return 200 (poll, timeout ~15s), THEN loads http://localhost:<port> in the main window.
+3. On quit / window close: terminates the sidecar cleanly (no orphaned server process). Handle the case where a server is already running on the port (reuse it, like EmbeddedServer does today) vs spawn our own.
+4. A basic window (title "Podium", reasonable default size, remembers size/position).
+Constraints: Tauri v2, Rust shell kept MINIMAL (target < ~200 lines of Rust). Do NOT bundle the web assets separately — the sidecar serves them; the window just navigates to localhost. Do NOT modify the Swift server except (if needed) adding a CLI flag; if you think the server needs a change, STOP and report.
+DOD: `cargo tauri dev` (or the npm equivalent) opens a window showing the live dashboard served by the spawned podium-server, against the real DB; closing the window leaves NO orphaned podium-server process (verify with lsof/ps). Document the exact run/build commands in tauri/README.md.
+[+ fence block §7]
 ```
 
-```
-TASK 2.0b — Ambient orb background for the native app (web-parity "Aurora Glass").
-
-Read first: Sources/PodiumApp/Theme.swift (current backgroundGradient + glassCard), the web reference: ~/Desktop/Work/Claude/podium/dashboard/client/src/index.css (body gradient + orb/glow definitions), and the palette note in the memory file podium-brand-palette (dark = gold orb rgba(254,210,58,0.05) tint from top-left; light = blue rgba(37,99,235,0.05) → indigo rgba(99,102,241,0.04)).
-Goal: a reusable OrbBackground SwiftUI view — 2–3 large blurred radial-gradient circles (Canvas or blurred Circles, .blur(radius: 80+)), gold-tinted in dark mode, blue/indigo in light mode, positioned like the web (one top-left, one bottom-right, subtle — opacity ≤ 0.06 equivalent). Applied ONCE at the root behind the NavigationSplitView, UNDER the existing .ultraThinMaterial glass cards so the glass picks up the color bleed exactly like the web's glassmorphism.
-Constraints: static (no animation — battery), must not measurably affect scroll performance (test with a 1k-session list), respects reduced-transparency accessibility setting (fall back to the flat gradient). Touch only Theme.swift + a new OrbBackground.swift + the root view application point.
-DOD: side-by-side screenshot vs the web app in both appearances; build + tests green.
-[+ fence block §4]
-```
-
-```
-TASK 2.0c — Onboarding tour depth pass (Gaël: "very quick, gives not much information, a bit sad").
-
-Read first: Sources/PodiumApp/OnboardingTour.swift (P5.5 — 5-step glass overlay w/ spotlight anchors), STANDALONE_PLAN.md §7 row for P5.5 (the anchor mechanism is load-bearing — marker-baseline ordering in PodiumApp.swift).
-Goal: same mechanism, better content. (1) Rewrite every step's copy: each step = what this page shows + ONE concrete thing to try ("Click a session to see its agents live"). Tone: confident, short, zero filler. (2) Add steps for Run, CC Config, and Diagnostics (and the menu bar extra if 2.1 has landed). (3) Final step links "Show this tour again: Help → Show Tour". Keep it skippable at every step; keep the live legacy-import count on step 1.
-Constraints: no new dependencies, don't touch the anchor/preference-key mechanism beyond adding anchors for the new steps, copy reviewed against the product frame (useful/easy/uncluttered — if a step needs 3 sentences, the step is wrong).
-DOD: tour run-through screen-recorded or screenshotted per step, light + dark; build green.
-[+ fence block §4]
-```
-
-### 2.1 ☐ Menu bar extra  *(S — highest value/effort ratio)*
-Always-visible presence = the "it's alive" wow in a demo, zero clutter.
+### T1.2 ☐ macOS packaging (.dmg) + vibrancy (glass)
 **Model: Sonnet.**
-
 ```
-TASK — Menu bar extra for PodiumApp (macOS).
-
-Read first: CLAUDE.md (architecture + constraints), Sources/PodiumApp/PodiumApp.swift (App entry, activation-policy note — do NOT break it), AppState.swift (@Observable, where session/agent state lives).
-Build: MenuBarExtra scene showing (a) live active-agent count as the label — eye logo template icon + count, gold tint when >0 (Theme.accent #FED23A); (b) dropdown: up to 5 most-recent active sessions (name, status dot, relative time — reuse StatusDot/Theme), each clickable → activates main window + navigates to that session; (c) "Awaiting input" section listing sessions with awaitingInputSince set, topmost; (d) footer: Open Podium / server mode indicator (embedded vs client) / Quit.
-Constraints: pure SwiftUI MenuBarExtra (macOS 14+, .menuBarExtraStyle(.window) for the rich dropdown). State comes ONLY from the existing AppState via WS updates — no new polling, no new API calls. Window activation must respect the activation-policy fix (test: app closed-to-menubar → click reopens window correctly). Add a Settings toggle "Show menu bar icon" (default ON), persisted in UserDefaults.
-DOD: builds + runs via ./run.sh; menu updates live while an agent runs; no retain cycle (AppState is @Observable environment — pass it explicitly to the scene); swift test green; board §7 row.
-[+ fence block §8]
+TASK T1.2 — macOS .dmg + native glass for the Tauri app. AFTER T1.1.
+Read first: T1.1's tauri/ setup; the current glass look (Sources/PodiumApp/Theme.swift ThemeBackground + the web CSS backdrop-filter); Tauri docs on macOS window vibrancy (the `window-vibrancy` crate / NSVisualEffectView) and on `.dmg` bundling + code signing (ad-hoc for now — NO paid Developer ID; document the xattr -dr com.apple.quarantine workaround in the release notes).
+Goal: (1) `cargo tauri build` produces `Podium.app` + a `.dmg` (drag-to-Applications). (2) Enable macOS vibrancy so the window has the liquid-glass look: transparent webview over an NSVisualEffectView, OR the window-vibrancy crate — whichever gives the wallpaper-blur behind the web content. The web UI already has its own CSS glass, so worst case that shows; best case native vibrancy bleeds through. (3) App icon = the existing eye/AppIcon asset.
+Constraints: ad-hoc signing only (no $99). Version stamped from a single source (align with the release pipeline in T3.1).
+DOD: install the .dmg on a clean path, open it (note the one-time right-click/xattr step), confirm live dashboard + glass. Screenshot.
+[+ fence block §7]
 ```
 
-### 2.2 ☐ Awaiting-input notification + ANSWER-FROM-POPUP  *(L — the flagship)*
-§6b №2, approved "ambitious version", and the single most product-defining
-feature: Claude is blocked → notification → answer INLINE from the popup.
-**Split into 3 dispatches, strictly in order. Model: Sonnet each, Opus-class
-review between steps** (this touches RunSpawner stdin — the concurrency-
-sensitive file; the cooperative-pool lesson lives there).
-
+### T1.3 ☐ Linux packaging (.AppImage / .deb) — the payoff
+**Model: Sonnet (build/run inside the swift:6.1 + Tauri toolchain; OrbStack/Docker on the dev Mac).**
 ```
-TASK 2.2a — Control-response framing in RunSpawner.sendInput (PodiumCore only, NO UI).
-
-Read first: Sources/PodiumCore/Runs/RunSpawner.swift ENTIRELY (esp. StdinWriter, the Thread.detachNewThread waitUntilExit comment — understand WHY it's a real thread before touching anything), RunState.swift RunInputAckMessage, STANDALONE_PLAN.md §6b №2 + the §7 note "answer-from-popup needs a stdin control-response framing extension in RunSpawner.sendInput".
-Goal: when a Podium-spawned run (stream-json protocol) emits a permission-request/control envelope, (1) parse + surface it on the RunHandle (new field, camelCase wire family, mirror Node's naming if the vendored client types have one — check client/src/lib/api.ts RunHandle first; if absent, name it pendingControlRequest and document it as a Swift-native extension), (2) broadcast a WS event run_control_request, (3) extend sendInput to write a correctly-framed control_response back to stdin (the claude stream-json control protocol — verify the exact frame against Claude Code docs/source, do NOT guess field names).
-Tests: unit tests with a fixture script that emits a control-request envelope and asserts the response frame lands on its stdin verbatim. All timing via bounded polls (see RunSpawnerTests.poll). Remember /usr/bin/true not /bin/true.
-Do NOT touch UI, PushNotifier, or the router beyond exposing the new field. ContractTests must stay 29/29 — if the RunHandle wire shape changes, update assertRunHandleShape in the SAME commit with a comment.
-[+ fence block §8]
+TASK T1.3 — Linux native app packaging. AFTER T1.1.
+Read first: T1.1; scripts/build-linux.sh (how podium-server is built for Linux via swift:6.1 docker); Tauri Linux bundling docs (.AppImage + .deb; WebKitGTK dependency).
+Goal: produce a Linux `.AppImage` (and .deb) of the Tauri app bundling the Linux podium-server sidecar. Double-click → opens a native window with the dashboard. No browser, no systemd needed for the app (the app launches its own server sidecar; the standalone systemd daemon path still exists separately for headless servers).
+Constraints: build inside a container so it's reproducible on the Mac dev box (document the exact docker/OrbStack commands). Ensure the Linux sidecar binary is the right arch.
+DOD: run the .AppImage inside a Linux container/VM (or note the manual step if GUI-in-container is impractical), confirm the window loads the dashboard against a seeded DB. This is THE "real Linux app" milestone — call it out in the run log.
+[+ fence block §7]
 ```
 
+### T1.4 ☐ Tray icon + native notifications (cross-platform)
+**Model: Sonnet. AFTER T1.1.**
 ```
-TASK 2.2b — macOS notification with inline reply (after 2.2a merges).
-
-Read first: Sources/PodiumCore/Push/PushNotifier.swift + NativeNotifier protocol, AppState.swift, 2.2a's run log entry.
-Goal: UNUserNotificationCenter notification when (a) a session/agent sets awaiting_input_since, or (b) a Podium-spawned run emits run_control_request. For (b): UNTextInputNotificationAction ("Reply…") for free-text prompts and UNNotificationAction buttons for allow/deny-style permission requests → route the response through the 2.2a API. For (a) (external terminal sessions): notification + click focuses the app on that session (NO keystroke injection — rejected in §6b).
-Also: notification preferences pane in Settings (per-event toggles: completed / error / awaiting-input / control-request; default all ON except completed).
-DOD: end-to-end demo — spawn a run from the Run page in acceptDangerously=OFF mode that triggers a permission ask, answer it from the notification popup without touching the window, run continues. Record the demo steps in the §7 row.
-[+ fence block §8]
+TASK T1.4 — System tray + native notifications via Tauri.
+Read first: T1.1; the events the server already broadcasts over WS (run_status, awaiting-input, agent/session updates — see Sources/PodiumServer/WebSocket/); the OLD SwiftUI notification intent (STANDALONE_PLAN §6b №2 — awaiting-input notification).
+Goal: (1) A tray/menu-bar icon showing live active-agent count (gold when >0), with a menu: Open Podium / server status / Quit. (2) Native OS notifications (Tauri notification plugin — works on mac + linux + windows) fired when a session finishes, errors, or goes awaiting-input. The shell subscribes to the server's WS (or a small /api events poll) to know when to fire. Per-event toggles persisted.
+Constraints: cross-platform (no platform-specific notification code where the Tauri plugin covers it). Don't reinvent state — read it from the server.
+DOD: demo a notification firing on a real event on both mac and linux (linux can be the container/VM). Tray count updates live.
+[+ fence block §7]
 ```
-
-```
-TASK 2.2c — Linux parity (after 2.2b): notify-send desktop notification for the same events via LinuxDesktopNotifier (NOTE: its waitUntilExit runs on a blocking call — check it's not on the cooperative pool; fix with the same Thread pattern as RunSpawner if it is, it's 3 lines). Web push click-through already exists; wire the run_control_request event into the web client ONLY if the vendored client already has a handler (do not fork the React app for this — if absent, log as future web work and stop).
-[+ fence block §8]
-```
-
-### 2.3 ☐ Backup restore wiring  *(S)*
-Backups tab is browse-only with an in-UI note (P5.4 flagged it explicit).
-Close the loop: restore = copy-back with a pre-restore safety copy +
-confirmation dialog naming both paths. **Model: Sonnet.** *(Prompt: extend
-PodiumAPI+CcConfig restore call → CcMutate copy-back guarded by a
-`.pre-restore-<timestamp>` sibling copy; UI confirm; unit test the copy
-logic against a fixture dir.)*
-
-### 2.4 ☐ Session hygiene: delete + cleanup UI  *(S)*
-`POST /api/settings/cleanup` exists server-side; surface it: per-session
-delete (context menu, confirm) + Settings "Clean up sessions older than N
-days" with a dry-run count first. Uncluttered dashboards sell the GroupOne
-demo. **Model: Sonnet.**
-
-### 2.5 ☐ Async reimport with progress  *(M)*
-Cold-cache first import is CPU-bound seconds-per-hundred-files (documented
-debt). Move to a background task + `import_progress` WS events (the message
-type already exists — `ImportProgressMessage`), progress UI in Import page +
-native app. **Only worth it if the switchover (1.4) shows real-corpus pain**
-— PO gate: measure first with Gaël's actual dashboard.db, then decide.
-
-### 2.6 ☐ Pre-migration DB backup  *(XS — do together with 2.5 or 1.4)*
-§6b №1, parked-but-cheap: on first takeover of an existing dashboard.db, the
-app writes `dashboard.db.pre-podium-<version>` next to it, once. ~20 lines +
-test. Fold into whichever adjacent task touches PodiumPaths first.
-
-### 2.7 ☐ Residual purple audit  *(XS)*
-Brand palette (gold/navy "Aurora Glass") is APPLIED since Wave 6, but the
-memory note flags stragglers: hardcoded `Color(red:0.6,green:0.4,blue:1)`
-purples and cyan "active" states (web uses gold for live). One Haiku-tier
-sweep: grep all Color literals in Sources/PodiumApp, table of hits, replace
-with Theme tokens per the palette memory. Screenshot before/after.
-
-### 2.9 ☐ Update system  *(M — added 2026-07-06 on Gaël's ask. RANK: FIRST in Phase 2 (Gaël's call: "the update thing should be a priority, others are more like fixes") — it is the distribution channel that lets every later fix reach users. Numbered 2.9 only to avoid renumbering an in-use file.)*
-
-Goal: tag a GitHub release → users see "Update available" in the app, read
-the changelog, download the new build. **60% exists already**:
-`UpdateCheck.swift` (P4.3) polls the GitHub Releases API and
-`/api/updates/status` + the `update_status` WS broadcast serve it — nothing
-PRODUCES releases today, and nothing DISPLAYS the check.
-
-**Staged, PO decision (revised 2026-07-06 — NO Apple Developer ID
-available; Gaël needs to prove the product first, so the update path must
-be free):**
-- Stage 1 (below) **IS the v1 update system** (Gaël 2026-07-06, after
-  liking Clawd on desk's approach: popup "new update available" with
-  Dismiss / Update, where Update opens the GitHub release page and the
-  user downloads + replaces manually). Simple beats clever here — do NOT
-  build more than this until manual-replace friction is actually observed
-  in GroupOne.
-- Stage 2 (free self-updater, NO Developer ID required): the app updates
-  ITSELF. Why this works without notarization: Gatekeeper only evaluates
-  files carrying the com.apple.quarantine xattr, and quarantine is OPT-IN
-  for the downloading process — browsers set it, the app's own URLSession
-  does not (don't add LSFileQuarantineEnabled). So: app downloads
-  Podium-<v>.zip via its own URLSession → verifies an ed25519 signature
-  (CI signs with a GitHub-secret key; app embeds the PUBLIC key —
-  swift-crypto Curve25519.Signing, already a dependency) → unpacks to
-  temp → atomically swaps the .app bundle (rename old aside, move new in,
-  relaunch; if the install dir isn't writable, fall back to "reveal
-  download in Finder") → relaunch. The replaced app is the same ad-hoc
-  build class the user already runs — no new Gatekeeper prompt.
-  Caveats to state honestly in RELEASING.md: (1) FIRST install keeps the
-  one-time right-click→Open friction — unavoidable without notarization;
-  (2) trust root is the embedded pubkey + repo secret, which is real
-  integrity (better than checksum-from-same-server) but not Apple's chain.
-- Later, if GroupOne funds a Developer ID: add notarization to release.yml
-  and keep the same updater — it's a drop-in improvement, nothing thrown
-  away. (Sparkle becomes optional at that point, not required.)
-
-```
-TASK 2.9c — Free self-updater (Stage 2). ***PARKED (Gaël 2026-07-06): Stage 1's open-the-release-page flow is the v1 system; only revive this if GroupOne users actually complain about manual replace.*** Model: Sonnet, Opus-class review (it swaps the app bundle on disk — the failure mode is a broken install). AFTER 2.9a + 2.9b ship and one real release exists.
-
-Read first: the Stage 2 rationale above (quarantine opt-in fact, ed25519 scheme), UpdateCheck.swift, 2.9a's release.yml, scripts/package-macos.sh, Package.swift (swift-crypto already pinned).
-Goal:
-1. release.yml additions: zip the .app (ditto -c -k --keepParent), sign the zip with ed25519 (private key from repo secret PODIUM_UPDATE_SIGNING_KEY; document one-time key generation in RELEASING.md), attach Podium-<v>.zip + Podium-<v>.zip.sig as release assets.
-2. App-side Updater (PodiumApp only, macOS): download the .zip asset via its own URLSession to a temp dir (verify NO quarantine xattr lands — assert in tests via xattr check on a fixture download), verify the .sig against the embedded public key BEFORE unpacking (reject loudly on mismatch — this is the security boundary), unpack, validate the bundle (Info.plist version matches the release tag), atomic swap: move current .app to ~/.Trash (or temp) → move new into place → relaunch via a detached /bin/sh -c 'sleep 1; open <path>' + terminate. If the parent dir isn't writable or the app isn't running from a normal location (translocation check), fall back to opening the downloaded zip in Finder with a one-line instruction.
-3. UI: the 2.9b banner gains "Install update" next to "Download"; progress + a clear failure state that NEVER leaves the user without a working app (the old bundle is only moved aside after the new one verified).
-4. Linux: out of scope (systemd unit + install script already handle it; print the one-line update command in the daemon log instead).
-Constraints: no Sparkle, no new dependencies, signature verification is NOT skippable (no env flag to bypass), never delete the old bundle before the new one is verified-in-place.
-DOD: full self-update demo against a real GitHub release (0.9.x fixture → latest), including a tampered-zip test proving the signature gate rejects it; full suite green.
-[+ fence block §4]
-```
-
-```
-TASK 2.9a — Release pipeline (producer side). Model: Sonnet.
-
-Read first: .github/workflows/ci.yml (style/conventions incl. timeout-minutes + the --product-per-invocation footgun note), scripts/package-macos.sh, scripts/build-linux.sh, Sources/PodiumCore/Discovery/UpdateCheck.swift (currentAppVersion — env PODIUM_APP_VERSION, falls back "dev").
-Goal: .github/workflows/release.yml triggered on tag push v* :
-1. macOS job: run package-macos.sh with the version STAMPED from the tag (extend the script to accept VERSION: writes CFBundleShortVersionString into the bundle Info.plist AND names the DMG Podium-<version>.dmg). timeout-minutes: 40.
-2. Linux job: build-linux.sh --host inside the swift:6.1 container (mind the docker-in-docker issue — if build-linux.sh insists on docker, use its host-toolchain path since the job ALREADY runs in the swift container), tarball named podium-linux-<version>-<arch>.tar.gz.
-3. Release job (needs both): gh release create for the tag with BOTH assets and --generate-notes (auto changelog from merged PRs/commits).
-Constraints: reuse ci.yml conventions; do NOT touch ci.yml itself; concurrency group per tag; the workflow must be a no-op for non-tag pushes. Verify by dry-running the version-stamping script paths locally (you cannot push a tag — document the manual verification steps you DID run and what the first real tag will prove).
-DOD: workflow file + updated packaging scripts + a RELEASING.md section (5 lines max: how to cut a release = git tag vX.Y.Z && git push --tags).
-[+ fence block §4]
-```
-
-```
-TASK 2.9b — In-app updates UI + changelog (consumer side). Model: Sonnet. AFTER 2.9a.
-
-Read first: Sources/PodiumCore/Discovery/UpdateCheck.swift ENTIRELY (appRepoSlug env resolution + doc comment; GitHubRelease/transport), Sources/PodiumServer/Routes/UpdatesRouter.swift, Models/Updates.swift + the updates assertions in ContractTests (testUpdatesStatusContract — any wire change must keep it green in the SAME commit), the Settings UI entry in Sources/PodiumApp/.
-Goal:
-1. Default appRepoSlug() to "Miraeld/podium-app" (env PODIUM_APP_GITHUB_REPO still overrides; update the stale doc comment saying no remote exists).
-2. currentAppVersion(): prefer the bundle's CFBundleShortVersionString (stamped by 2.9a), then env, then "dev".
-3. Extend GitHubRelease + the API decode with the release NOTES body (markdown) — new optional snake_case wire field on RepoUpdateStatus (release_notes); ContractTests updates test must stay green.
-4. Native UI, two surfaces (reference UX: Clawd on desk, per Gaël):
-   (a) PROACTIVE POPUP — on launch (one auto-check per launch, no polling) when updateAvailable: an alert/sheet "New update available — Podium <version>" with the release notes summary and exactly two buttons: "Dismiss" and "Update". Update opens releaseUrl (the GitHub release page) in the browser — the user downloads and replaces manually, that's the whole flow. Dismiss remembers the version in UserDefaults and never re-prompts for THAT version (nagging is a defect); the next release prompts again.
-   (b) Settings → "Updates" card as the persistent home: current version, "Check for updates" button (POST /api/updates/check), banner when available (Theme.accent), full changelog sheet (AttributedString(markdown:) — no new deps), same Update-opens-release-page button. Also listen for the update_status WS broadcast.
-5. Linux daemon: log "update available: <version> — <url>" once per process when detected. Web client: NO fork — note in the report whether the vendored UpdateNotifier.tsx could be re-enabled via the patches/ flow, but do not do it.
-Constraints: no auto-download/install (Stage 2), no Sparkle, no new dependencies. Respect the update-check being best-effort (offline must never error the UI — show "couldn't check" quietly).
-DOD: demo path — set env PODIUM_APP_VERSION=0.9.0 with a real 1.0 release published (or a fixture transport in tests) → banner appears, changelog renders, download opens. Unit tests for the version-compare + release_notes decode. Full suite + ContractTests green.
-[+ fence block §4]
-```
-
-### 2.8 ☐ Quick Look extension  *(parked — revisit after 2.1–2.4 ship)*
-Neat, not pitch-critical. Re-evaluate only when everything above is done.
-
-### 2.10 ☐ Recommendations engine  *(L — MARQUEE FEATURE, added 2026-07-06 on Gaël's idea. The single strongest GroupOne pitch: "Podium watches how you work and tells you how to work better." Rank: after 2.0 UX parity + 2.9 update system are solid — it needs the app to feel finished first, but it's the differentiator, so don't let it slip past 2.3/2.4.)*
-
-**The idea (Gaël):** a `Recommendations` view that analyses the local
-session/agent/event history and surfaces actionable suggestions — e.g.
-*"You've used a near-identical prompt in 100 of 150 sessions — consider a
-`/skill` or slash-command."* **Hard constraint: it must work with NO
-embedded AI** (no LLM, no embeddings, no network, no API key) so it lights
-up for every GroupOne user out of the box. Everything below is pure
-heuristics/SQL over data Podium already stores.
-
-**Feasibility (confirmed): fully doable offline.** All raw material is in
-the SQLite DB (prompts via UserPromptSubmit events + transcripts, tool
-calls, cwds, agents, errors) and the aggregation machinery already exists
-(WorkflowAggregator, PodiumStore+Workflows). The engine is just a rule set.
-
-**The honest limit:** no-AI matching is LEXICAL (same/similar wording), so
-it catches repeated *pastes* (the bulk of the value) but not paraphrases.
-Set that expectation in the UI copy; the optional AI-polish stage (2.10c)
-closes the gap on demand.
-
-```
-TASK 2.10a — RecommendationEngine (PodiumCore, offline, NO AI). Model: Sonnet, Opus-class review (heuristics + thresholds are easy to get spammy — the reviewer's job is to kill noisy rules).
-
-Read first: CLAUDE.md; Sources/PodiumCore/Workflows/WorkflowAggregator.swift + Database/PodiumStore+Workflows.swift (the existing aggregation pattern to mirror); Ingest/ (how UserPromptSubmit + tool events land); Models/Event.swift + Session.swift.
-Goal: a `RecommendationEngine` (new PodiumCore/Recommendations/ dir) that runs a catalog of RULES against the store and returns `[Recommendation]`, ranked by confidence×impact. Each Recommendation: id, kind (enum), title, body (templated plain text — NO AI phrasing), evidence (e.g. "seen in 100 of 150 sessions"), suggestedAction (freeform string, e.g. "Create a skill: /<slug>"), and a strength score. Codable, snake_case wire, contract-test friendly.
-RULE CATALOG (v1 — implement these, each = a query + threshold + template):
-  1. repeated_prompt: normalize prompts (lowercase, trim, collapse whitespace, strip trailing punctuation), group by normalized hash AND by fuzzy near-dup (token-set Jaccard ≥ 0.8 or shared 8-gram shingles — classic, no ML), count distinct sessions. Fire when a cluster spans ≥ N sessions (default 5, and ≥ some % of sessions). Suggest a slash-command/skill; propose a crude slug from the prompt's first salient tokens.
-  2. repeated_tool_sequence: reuse tool-flow transitions; frequent A→B→C chains → suggest a hook/script.
-  3. project_no_config: a cwd with ≥ N sessions but no project CLAUDE.md/.claude config → suggest onboarding that project.
-  4. high_error_rate: subagent_type or tool with error rate ≥ threshold over ≥ N runs.
-  5. high_abandon_rate: % of sessions ending abandoned ≥ threshold → suggest smaller scopes.
-  6. file_hotspot: same file edited across ≥ N sessions.
-Thresholds live in one struct with sane defaults; every rule must be individually suppressible. NO rule may fire on thin data (guard minimum sample sizes) — a spammy recommendations list is worse than none.
-Tests: unit tests per rule with seeded fixtures proving fire/no-fire at the threshold boundary, and that normalization clusters obvious dupes. Deterministic ordering.
-Do NOT build UI or routes here. Do NOT add any AI/network dependency.
-[+ fence block §4]
-```
-
-```
-TASK 2.10b — /api/recommendations route + Recommendations view. Model: Sonnet. AFTER 2.10a.
-Read first: 2.10a's engine; Sources/PodiumServer/Routes/ (thin-router pattern, JSONResponse); a couple existing PodiumApp views (DashboardView for card style, ConfigExplorerView SettingsSurfaceView for the tile/card look); ContentView Sidebar (add a nav row).
-Goal: (1) GET /api/recommendations → runs the engine, returns {recommendations:[…]} (snake_case; add a ContractTests case). (2) New sidebar entry "Recommendations" (Discover section, icon lightbulb) + NavDestination case + detail view. (3) The view: a ranked list of recommendation cards — title, evidence line, the templated body, and the suggested action; each card dismissible (persist dismissed ids in UserDefaults like the update popup); empty state ("Not enough history yet — keep working and Podium will spot patterns"). Match the app's glass-card look; respect the orbs/theme.
-Constraints: no AI. The view only renders what the engine produced. Keep ContractTests green (new endpoint + any wire change in the SAME commit).
-DOD: demo against the real 1551-session DB — screenshot the populated list; confirm the repeated_prompt rule surfaces a real cluster from Gaël's history. Full suite + ContractTests green.
-[+ fence block §4]
-```
-
-```
-TASK 2.10c — OPTIONAL "✨ Improve with AI" (opt-in, uses the USER's own Claude, NO embedded key). Model: Sonnet. AFTER 2.10a/b ship and prove useful. GATED — only build if Gaël wants the AI polish; the offline engine must stand alone without it.
-Read first: 2.10a/b; Sources/PodiumCore/Runs/RunSpawner.swift (Podium spawns the user's own `claude` — that's the AI path, no API key stored by Podium); the answer-from-popup work if 2.2 landed.
-Goal: a per-recommendation "✨ Improve with AI" button that, for a repeated_prompt cluster, spawns a headless Podium run asking the user's own Claude to (a) propose a good skill/command name and (b) draft the skill's content from the clustered prompts, then shows the draft for the user to save into ~/.claude/skills. Purely on-demand; nothing runs automatically; no data leaves the machine except through the user's own already-authenticated Claude.
-Constraints: Podium NEVER stores or asks for an API key — it only drives the user's local `claude` binary via RunSpawner. If no claude binary is found (GET /api/run/binary → found:false), the button is disabled with a tooltip. Feature-flag it so it can ship dark.
-DOD: end-to-end demo — pick a repeated_prompt recommendation, click Improve with AI, get a named skill draft back, save it. Full suite green.
-[+ fence block §4]
-```
-
-**PO notes:**
-- Ship 2.10a+b as the product; 2.10c is a bonus that must never be a
-  dependency (the constraint is "works without AI").
-- The demo that sells this: run it against Gaël's real 1551-session DB and
-  let it find an actual repeated prompt he didn't realize he was pasting.
-- Watch the noise. One good recommendation beats ten obvious ones — the
-  review pass on 2.10a exists specifically to be ruthless about thresholds.
 
 ---
 
-## PHASE 3 — Tech-debt ledger (fold into adjacent work, never a dedicated sprint)
+## PHASE T2 — Move the SwiftUI-only features into the web client
 
-| Debt | Where | Fold into |
-|---|---|---|
-| PushNotifier Sendable-closure warning (Swift 6 mode) | Push/PushNotifier.swift:26 | 2.2b |
-| LinuxDesktopNotifier blocking `waitUntilExit` — audit vs cooperative pool | Push/LinuxDesktopNotifier.swift:34 | 2.2c |
-| Same audit: GitContext.swift:93, RunBinaryLocator.swift:44 | app/core | any Sonnet task touching those files |
-| cc-config symlink-following gap (exact Node parity — joint ticket) | Discovery/CcConfig | when Node side moves |
-| Web-push click-through fields snake_case vs future client camelCase | Push | 2.2c (no consumer yet) |
-| `WorkflowSessionRaw` dead code | PodiumApp Models | 2.7 sweep |
-| Web app over-eager refetch — UI "stutters"/spinner storm on WS events (Gaël 2026-07-06, parked by his call: low investment). Likely fix = debounce refetch-on-WS + skeleton instead of spinner | WebClient (vendored — needs the patches/ + rebuild flow) | only if it still annoys after the switchover |
-| RunSpawner stdin-backpressure question (from CI diagnosis era — likely resolved by the Thread fix, but never explicitly tested with a slow-reading child) | Runs/RunSpawner.swift | 2.2a MUST add a test: child that never reads stdin + 1MB write → sendInput must not block the actor |
+These features existed only in the native SwiftUI app. They now belong in the
+React web client (`WebClient/` — built via the vendored client's patch/rebuild
+flow, see the P5.5 tour work in git history for the WebClient/patches pattern),
+so they work in the Tauri window on every platform AND in a plain browser.
 
-## 4. §8 — The fence block (append to EVERY dispatch prompt, verbatim)
+### T2.1 ☐ Update popup + changelog → web client
+```
+TASK T2.1 — Update-available popup in the React client.
+Read first: Sources/PodiumCore/Discovery/UpdateCheck.swift (the /api/updates/status backend already exists + returns release notes); the vendored client — there's a stub UpdateNotifier.tsx waiting for exactly this; the retired SwiftUI UpdatesView.swift for the intended UX (popup with Dismiss / Update; Dismiss suppresses that version, Update opens the release page WITHOUT suppressing so it re-prompts if not installed).
+Goal: a React "New update available" popup + a Settings "Updates" panel, consuming /api/updates/status, rendering the changelog (release notes markdown), with the exact Dismiss/Update semantics above (persist dismissed version in localStorage). Built through the WebClient patch/rebuild flow → vendored dist.
+NOTE: the actual app self-update (download+install) is Tauri's built-in updater (T2.3), not this — this is notify + changelog + "open release page".
+DOD: with a newer GitHub release published, the popup appears in the Tauri window; Dismiss/Update behave correctly. ContractTests for /api/updates stay green.
+[+ fence block §7]
+```
+
+### T2.2 ☐ Onboarding tour → web client
+```
+TASK T2.2 — Onboarding tour in the React client.
+Read first: the web client's existing welcome card (Dashboard.tsx, from the P5.5 work); a web tour lib (driver.js or shepherd.js — pick one, justify briefly).
+Goal: a guided first-run tour over the real web UI — spotlight each nav section with one concrete "try this" per step (Sessions, Workflows, Run, CC Config, Diagnostics, Recommendations-when-it-lands), skippable, re-runnable from a Help/Settings entry, shown once (localStorage). Copy per the product frame: short, confident, one action per step.
+DOD: tour runs in the Tauri window + a browser, light + dark; screen-record or screenshot each step.
+[+ fence block §7]
+```
+
+### T2.3 ☐ Tauri built-in auto-updater (replaces the custom self-updater)
+```
+TASK T2.3 — Wire Tauri's built-in updater. AFTER T3.1 (release pipeline emits the update artifacts + signature).
+Read first: Tauri v2 updater docs (updater plugin, update manifest, signing keys — Tauri's own EdDSA scheme, NO Apple Developer ID needed for the update mechanism itself); the free-updater rationale from git history (quarantine is opt-in for the app's own downloads).
+Goal: the app checks a Tauri update manifest (published by the release pipeline), and on "Install update" downloads + swaps + relaunches — signed with the Tauri updater key (public key embedded, private key a CI secret). This is the real click-to-update, cross-platform, no paid signing required.
+Constraints: signature verification NOT skippable. Feature-flaggable. First install still has the one-time Gatekeeper step on mac (unavoidable without notarization) — document it.
+DOD: publish a test release, click Install update in an older build, get the new version. Tampered-artifact test proves the signature gate rejects it.
+[+ fence block §7]
+```
+
+---
+
+## PHASE T3 — Harden + ship 1.0.0
+
+### T3.1 ☐ Release pipeline → Tauri installers
+```
+TASK T3.1 — CI builds the Tauri installers. AFTER T1.1–T1.3.
+Read first: the current .github/workflows/release.yml (builds the DMG + Linux tarball for the SwiftUI app — this gets replaced/extended); Tauri's official GitHub Action (tauri-apps/tauri-action) which builds + drafts a release with .dmg/.AppImage/.deb; T2.3's updater artifact + signing requirements.
+Goal: on tag push v*, build the Swift podium-server per-platform, then the Tauri app for macOS + Linux, and publish a GitHub Release with .dmg + .AppImage (+ .deb) + the Tauri updater manifest/signature. Keep macOS + Linux jobs; keep the timeout-minutes + concurrency conventions.
+DOD: a real tag produces a release with the Tauri installers attached; a fresh download opens and works on both platforms.
+[+ fence block §7]
+```
+
+### T3.2 ☐ Retire the SwiftUI app target
+```
+TASK T3.2 — Remove PodiumApp (SwiftUI) once the Tauri app is at parity. AFTER T1+T2 verified.
+Goal: delete the PodiumApp executable target from Package.swift and its Sources/PodiumApp/ tree (git history preserves it), plus run.sh's app-bundle path and scripts/package-macos.sh's SwiftUI packaging. KEEP: PodiumCore, PodiumServer, podium-server, podium-hook, WebClient, Tests. Update CLAUDE.md to describe the new architecture (Swift server + web client + Tauri shell).
+Constraints: do this ONLY after 1.0 QA (T3.4) confirms the Tauri app fully replaces it. Full test suite stays green (the server/core tests are unaffected).
+DOD: swift build + swift test green with PodiumApp gone; the app still ships (via Tauri).
+[+ fence block §7]
+```
+
+### T3.3 ☐ Docs for the new architecture
+README + MIGRATION rewritten: what Podium is (native app on mac+linux via
+Tauri, Swift server inside), install per platform, the one-time Gatekeeper
+step, the plugin→standalone migration (unchanged: "your dashboard.db just
+works"). Update CLAUDE.md. Orchestrator or Sonnet.
+
+### T3.4 ☐ Final 1.0.0 QA (both platforms) → tag
+Clean-machine test on macOS + Linux: download installer → open → live agents
+appear → walk every page → spawn a run → notifications fire. Fix or file
+anything broken. When green on both: **tag v1.0.0.** This is the finish line.
+
+---
+
+## 5. DROPPED from the old (SwiftUI-era) roadmap — nothing lost, just moot
+
+The pivot retires the SwiftUI UI, so these are gone (their *intent*, where it
+still matters, is folded into the web client or Tauri shell above):
+
+- Native UX parity pass (SwiftUI nav restructure, agent-card→conversation,
+  settings summary cards) — **moot**; the web UI already has all this.
+- Native **menu-bar extra** — replaced by the Tauri **tray** (T1.4).
+- Answer-from-popup / awaiting-input **native notifications** — replaced by
+  Tauri notifications (T1.4); inline-answer stays a later idea via the run
+  stdin protocol (server-side, still valid).
+- SwiftUI **orbs / purple audit / Theme** work — moot (web has its own glass;
+  Tauri vibrancy in T1.2).
+- SwiftUI **Data settings / CC Config redesigns / Diagnostics label / card
+  alignment** — moot (web UI is the UI now).
+- **F2** SwiftUI app bugs (Thinking tab, reinstall-hooks, Diagnostics
+  unavailable) — moot (those were SwiftUI views; the web equivalents work).
+- Custom Swift **self-updater (old 2.9c)** — replaced by Tauri's built-in
+  updater (T2.3).
+- **Kanban** — already removed from nav; not carried to the web nav either
+  unless it earns its place (it doesn't today).
+
+Kept and carried forward: the Swift server, ingestion, contract tests,
+packaging of the server binary, the update *pipeline* (adapted), the
+switchover (done), CI truth policy, the crash fix (§4.0).
+
+## 6. Post-1.0 (mentioned, NOT scheduled — Gaël: not a priority now)
+
+- **Windows** installer (.msi) — Tauri makes it mostly a build-target add;
+  do it when there's demand.
+- **Recommendations engine** — Gaël's idea: a view that analyses local
+  history and surfaces actionable suggestions ("you've pasted this prompt
+  100/150 sessions → make a /skill"). Works WITHOUT cloud AI via lexical +
+  fuzzy matching and, on capable platforms, on-device embeddings (Apple
+  `NLEmbedding` on mac; ONNX MiniLM cross-platform later). Must cross-check
+  against the user's EXISTING skills/commands so it never recommends what
+  already exists. Optional "✨ improve with AI" uses the user's own `claude`
+  binary (no stored key). Full 3-stage spec preserved in git history
+  (commit 48c37a4, the previous ROADMAP §2.10) — resurrect when prioritized.
+- Tauri auto-updater key rotation / notarization if a Developer ID is ever
+  funded (drop-in; nothing above changes).
+
+## 7. §7 — The fence block (append to EVERY dispatch prompt, verbatim)
 
 ```
 FENCES — non-negotiable:
-- Touch ONLY the files named in this task. If the fix seems to belong elsewhere, STOP and report.
-- Never touch: ~/.claude/podium/data (live Docker bind-mount), any running PodiumApp process, the prod `podium` Docker container, WebClient/dist (vendored build — patches go through WebClient/patches/ + rebuild flow only).
-- Wire format is LAW: snake_case via PodiumJSON; deliberate camelCase families use the AnyEncodable dictionary pattern (see PodiumJSON.swift doc comment); errors are CodedErrorResponse {"error":{"code","message"}}; never mix snake_case CodingKeys with .convertFromSnakeCase. ContractTests (29) is the gate — run it.
-- Tests: /usr/bin/true not /bin/true. Bounded polls only. New XCTSkip gates need GITHUB_ACTIONS guard + comment, and ONLY for runner-env behavior that passes locally.
-- Do not commit or push unless the task says to; an auto-commit hook may fire on saves — ignore it, never amend/rebase around it.
-- Report: outcome first, then evidence (test output), then deviations. If you deviated from the spec, say so explicitly — undeclared deviations are treated as bugs.
+- Touch ONLY the files/dirs named in this task. If the fix belongs elsewhere, STOP and report.
+- Never touch: ~/.claude/podium/data (old Docker bind-mount, kept as backup), the user's running app/server, WebClient/dist except via the patches/ + rebuild flow.
+- The Swift SERVER is the backend and stays authoritative: wire format is snake_case via PodiumJSON; camelCase exception families use the AnyEncodable dict pattern; errors are CodedErrorResponse; ContractTests (the wire gate) must stay green — run it after any server change.
+- Sidecar lifecycle is load-bearing: never leave an orphaned podium-server process; always wait-for-health before loading the window; reuse an already-running server if the port is taken.
+- Tests: /usr/bin/true not /bin/true; bounded polls; new XCTSkip gates need a GITHUB_ACTIONS guard + a comment naming the runner behavior, only for things that pass locally.
+- Don't commit/push unless the task says to; an auto-commit hook may fire on save — ignore it, never amend/rebase around it.
+- Report: outcome first, then evidence (build/run output), then deviations. Undeclared deviations are treated as bugs.
 ```
 
-## 5. Suggested session shapes
+## 8. Debt ledger (server-side, trimmed to what still matters)
 
-- **One evening:** Phase 0 complete (0.1 orchestrator + 0.2 Sonnet + 0.3) →
-  README close-out. CI green + P6.2 ✅ is a clean stopping point.
-- **One day:** Phase 1 (F2 + QA sweep + main branch), switchover with Gaël
-  in the evening. **v1.0 done-done.**
-- **v1.1 week:** 2.9a/b (update channel) → 2.0 (UX parity) → 2.1 →
-  2.2a/b/c → 2.3 → 2.4, one at a time, each polished.
-- Always end a session with: board updated, §7 logged, HANDOVER.md
-  resealed, everything pushed, CI verdict known.
+| Debt | Where | Fold into |
+|---|---|---|
+| WebSocket auto-ping crash | hummingbird-websocket / PodiumServerApp | §4.0 (do now) |
+| PushNotifier Sendable-closure warning (Swift 6) | Push/PushNotifier.swift | any Push task |
+| `waitUntilExit` on cooperative pool — audit LinuxDesktopNotifier / GitContext / RunBinaryLocator | app/core | any task touching them |
+| Cold-cache first import CPU-bound | Ingest/LegacyImporter | if real-corpus UX warrants (measure first) |
+| cc-config symlink-following gap (Node parity) | Discovery/CcConfig | when Node side moves |
+| Live-session ingestion: current session showed as Abandoned / not "active" | Ingest + hook delivery post-switchover | verify podium-hook reaches the embedded/sidecar server; sweep-vs-live status logic |
+
+## 9. Suggested execution order to 1.0.0
+
+**§4.0 crash fix (ship 0.5.3)** → **T1.1 sidecar** (the make-or-break) →
+T1.2 mac .dmg + T1.3 Linux .AppImage (parallel-ish) → T1.4 tray/notifs →
+T2.1 update popup + T2.2 tour (web) → T3.1 Tauri release pipeline →
+T2.3 built-in updater → T3.4 QA both platforms → **T3.2 delete SwiftUI** →
+T3.3 docs → **tag 1.0.0.**
