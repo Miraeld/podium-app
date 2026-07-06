@@ -1,7 +1,9 @@
 #if os(macOS)
 import Foundation
 import SwiftUI
+import AppKit
 import UserNotifications
+import PodiumCore
 
 // MARK: - App State
 
@@ -55,6 +57,27 @@ final class AppState {
     // Active agents (working or waiting)
     var activeAgents: [Agent] = []
 
+    // MARK: Updates (TASK 2.9b)
+
+    /// Latest known update status (from the on-launch check, a manual
+    /// Settings "Check for updates", or a live `update_status` WS
+    /// broadcast). `nil` until the first check completes.
+    var updateStatus: UpdatesStatusResponse?
+    /// True only while a check is actually in flight — gates the Settings
+    /// "Check for updates" button spinner, not the proactive popup.
+    var isCheckingForUpdates = false
+    /// Set when the best-effort check fails (offline, GitHub unreachable,
+    /// decode error). Never surfaced as an error alert — the Settings card
+    /// shows it quietly; the proactive popup simply doesn't appear.
+    var updateCheckFailed = false
+    /// Drives the proactive "New update available" popup. Set once per
+    /// launch, right after the first successful check, if the app's
+    /// version hasn't already been dismissed by the user.
+    var showUpdatePopup = false
+
+    private static let dismissedUpdateVersionKey = "dismissed_update_version"
+    private var hasCheckedForUpdatesThisLaunch = false
+
     private let ws = WebSocketClient()
     private var api: PodiumAPI = PodiumAPI()
     private let spotlight = SpotlightIndexer()
@@ -96,6 +119,7 @@ final class AppState {
         await loadActiveAgents()
         let wsURL = URL(string: "ws://\(host):\(port)/ws")!
         ws.connect(url: wsURL)
+        await checkForUpdatesOnLaunch()
     }
 
     func refresh() async {
@@ -312,6 +336,60 @@ final class AppState {
 
     private func refreshStats() async {
         if let s = try? await api.stats() { stats = s }
+    }
+
+    // MARK: Updates (TASK 2.9b)
+
+    /// One auto-check per app launch — called from `start()`. Best-effort:
+    /// network/decode failures degrade silently (`updateCheckFailed = true`,
+    /// no alert). If an update is available for the app's own repo and its
+    /// version hasn't been dismissed before, triggers the proactive popup.
+    func checkForUpdatesOnLaunch() async {
+        guard !hasCheckedForUpdatesThisLaunch else { return }
+        hasCheckedForUpdatesThisLaunch = true
+        do {
+            let status = try await api.updatesStatus()
+            updateStatus = status
+            updateCheckFailed = false
+            if status.app.updateAvailable, let latest = status.app.latestVersion,
+               !isVersionDismissed(latest) {
+                showUpdatePopup = true
+            }
+        } catch {
+            updateCheckFailed = true
+        }
+    }
+
+    /// Manual "Check for updates" from Settings — also broadcasts
+    /// `update_status` over the WS hub server-side (other connected clients
+    /// see the same result live).
+    func checkForUpdatesNow() async {
+        isCheckingForUpdates = true
+        defer { isCheckingForUpdates = false }
+        do {
+            updateStatus = try await api.checkForUpdates()
+            updateCheckFailed = false
+        } catch {
+            updateCheckFailed = true
+        }
+    }
+
+    /// Persists the dismissal so this version never re-prompts; a newer
+    /// release (different `latestVersion`) prompts again.
+    func dismissUpdate(version: String) {
+        UserDefaults.standard.set(version, forKey: Self.dismissedUpdateVersionKey)
+        showUpdatePopup = false
+    }
+
+    private func isVersionDismissed(_ version: String) -> Bool {
+        UserDefaults.standard.string(forKey: Self.dismissedUpdateVersionKey) == version
+    }
+
+    /// Opens the GitHub release page — the entire "update" flow for Stage 1
+    /// (no self-update, no download-and-replace; see ROADMAP.md 2.9).
+    func openReleasePage() {
+        guard let urlString = updateStatus?.app.releaseUrl, let url = URL(string: urlString) else { return }
+        NSWorkspace.shared.open(url)
     }
 
     func fetchEvents(type: String? = nil, limit: Int = 50, offset: Int = 0) async throws -> EventsResponse {

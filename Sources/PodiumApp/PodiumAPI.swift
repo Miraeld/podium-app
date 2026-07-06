@@ -1,5 +1,6 @@
 #if os(macOS)
 import Foundation
+import PodiumCore
 
 // MARK: - JSON Decoder
 
@@ -120,6 +121,19 @@ actor PodiumAPI {
         var comps = URLComponents(url: baseURL.appending(path: "/api/analytics"), resolvingAgainstBaseURL: false)!
         comps.queryItems = [.init(name: "tz_offset", value: "\(tzOffsetMinutes)")]
         return try await get(url: comps.url!)
+    }
+
+    // MARK: Updates
+
+    /// `GET /api/updates/status` — read-only check, no WS broadcast.
+    func updatesStatus() async throws -> UpdatesStatusResponse {
+        try await get("/api/updates/status")
+    }
+
+    /// `POST /api/updates/check` — same check, also broadcasts
+    /// `update_status` over the WS hub (see `UpdatesRouter.swift`).
+    func checkForUpdates() async throws -> UpdatesStatusResponse {
+        try await postDecodable("/api/updates/check", body: Data())
     }
 
     // MARK: Cost
