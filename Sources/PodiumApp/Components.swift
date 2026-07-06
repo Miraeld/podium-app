@@ -71,6 +71,10 @@ struct StatCard: View {
                         .foregroundStyle(.secondary)
                 }
             }
+            // Fixed height so the value/label below start at the same Y across
+            // all cards — SF Symbols have varying intrinsic heights, which
+            // otherwise misaligns the big numbers row-to-row.
+            .frame(height: 18)
             Text(value)
                 .font(.system(size: 28, weight: .bold, design: .rounded))
                 .foregroundStyle(.primary)

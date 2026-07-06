@@ -113,6 +113,7 @@ struct ContentView: View {
                     .keyboardShortcut("r", modifiers: .command)
                     .help("Refresh (⌘R)")
                 }
+                .padding(.trailing, 6)
             }
         }
         .background(Group {
