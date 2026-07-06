@@ -67,8 +67,16 @@ struct UpdateAvailablePopup: View {
     }
 
     private func dismiss(open: Bool) {
-        if open { state.openReleasePage() }
-        if let latest = app?.latestVersion {
+        if open {
+            // "Update" opens the release page but does NOT persist a
+            // dismissal: if the user doesn't actually install, the popup
+            // re-prompts on the next launch (still on the old version).
+            // Only closes for this session.
+            state.openReleasePage()
+            state.showUpdatePopup = false
+        } else if let latest = app?.latestVersion {
+            // "Dismiss" suppresses THIS version permanently; a newer
+            // release prompts again.
             state.dismissUpdate(version: latest)
         } else {
             state.showUpdatePopup = false
