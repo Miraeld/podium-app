@@ -145,7 +145,12 @@ DOD: install the .dmg on a clean path, open it (note the one-time right-click/xa
 [+ fence block §7]
 ```
 
-### T1.3 ☐ Linux packaging (.AppImage / .deb) — the payoff
+### T1.3 ✅ Linux packaging (.AppImage / .deb) — the payoff
+**DONE 2026-07-07** — reproducible Docker build (swift:6.1 + Rust + WebKitGTK)
+produces `.AppImage` + `.deb` with the Linux podium-server sidecar embedded.
+ARM64 built + structurally verified; x86_64 cross-build path documented, not
+run; GUI verify pending on a real Linux desktop (no display in Docker). See
+`tauri/linux-build/README.md`.
 **Model: Sonnet (build/run inside the swift:6.1 + Tauri toolchain; OrbStack/Docker on the dev Mac).**
 ```
 TASK T1.3 — Linux native app packaging. AFTER T1.1.
@@ -156,8 +161,22 @@ DOD: run the .AppImage inside a Linux container/VM (or note the manual step if G
 [+ fence block §7]
 ```
 
-### T1.4 ☐ Tray icon + native notifications (cross-platform)
-**Model: Sonnet. AFTER T1.1.**
+### T1.4 ✅ Tray icon + native notifications (cross-platform)
+**DONE 2026-07-07** — menu-bar tray (Open / live server-status / Quit) +
+native notifications on session finish/error/awaiting-input, driven by a
+background thread watching podium-server's `/ws` stream (`ws_watcher.rs`).
+Per-event toggles persisted as a hand-editable JSON file
+(`<data_dir>/tauri-notifications.json`) — no settings UI yet (a web-client
+panel is a later task). Fixed the tray "starting…" stuck-status bug (status
+now seeds from the health check + refreshes from `/api/stats` on WS connect).
+Verified on macOS: build, health, ws connect, real active→completed event
+processed cleanly, Cmd+Q kills the sidecar with no orphan. Still wants a
+human's eyes for **visual** notification confirmation + the first-launch
+macOS notification-permission prompt. NOTE: real-session notifications
+depend on live sessions actually being ingested — see the ingestion-status
+debt item (§8), which the current session surfaced ("live session shows as
+Abandoned / not in the web UI").
+**Original task spec (kept for reference):**
 ```
 TASK T1.4 — System tray + native notifications via Tauri.
 Read first: T1.1; the events the server already broadcasts over WS (run_status, awaiting-input, agent/session updates — see Sources/PodiumServer/WebSocket/); the OLD SwiftUI notification intent (STANDALONE_PLAN §6b №2 — awaiting-input notification).
