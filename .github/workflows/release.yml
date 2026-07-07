@@ -33,8 +33,7 @@ jobs:
         run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
       # tauri.conf.json's "version" is stamped from the tag so the .dmg /
       # .app Info.plist and the (future) T2.3 updater manifest all agree
-      # with the GitHub release tag — same convention package-macos.sh uses
-      # for the retired SwiftUI app.
+      # with the GitHub release tag.
       - name: Stamp Tauri app version from tag
         env:
           VERSION: ${{ steps.version.outputs.version }}

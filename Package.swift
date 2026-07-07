@@ -10,8 +10,7 @@ let package = Package(
         .library(name: "PodiumCore", targets: ["PodiumCore"]),
         .library(name: "PodiumServer", targets: ["PodiumServer"]),
         .executable(name: "podium-server", targets: ["PodiumServerCLI"]),
-        .executable(name: "podium-hook", targets: ["PodiumHook"]),
-        .executable(name: "PodiumApp", targets: ["PodiumApp"])
+        .executable(name: "podium-hook", targets: ["PodiumHook"])
     ],
     dependencies: [
         .package(url: "https://github.com/hummingbird-project/hummingbird.git", from: "2.0.0"),
@@ -79,16 +78,6 @@ let package = Package(
             name: "PodiumHook",
             dependencies: ["PodiumCore"],
             path: "Sources/PodiumHook"
-        ),
-
-        // Native SwiftUI macOS app. Sources are wrapped in #if os(macOS) so
-        // `swift build` still succeeds for the other products on Linux.
-        // Depends on PodiumServer/PodiumCore (P5.1) to embed the server
-        // in-process — see Sources/PodiumApp/EmbeddedServer.swift.
-        .executableTarget(
-            name: "PodiumApp",
-            dependencies: ["PodiumServer", "PodiumCore"],
-            path: "Sources/PodiumApp"
         ),
 
         .testTarget(

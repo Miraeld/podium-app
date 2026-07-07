@@ -8,26 +8,26 @@ server on both platforms.
 ## How to run / build / test
 
 ```bash
-./run.sh                    # build + wrap in .app bundle + open (macOS, recommended)
+./run.sh                    # build sidecar + cargo tauri dev (Tauri shell, recommended)
 swift build                 # build all products
 swift test                  # run PodiumCoreTests + PodiumServerTests
-scripts/package-macos.sh    # release build → dist/PodiumApp.app + Podium-<ver>.dmg
 scripts/build-linux.sh      # release build → dist-linux tarball (swift:6.1 docker by default)
 ```
 
-`run.sh` builds `PodiumApp` and `podium-hook`, assembles a minimal `.app`
-bundle, writes `Info.plist`, and opens it. The bundle is required because SPM
-executables run with `.prohibited` activation policy — macOS won't show
-windows otherwise.
+`run.sh` builds the `podium-server` sidecar (`tauri/prepare-sidecar.sh`) and
+runs the Tauri app in dev mode (`cargo tauri dev`) — see `tauri/README.md` for
+the full lifecycle and prerequisites. Release packaging (`.dmg`/`.AppImage`/
+`.deb`) goes through `cargo tauri build`; see `tauri/README.md`.
 
 ## Project structure
 
 ```
 PodiumSwiftApp/
 ├── Package.swift                    # SPM manifest: PodiumCore, PodiumServer (libraries);
-│                                     #   podium-server, podium-hook, PodiumApp (executables)
-├── run.sh, scripts/                 # dev launcher + packaging (package-macos.sh, build-linux.sh,
+│                                     #   podium-server, podium-hook (executables)
+├── run.sh, scripts/                 # dev launcher (Tauri) + packaging (build-linux.sh,
 │                                     #   install-linux.sh, podium-server.service)
+├── tauri/                           # Tauri v2 shell — native app wrapping podium-server as a sidecar
 ├── WebClient/dist                   # vendored React build, served as static files
 ├── Sources/
 │   ├── CSQLite/                     # system library wrapping libsqlite3
@@ -49,24 +49,13 @@ PodiumSwiftApp/
 │   │   ├── Static/                  #   hand-rolled static file handler
 │   │   └── Services/                #   background services (import, sweep, watchdog)
 │   ├── PodiumServerCLI/main.swift   # podium-server executable (headless daemon)
-│   ├── PodiumHook/main.swift        # podium-hook executable (native hook.mjs replacement)
-│   └── PodiumApp/                   # native SwiftUI macOS app (40 files) — embeds
-│                                     #   PodiumServer in-process via EmbeddedServer.swift
+│   └── PodiumHook/main.swift        # podium-hook executable (native hook.mjs replacement)
 └── Tests/
     ├── PodiumCoreTests/
     └── PodiumServerTests/           # includes ContractTests.swift — wire-format gate
 ```
 
 ## Key decisions & non-obvious constraints
-
-**Activation policy fix** (`Sources/PodiumApp/PodiumApp.swift`): SPM
-executables run with `.prohibited` activation policy — the window server
-ignores them. `NSApplication.shared.setActivationPolicy(.regular)` is called
-in `App.init()`, and `NSApp.activate(ignoringOtherApps: true)` fires in
-`applicationDidFinishLaunching`. Both are required; removing either breaks
-launch. The `AppDelegate` + `@NSApplicationDelegateAdaptor` exist solely for
-these two calls plus `applicationWillTerminate` (graceful embedded-server
-shutdown) — don't remove it.
 
 **PodiumJSON** (`Sources/PodiumCore/Models/PodiumJSON.swift`): shared
 snake_case encoder/decoder for wire parity with the old Node dashboard.
