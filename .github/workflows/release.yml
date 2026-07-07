@@ -15,7 +15,7 @@ permissions:
 
 jobs:
   macos:
-    name: macOS (package + DMG)
+    name: macOS (Tauri .dmg)
     runs-on: macos-latest
     timeout-minutes: 40
     steps:
@@ -24,50 +24,127 @@ jobs:
         run: sudo xcode-select -s /Applications/Xcode.app
       - name: Swift version
         run: swift --version
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version "^2.0.0" --locked
       - name: Strip leading "v" from tag
         id: version
         run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
-      - name: Package macOS app + DMG
+      # tauri.conf.json's "version" is stamped from the tag so the .dmg /
+      # .app Info.plist and the (future) T2.3 updater manifest all agree
+      # with the GitHub release tag — same convention package-macos.sh uses
+      # for the retired SwiftUI app.
+      - name: Stamp Tauri app version from tag
         env:
           VERSION: ${{ steps.version.outputs.version }}
-        run: scripts/package-macos.sh
+        run: |
+          cd tauri/src-tauri
+          jq --arg v "$VERSION" '.version = $v' tauri.conf.json > tauri.conf.json.tmp
+          mv tauri.conf.json.tmp tauri.conf.json
+      - name: Build + stage podium-server sidecar (+ WebClient/dist)
+        run: tauri/prepare-sidecar.sh
+      # icons/ is git-ignored (build artifact); cargo tauri build panics
+      # without it (verified locally — "failed to open icon .../32x32.png").
+      - name: Generate app icons
+        run: |
+          cd tauri
+          cargo tauri icon src-tauri/icon-source.png
+      - name: Build Tauri app (.app + .dmg)
+        run: |
+          cd tauri
+          cargo tauri build --bundles app,dmg
+      # TODO(T2.3): once the Tauri updater signing key exists as a repo
+      # secret, add `TAURI_SIGNING_PRIVATE_KEY` / `_PASSWORD` env here so
+      # `cargo tauri build` also emits the .app.tar.gz + .sig update
+      # artifacts, and generate/upload a `latest.json` updater manifest
+      # alongside the .dmg below. Not implemented now — no key exists yet.
       - name: Upload macOS artifact
         uses: actions/upload-artifact@v4
         with:
           name: macos-dmg
-          path: dist/Podium-*.dmg
+          path: tauri/src-tauri/target/release/bundle/dmg/*.dmg
           if-no-files-found: error
 
   linux:
-    name: Linux (tarball)
+    name: Linux (Tauri .AppImage + .deb)
     runs-on: ubuntu-latest
-    container: swift:6.1
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
-      - name: Install system dependencies
-        run: |
-          apt-get update
-          apt-get install -y libsqlite3-dev
+      # No Docker-in-Docker here: tauri/linux-build/Dockerfile exists so the
+      # LOCAL dev flow (build on a Mac via OrbStack) can reproduce the exact
+      # swift:6.1-based toolchain without polluting the host. On an Ubuntu
+      # CI runner we already ARE Ubuntu 24.04 with apt + a real (if
+      # ephemeral) userland, so installing the same dependencies straight
+      # onto the runner is simpler and faster than spinning up a container
+      # image just to throw it away — no bind-mount/volume dance needed
+      # either. This mirrors linux-build/Dockerfile's package list, not
+      # scripts/build-linux.sh's `container: swift:6.1` job (that job only
+      # needs the Swift toolchain; this one also needs the full Tauri/
+      # WebKitGTK GUI build chain, which is far easier to apt-install
+      # directly on the runner than to layer into that container image).
+      #
+      # Bonus: GitHub's ubuntu-latest runners are x86_64, while the dev
+      # Mac's OrbStack containers default to aarch64 — so this job produces
+      # x86_64 Linux artifacts for free, which is what most Linux desktop
+      # users actually want (the T1.3 container path only verified aarch64).
+      - name: Install Swift toolchain
+        uses: swift-actions/setup-swift@v2
+        with:
+          swift-version: "6.1"
       - name: Swift version
         run: swift --version
+      - name: Install Tauri + podium-server Linux build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            libsqlite3-dev \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            librsvg2-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            patchelf \
+            file \
+            fuse \
+            libfuse2
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version "^2.0.0" --locked
       - name: Strip leading "v" from tag
         id: version
         run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
-      # Already running inside the swift:6.1 container (see ci.yml) — use
-      # build-linux.sh's --host path, not --docker (no docker-in-docker).
-      # Also mind the documented footgun this script itself works around:
-      # `swift build --product A --product B` silently builds only the
-      # LAST product — one invocation per product.
-      - name: Build + package Linux tarball
+      - name: Stamp Tauri app version from tag
         env:
           VERSION: ${{ steps.version.outputs.version }}
-        run: scripts/build-linux.sh --host
-      - name: Upload Linux artifact
+        run: |
+          cd tauri/src-tauri
+          jq --arg v "$VERSION" '.version = $v' tauri.conf.json > tauri.conf.json.tmp
+          mv tauri.conf.json.tmp tauri.conf.json
+      - name: Build + stage podium-server sidecar (+ WebClient/dist)
+        run: tauri/prepare-sidecar.sh
+      # icons/ is git-ignored (build artifact); a fresh CI checkout never has
+      # it, so always regenerate (see the macOS job's identical step).
+      - name: Generate app icons
+        run: |
+          cd tauri
+          cargo tauri icon src-tauri/icon-source.png
+      - name: Build Tauri app (.AppImage + .deb)
+        run: |
+          cd tauri
+          cargo tauri build --bundles appimage,deb
+      # TODO(T2.3): same updater-signing slot as the macOS job above —
+      # add the Tauri signing key env vars here once it exists, so this
+      # job also emits .AppImage.tar.gz + .sig for the updater manifest.
+      - name: Upload Linux artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: linux-tarball
-          path: dist-linux/podium-linux-*.tar.gz
+          name: linux-bundles
+          path: |
+            tauri/src-tauri/target/release/bundle/appimage/*.AppImage
+            tauri/src-tauri/target/release/bundle/deb/*.deb
           if-no-files-found: error
 
   release:
@@ -82,17 +159,24 @@ jobs:
         with:
           name: macos-dmg
           path: artifacts
-      - name: Download Linux artifact
+      - name: Download Linux artifacts
         uses: actions/download-artifact@v4
         with:
-          name: linux-tarball
+          name: linux-bundles
           path: artifacts
-      - name: Create GitHub release
+      # TODO(T2.3): once the updater exists, also generate + attach a
+      # `latest.json` updater manifest here (version, per-platform
+      # download URLs pointing at this release's assets, and the EdDSA
+      # signatures produced by the signing steps above) so the in-app
+      # updater has something to poll.
+      - name: Create GitHub release (draft)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release create "${{ github.ref_name }}" \
-            artifacts/Podium-*.dmg \
-            artifacts/podium-linux-*.tar.gz \
+            artifacts/*.dmg \
+            artifacts/*.AppImage \
+            artifacts/*.deb \
+            --draft \
             --title "${{ github.ref_name }}" \
             --generate-notes
