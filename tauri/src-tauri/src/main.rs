@@ -1,6 +1,6 @@
 // Podium Tauri shell — minimal Rust glue.
 //
-// Responsibilities (see tauri/README.md + repo ROADMAP.md T1.1):
+// Responsibilities (see tauri/README.md + repo ROADMAP.md T1.1/T1.4):
 //   1. On launch: if something is already answering GET /api/health on the
 //      target port, reuse it. Otherwise spawn the bundled `podium-server`
 //      sidecar with --port + --data-dir (the same platform data dir
@@ -11,12 +11,22 @@
 //      points at it. No web assets are bundled by Tauri.
 //   3. On window-close / app-exit: kill the sidecar IF we spawned it. Never
 //      kill a pre-existing server we merely reused.
+//   4. (T1.4) A system tray icon showing the live active-agent count, and
+//      native OS notifications when a session finishes, errors, or goes
+//      awaiting-input. Both are driven by a background thread that opens a
+//      `/ws` connection to podium-server and reacts to its broadcast
+//      envelopes — see `ws_watcher` below for the WS-vs-poll rationale.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use std::sync::atomic::{AtomicBool, Ordering};
+mod notify_settings;
+mod ws_watcher;
+
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Mutex;
 use std::time::Duration;
 
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+use tauri::tray::TrayIconBuilder;
 use tauri::{Manager, RunEvent, WindowEvent};
 use tauri_plugin_shell::process::CommandChild;
 use tauri_plugin_shell::ShellExt;
@@ -33,11 +43,25 @@ struct SidecarState {
     spawned_by_us: AtomicBool,
 }
 
-fn port() -> u16 {
+/// Live active-agent count as last seen by the WS watcher, plus the tray's
+/// status menu item so the background thread can update its label. Shared
+/// with `ws_watcher` via `app.state()`.
+pub struct TrayState {
+    pub active_agents: AtomicUsize,
+    pub status_item: Mutex<Option<MenuItem<tauri::Wry>>>,
+}
+
+pub fn port() -> u16 {
     std::env::var("PODIUM_PORT")
         .ok()
         .and_then(|v| v.parse().ok())
         .unwrap_or(DEFAULT_PORT)
+}
+
+/// Public wrapper so `ws_watcher` can resolve the same data dir for its
+/// notification-settings file without duplicating the platform logic.
+pub fn default_data_dir_for_watcher() -> std::path::PathBuf {
+    default_data_dir()
 }
 
 /// Platform default data dir, mirroring PodiumPaths.swift exactly:
@@ -87,9 +111,14 @@ fn wait_for_health(port: u16) -> bool {
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_notification::init())
         .manage(SidecarState {
             child: Mutex::new(None),
             spawned_by_us: AtomicBool::new(false),
+        })
+        .manage(TrayState {
+            active_agents: AtomicUsize::new(0),
+            status_item: Mutex::new(None),
         })
         .setup(|app| {
             let port = port();
@@ -153,7 +182,8 @@ fn main() {
 
             // Wait for health (blocking the setup hook is fine here — this
             // runs once, before any window is shown to the user).
-            if !wait_for_health(port) {
+            let healthy = wait_for_health(port);
+            if !healthy {
                 eprintln!("podium-server did not become healthy within {HEALTH_TIMEOUT:?}");
             }
 
@@ -180,6 +210,46 @@ fn main() {
                     .navigate(url)
                     .expect("failed to navigate main window to podium-server");
             }
+
+            // --- T1.4: tray icon + menu ---------------------------------
+            // Initial status reflects the health check we just did, so the
+            // menu never shows a stale "starting…" once the server is up —
+            // the ws_watcher then keeps it live ("N active" / "running") as
+            // sessions come and go.
+            let initial_status = if healthy { "Server: running" } else { "Server: starting…" };
+            let open_item = MenuItem::with_id(app, "open", "Open Podium", true, None::<&str>)?;
+            let status_item = MenuItem::with_id(app, "status", initial_status, false, None::<&str>)?;
+            let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+            let separator = PredefinedMenuItem::separator(app)?;
+            let menu = Menu::with_items(app, &[&open_item, &status_item, &separator, &quit_item])?;
+
+            *handle.state::<TrayState>().status_item.lock().unwrap() = Some(status_item);
+
+            let _tray = TrayIconBuilder::with_id("main-tray")
+                .menu(&menu)
+                .tooltip("Podium")
+                .icon(app.default_window_icon().cloned().expect("no default window icon"))
+                .on_menu_event(move |app, event| match event.id.as_ref() {
+                    "open" => {
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.unminimize();
+                            let _ = window.set_focus();
+                        }
+                    }
+                    "quit" => {
+                        kill_sidecar_if_ours(app);
+                        app.exit(0);
+                    }
+                    _ => {}
+                })
+                .build(app)?;
+
+            // --- T1.4: background WS watcher for live count + notifications
+            let watcher_handle = app.handle().clone();
+            std::thread::spawn(move || {
+                ws_watcher::run(watcher_handle, port);
+            });
 
             Ok(())
         })

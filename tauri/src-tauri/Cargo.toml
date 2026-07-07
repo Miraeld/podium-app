@@ -8,11 +8,17 @@ edition = "2021"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["macos-private-api"] }
+tauri = { version = "2", features = ["macos-private-api", "tray-icon", "image-png"] }
 tauri-plugin-shell = "2"
+tauri-plugin-notification = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-ureq = "2"
+# `json` feature: ws_watcher's agent-event fallback re-derives the active
+# count from GET /api/stats via resp.into_json().
+ureq = { version = "2", features = ["json"] }
+# Blocking WebSocket client for the tray/notification watcher thread — no
+# async runtime is pulled in just for this (matches main.rs's sync style).
+tungstenite = "0.29"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 # Pinned to match the window-vibrancy version tauri itself vendors
