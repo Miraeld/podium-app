@@ -172,10 +172,14 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "${{ github.ref_name }}" \
-            artifacts/*.dmg \
-            artifacts/*.AppImage \
-            artifacts/*.deb \
+          # download-artifact preserves each artifact's internal layout, and the
+          # Linux job uploads two paths (appimage/ + deb/) so its files land under
+          # artifacts/appimage/ and artifacts/deb/, not flat. Collect recursively
+          # so the nesting doesn't matter.
+          mapfile -t assets < <(find artifacts -type f \( -name '*.dmg' -o -name '*.AppImage' -o -name '*.deb' \))
+          echo "Attaching ${#assets[@]} assets:"; printf '  %s\n' "${assets[@]}"
+          test "${#assets[@]}" -gt 0 || { echo "::error::no release assets found under artifacts/"; exit 1; }
+          gh release create "${{ github.ref_name }}" "${assets[@]}" \
             --draft \
             --title "${{ github.ref_name }}" \
             --generate-notes
