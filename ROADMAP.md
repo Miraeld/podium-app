@@ -205,7 +205,7 @@ DOD: with a newer GitHub release published, the popup appears in the Tauri windo
 [+ fence block §7]
 ```
 
-### T2.2 ☐ Onboarding tour → web client
+### T2.2 ✅ Onboarding tour → web client (done 2026-07-07; driver.js, 4-5 steps, re-runnable from Settings. Fixed a launch bug where onDestroyed marked "seen" on teardown → tour never showed. Auto-run/reload/replay all verified in-browser.)
 ```
 TASK T2.2 — Onboarding tour in the React client.
 Read first: the web client's existing welcome card (Dashboard.tsx, from the P5.5 work); a web tour lib (driver.js or shepherd.js — pick one, justify briefly).
