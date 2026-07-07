@@ -228,7 +228,7 @@ DOD: publish a test release, click Install update in an older build, get the new
 
 ## PHASE T3 — Harden + ship 1.0.0
 
-### T3.1 ☐ Release pipeline → Tauri installers
+### T3.1 ✅ Release pipeline → Tauri installers (done 2026-07-07, `8eb4eec`; macOS job locally built a real .dmg + actionlint clean. REMAINING MANUAL DOD: push a real `v*` tag to prove the Linux job + end-to-end release/draft flow.)
 ```
 TASK T3.1 — CI builds the Tauri installers. AFTER T1.1–T1.3.
 Read first: the current .github/workflows/release.yml (builds the DMG + Linux tarball for the SwiftUI app — this gets replaced/extended); Tauri's official GitHub Action (tauri-apps/tauri-action) which builds + drafts a release with .dmg/.AppImage/.deb; T2.3's updater artifact + signing requirements.
