@@ -237,7 +237,7 @@ DOD: a real tag produces a release with the Tauri installers attached; a fresh d
 [+ fence block §7]
 ```
 
-### T3.2 ☐ Retire the SwiftUI app target
+### T3.2 ✅ Retire the SwiftUI app target (done 2026-07-07, 69e803f/fc2ceaf; PodiumApp target + Sources/PodiumApp deleted, run.sh→Tauri dev, swift test 465/465)
 ```
 TASK T3.2 — Remove PodiumApp (SwiftUI) once the Tauri app is at parity. AFTER T1+T2 verified.
 Goal: delete the PodiumApp executable target from Package.swift and its Sources/PodiumApp/ tree (git history preserves it), plus run.sh's app-bundle path and scripts/package-macos.sh's SwiftUI packaging. KEEP: PodiumCore, PodiumServer, podium-server, podium-hook, WebClient, Tests. Update CLAUDE.md to describe the new architecture (Swift server + web client + Tauri shell).
@@ -246,13 +246,13 @@ DOD: swift build + swift test green with PodiumApp gone; the app still ships (vi
 [+ fence block §7]
 ```
 
-### T3.3 ☐ Docs for the new architecture
+### T3.3 ✅ Docs for the new architecture (done 2026-07-07; README + MIGRATION + CLAUDE.md rewritten for the Tauri app)
 README + MIGRATION rewritten: what Podium is (native app on mac+linux via
 Tauri, Swift server inside), install per platform, the one-time Gatekeeper
 step, the plugin→standalone migration (unchanged: "your dashboard.db just
 works"). Update CLAUDE.md. Orchestrator or Sonnet.
 
-### T3.4 ☐ Final 1.0.0 QA (both platforms) → tag
+### T3.4 ◑ Final 1.0.0 QA — macOS DONE 2026-07-07 (launch→live data→render→close-to-tray→clean quit→all 9 pages, zero console errors). LINUX GUI QA + the v1.0.0 tag REMAIN (need a real Linux box/VM).
 Clean-machine test on macOS + Linux: download installer → open → live agents
 appear → walk every page → spawn a run → notifications fire. Fix or file
 anything broken. When green on both: **tag v1.0.0.** This is the finish line.

@@ -40,9 +40,10 @@ flag is needed for normal use.
    cp ~/.claude/podium/data/dashboard.db ~/Library/Application\ Support/Podium/dashboard.db
    ```
    Copying keeps the original file untouched in case anything looks wrong.
-3. **Launch the app** (or start `podium-server` on Linux). It reads the copied
-   `dashboard.db` directly — no import step, no schema migration needed (same
-   schema, ported 1:1).
+3. **Launch the Podium app** (macOS or Linux — see the README for install +
+   the one-time macOS Gatekeeper step). It reads the copied `dashboard.db`
+   directly — no import step, no schema migration needed (same schema, ported
+   1:1). Headless Linux server hosts can run `podium-server` directly instead.
 4. **Verify.** Open the dashboard, confirm your session history, costs, and
    recent agents look right.
 5. **Only then retire the container** (`docker rm <podium-container-name>`) and
