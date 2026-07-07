@@ -254,10 +254,16 @@ fn main() {
             Ok(())
         })
         .on_window_event(|window, event| {
-            // Kill the sidecar (if we spawned it) when the last window
-            // closes, so no orphaned podium-server process survives the app.
-            if let WindowEvent::CloseRequested { .. } = event {
-                kill_sidecar_if_ours(window.app_handle());
+            // Close-to-tray: hitting the window's close button HIDES the
+            // window and leaves the sidecar server RUNNING, so Podium keeps
+            // ingesting Claude Code hook events in the background (that's the
+            // whole point of a session observer — it has to be listening even
+            // when you're not looking at it). The server is only torn down on
+            // an explicit Quit (tray menu → RunEvent::Exit below). Reopen the
+            // window from the tray's "Open Podium" item.
+            if let WindowEvent::CloseRequested { api, .. } = event {
+                api.prevent_close();
+                let _ = window.hide();
             }
         })
         .build(tauri::generate_context!())
