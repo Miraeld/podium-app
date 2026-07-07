@@ -195,7 +195,7 @@ React web client (`WebClient/` — built via the vendored client's patch/rebuild
 flow, see the P5.5 tour work in git history for the WebClient/patches pattern),
 so they work in the Tauri window on every platform AND in a plain browser.
 
-### T2.1 ☐ Update popup + changelog → web client
+### T2.1 ✅ Update popup + changelog → web client (done 2026-07-07, `f3670c0`; popup/Dismiss/Update semantics + Settings panel verified in-browser, ContractTests 29/29)
 ```
 TASK T2.1 — Update-available popup in the React client.
 Read first: Sources/PodiumCore/Discovery/UpdateCheck.swift (the /api/updates/status backend already exists + returns release notes); the vendored client — there's a stub UpdateNotifier.tsx waiting for exactly this; the retired SwiftUI UpdatesView.swift for the intended UX (popup with Dismiss / Update; Dismiss suppresses that version, Update opens the release page WITHOUT suppressing so it re-prompts if not installed).
