@@ -179,7 +179,7 @@ Abandoned / not in the web UI").
 **Original task spec (kept for reference):**
 ```
 TASK T1.4 — System tray + native notifications via Tauri.
-Read first: T1.1; the events the server already broadcasts over WS (run_status, awaiting-input, agent/session updates — see Sources/PodiumServer/WebSocket/); the OLD SwiftUI notification intent (STANDALONE_PLAN §6b №2 — awaiting-input notification).
+Read first: T1.1; the events the server already broadcasts over WS (run_status, awaiting-input, agent/session updates — see Sources/PodiumServer/WebSocket/); the OLD SwiftUI notification intent (awaiting-input notification — was STANDALONE_PLAN §6b №2, file removed; see git history).
 Goal: (1) A tray/menu-bar icon showing live active-agent count (gold when >0), with a menu: Open Podium / server status / Quit. (2) Native OS notifications (Tauri notification plugin — works on mac + linux + windows) fired when a session finishes, errors, or goes awaiting-input. The shell subscribes to the server's WS (or a small /api events poll) to know when to fire. Per-event toggles persisted.
 Constraints: cross-platform (no platform-specific notification code where the Tauri plugin covers it). Don't reinvent state — read it from the server.
 DOD: demo a notification firing on a real event on both mac and linux (linux can be the container/VM). Tray count updates live.
