@@ -251,7 +251,7 @@ public enum UpdateCheck {
         }
         let updateAvailable: Bool
         if let currentVersion, currentVersion != "dev" {
-            updateAvailable = normalizeVersion(currentVersion) != normalizeVersion(release.tagName)
+            updateAvailable = isNewer(normalizeVersion(release.tagName), than: normalizeVersion(currentVersion))
         } else {
             updateAvailable = false
         }
@@ -264,5 +264,31 @@ public enum UpdateCheck {
 
     private static func normalizeVersion(_ version: String) -> String {
         version.hasPrefix("v") ? String(version.dropFirst()) : version
+    }
+
+    /// Semantic-version comparison: `true` only when `lhs` (latest) is
+    /// strictly newer than `rhs` (current). Splits each on ".", compares
+    /// numeric components left-to-right (missing trailing components treated
+    /// as `0`). If either version contains a non-numeric component, the
+    /// versions can't be reliably compared — return `false` (no update
+    /// prompt) rather than guessing from string inequality, since that's the
+    /// exact class of false positive this helper exists to fix (e.g. a
+    /// running dev build "0.5.3" vs. a still-draft "0.5.2" release must never
+    /// look "newer").
+    private static func isNewer(_ lhs: String, than rhs: String) -> Bool {
+        let lhsParts = lhs.split(separator: ".").map(String.init)
+        let rhsParts = rhs.split(separator: ".").map(String.init)
+        let count = max(lhsParts.count, rhsParts.count)
+        for i in 0..<count {
+            let lhsComponent = i < lhsParts.count ? lhsParts[i] : "0"
+            let rhsComponent = i < rhsParts.count ? rhsParts[i] : "0"
+            guard let lhsNumber = Int(lhsComponent), let rhsNumber = Int(rhsComponent) else {
+                return false
+            }
+            if lhsNumber != rhsNumber {
+                return lhsNumber > rhsNumber
+            }
+        }
+        return false
     }
 }
