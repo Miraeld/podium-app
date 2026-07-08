@@ -219,9 +219,14 @@ fn main() {
             let initial_status = if healthy { "Server: running" } else { "Server: starting…" };
             let open_item = MenuItem::with_id(app, "open", "Open Podium", true, None::<&str>)?;
             let status_item = MenuItem::with_id(app, "status", initial_status, false, None::<&str>)?;
+            let reload_item =
+                MenuItem::with_id(app, "reload", "Reload Dashboard", true, None::<&str>)?;
             let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
             let separator = PredefinedMenuItem::separator(app)?;
-            let menu = Menu::with_items(app, &[&open_item, &status_item, &separator, &quit_item])?;
+            let menu = Menu::with_items(
+                app,
+                &[&open_item, &status_item, &reload_item, &separator, &quit_item],
+            )?;
 
             *handle.state::<TrayState>().status_item.lock().unwrap() = Some(status_item);
 
@@ -237,6 +242,7 @@ fn main() {
                             let _ = window.set_focus();
                         }
                     }
+                    "reload" => reload_dashboard(app),
                     "quit" => {
                         kill_sidecar_if_ours(app);
                         app.exit(0);
@@ -276,6 +282,27 @@ fn main() {
                 kill_sidecar_if_ours(app_handle);
             }
         });
+}
+
+/// Recovery for the "window goes dark" bug (user-reported: webview content
+/// crashes/blanks, revealing the vibrancy background behind it, and the
+/// window never repaints on its own). Re-navigates the main window's webview
+/// to the dashboard URL natively (not a JS `eval`/`location.reload()`) so it
+/// works even when the page's own JS is dead — `navigate()` drives WKWebView
+/// from the Rust side, the same call used for the initial load in `setup`.
+fn reload_dashboard(app: &tauri::AppHandle) {
+    let Some(window) = app.get_webview_window("main") else {
+        return;
+    };
+    let url = format!("http://127.0.0.1:{}", port());
+    match url.parse() {
+        Ok(url) => {
+            if let Err(err) = window.navigate(url) {
+                eprintln!("reload_dashboard: navigate failed: {err}");
+            }
+        }
+        Err(err) => eprintln!("reload_dashboard: invalid URL: {err}"),
+    }
 }
 
 fn kill_sidecar_if_ours(app_handle: &tauri::AppHandle) {
