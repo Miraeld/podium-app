@@ -378,7 +378,13 @@ private final class Blocker {
         var addr = sockaddr_in()
         addr.sin_family = sa_family_t(AF_INET)
         addr.sin_port = in_port_t(port).bigEndian
-        addr.sin_addr.s_addr = INADDR_ANY
+        // Bind loopback specifically (not INADDR_ANY): PodiumServerLifecycle
+        // now defaults to binding 127.0.0.1 only (security fix — see
+        // PodiumServerApp/PodiumServerLifecycle host defaults), and on
+        // Darwin a wildcard bind doesn't reliably conflict with a later
+        // specific-address bind on the same port, so this must occupy the
+        // same address the server under test will try to use.
+        addr.sin_addr.s_addr = INADDR_LOOPBACK.bigEndian
 
         let bindResult = withUnsafePointer(to: &addr) { ptr -> Int32 in
             ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockaddrPtr in

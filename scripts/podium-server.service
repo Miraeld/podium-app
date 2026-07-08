@@ -14,6 +14,15 @@ Type=simple
 # the vendored dashboard to /usr/local/share/podium/web, which
 # WebDistResolver.resolve() (Sources/PodiumServer/Static/StaticFileHandler.swift)
 # checks by default as the "installed Linux layout" fallback.
+# podium-server now defaults to binding 127.0.0.1 only (loopback), matching
+# the desktop app's Tauri shell which only ever talks to localhost. This
+# headless unit exists to serve the dashboard to a browser on another
+# machine (the "what runs headless on a Linux server" use case from
+# README.md), so we explicitly opt back in to a LAN-reachable bind here.
+# The run-spawning endpoints (POST /api/run) have no authentication —
+# only run this on a trusted network, and put it behind a reverse proxy /
+# VPN if it needs to be reachable from anywhere less trusted.
+Environment=PODIUM_HOST=0.0.0.0
 ExecStart=/usr/local/bin/podium-server
 Restart=on-failure
 RestartSec=2
