@@ -32,6 +32,9 @@ struct PodiumServerCLI: AsyncParsableCommand {
     @Option(name: .long, help: "Path to the built web client (WebClient/dist). Overrides $PODIUM_WEB_DIST.")
     var webDist: String?
 
+    @Option(name: .long, help: "Address to bind to (default: $PODIUM_HOST or 127.0.0.1). Set to 0.0.0.0 to expose the API on the LAN — the run-spawning endpoints have no authentication.")
+    var host: String?
+
     func run() async throws {
         // --data-dir wins over DASHBOARD_DATA_DIR/DASHBOARD_DB_PATH env for
         // this process only — set the env var so every PodiumPaths call
@@ -70,12 +73,29 @@ struct PodiumServerCLI: AsyncParsableCommand {
 
         let startPort = port ?? PodiumServerLifecycle.defaultPort()
 
-        logger.info("Podium server starting", metadata: ["dataDir": "\(PodiumPaths.dataDir().path)"])
+        // Bind address precedence: --host flag > $PODIUM_HOST env > 127.0.0.1
+        // default. The API includes run-spawning endpoints (POST /api/run)
+        // with no authentication, so anything other than loopback exposes
+        // remote-code-execution + full session-data read to the LAN — warn
+        // loudly rather than silently widening the attack surface.
+        let resolvedHost = host ?? ProcessInfo.processInfo.environment["PODIUM_HOST"] ?? "127.0.0.1"
+        let loopbackHosts: Set<String> = ["127.0.0.1", "localhost", "::1"]
+        if !loopbackHosts.contains(resolvedHost) {
+            FileHandle.standardError.write(Data("""
+            podium-server: WARNING — binding to \(resolvedHost) exposes the API \
+            (including run-spawning endpoints) to the network with no authentication. \
+            Anyone who can reach this host can execute code as this user. Only do this \
+            on a trusted network.\n
+            """.utf8))
+        }
+
+        logger.info("Podium server starting", metadata: ["dataDir": "\(PodiumPaths.dataDir().path)", "host": "\(resolvedHost)"])
 
         do {
             let boundPort = try await PodiumServerLifecycle.run(
                 store: store,
                 startPort: startPort,
+                host: resolvedHost,
                 mounts: [
                     SessionsRouterMount.self,
                     AgentsRouterMount.self,

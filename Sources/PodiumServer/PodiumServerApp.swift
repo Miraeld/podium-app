@@ -52,7 +52,7 @@ public struct PodiumServerApp: Sendable {
     public init(
         store: PodiumStore,
         port: Int,
-        host: String = "0.0.0.0",
+        host: String = "127.0.0.1",
         webDistDirectory: String = WebDistResolver.resolve(
             fallback: PodiumServerApp.defaultDevDistPath()
         ),

@@ -69,7 +69,7 @@ public enum PodiumServerLifecycle {
     public static func makeApp(
         store: PodiumStore,
         port: Int,
-        host: String = "0.0.0.0",
+        host: String = "127.0.0.1",
         webDistDirectory: String? = nil,
         mounts: [any RouterMount.Type] = [],
         services: [any BackgroundService]? = nil,
@@ -120,7 +120,7 @@ public enum PodiumServerLifecycle {
     public static func run(
         store: PodiumStore,
         startPort: Int,
-        host: String = "0.0.0.0",
+        host: String = "127.0.0.1",
         webDistDirectory: String? = nil,
         mounts: [any RouterMount.Type] = [],
         services: [any BackgroundService]? = nil,
