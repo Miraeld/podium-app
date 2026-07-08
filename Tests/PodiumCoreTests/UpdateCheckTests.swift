@@ -74,6 +74,74 @@ final class UpdateCheckTests: XCTestCase {
         XCTAssertNil(withoutNotes.body)
     }
 
+    // MARK: - semver comparison (updateAvailable only when latest > current)
+
+    /// Drives `checkRepo`'s private semver comparison indirectly through
+    /// `status()` by pinning `PODIUM_APP_VERSION`/`PODIUM_APP_GITHUB_REPO`
+    /// for the duration of the call, since the comparison helper itself is
+    /// private. Always restores the previous env var values.
+    private func appUpdateAvailable(currentVersion: String, latestTag: String) async -> Bool {
+        let envKeyVersion = "PODIUM_APP_VERSION"
+        let envKeyRepo = "PODIUM_APP_GITHUB_REPO"
+        let previousVersion = ProcessInfo.processInfo.environment[envKeyVersion]
+        let previousRepo = ProcessInfo.processInfo.environment[envKeyRepo]
+        setenv(envKeyVersion, currentVersion, 1)
+        setenv(envKeyRepo, "fake/app", 1)
+        defer {
+            if let previousVersion { setenv(envKeyVersion, previousVersion, 1) } else { unsetenv(envKeyVersion) }
+            if let previousRepo { setenv(envKeyRepo, previousRepo, 1) } else { unsetenv(envKeyRepo) }
+        }
+        let release = GitHubRelease(tagName: latestTag, htmlUrl: "https://example.com", publishedAt: nil, prerelease: false)
+        let transport = FakeTransport(releases: ["fake/app": release])
+        let status = await UpdateCheck.status(transport: transport)
+        return status.app.updateAvailable
+    }
+
+    func testSemverUpdateAvailableWhenLatestIsNewer() async {
+        let available = await appUpdateAvailable(currentVersion: "0.5.2", latestTag: "v0.5.3")
+        XCTAssertTrue(available)
+    }
+
+    func testSemverNoUpdateWhenVersionsEqual() async {
+        let available = await appUpdateAvailable(currentVersion: "0.5.3", latestTag: "v0.5.3")
+        XCTAssertFalse(available)
+    }
+
+    func testSemverNoUpdateWhenCurrentIsNewerThanLatest() async {
+        // Regression case for the reported bug: running 0.5.3 while the
+        // latest *published* GitHub release is still v0.5.2 (0.5.3 is a
+        // draft) must NOT report an update available.
+        let available = await appUpdateAvailable(currentVersion: "0.5.3", latestTag: "v0.5.2")
+        XCTAssertFalse(available)
+    }
+
+    func testSemverHandlesMultiDigitComponents() async {
+        let available = await appUpdateAvailable(currentVersion: "0.5.9", latestTag: "v0.5.10")
+        XCTAssertTrue(available)
+    }
+
+    func testSemverNoUpdateWhenCurrentIsDev() async {
+        let envKeyVersion = "PODIUM_APP_VERSION"
+        let envKeyRepo = "PODIUM_APP_GITHUB_REPO"
+        let previousVersion = ProcessInfo.processInfo.environment[envKeyVersion]
+        let previousRepo = ProcessInfo.processInfo.environment[envKeyRepo]
+        unsetenv(envKeyVersion)
+        setenv(envKeyRepo, "fake/app", 1)
+        defer {
+            if let previousVersion { setenv(envKeyVersion, previousVersion, 1) } else { unsetenv(envKeyVersion) }
+            if let previousRepo { setenv(envKeyRepo, previousRepo, 1) } else { unsetenv(envKeyRepo) }
+        }
+        let release = GitHubRelease(tagName: "v99.0.0", htmlUrl: "https://example.com", publishedAt: nil, prerelease: false)
+        let transport = FakeTransport(releases: ["fake/app": release])
+        let status = await UpdateCheck.status(transport: transport)
+        XCTAssertFalse(status.app.updateAvailable)
+    }
+
+    func testSemverNonNumericComponentsAreTreatedAsNotNewer() async {
+        let available = await appUpdateAvailable(currentVersion: "0.5.3", latestTag: "v0.5.next")
+        XCTAssertFalse(available)
+    }
+
     func testRepoUpdateStatusReleaseNotesRoundTripsThroughCodable() throws {
         let status = RepoUpdateStatus(
             repo: "owner/repo", checked: true, currentVersion: "1.0.0", latestVersion: "1.1.0",
