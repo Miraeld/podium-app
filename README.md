@@ -49,11 +49,6 @@ from the tray's *Quit* (which cleanly stops the bundled server). If a server is
 already listening on the port (another Podium, or a headless `podium-server`),
 the app connects to it instead of double-hosting.
 
-## Migrating from the plugin-era (Node/Docker) dashboard
-
-Your existing `dashboard.db` just works — no schema migration. See
-[MIGRATION.md](MIGRATION.md) for the copy-first switchover.
-
 ## Architecture
 
 - **`PodiumCore`** — models, SQLite store, hook ingestion, transcripts, pricing,
