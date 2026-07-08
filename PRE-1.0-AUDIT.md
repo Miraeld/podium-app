@@ -6,10 +6,10 @@
 
 ## A — Fix before 1.0.0
 
-- **A1 ✓ SECURITY: server binds 0.0.0.0, no auth.** Verified live (`lsof`: `*:4820`).
-  Any LAN peer can read all session data AND `POST /api/run` (defaults
-  `acceptEdits`) → RCE. Fix in flight: default `127.0.0.1`, `--host`/`PODIUM_HOST`
-  opt-in with warning. (`PodiumServerApp.swift:55`, `PodiumServerLifecycle.swift:72,123`)
+- **A1 ✅ DONE (`e8b57f4`) SECURITY: server bound 0.0.0.0, no auth.** Was verified
+  live. Now: default `127.0.0.1`; `--host` flag > `PODIUM_HOST` env > default,
+  stderr warning on non-loopback; `podium-server.service` opts into 0.0.0.0
+  explicitly (headless LAN use). 471/471 tests.
 - **A2: sidebar GitHub link → `github.com/wp-media/maestro`** (internal codename
   repo) on every page (`Sidebar.tsx:452,482`). Every 1.0 user who clicks gets a
   404/private wall. Point at the public Podium repo or hide.
