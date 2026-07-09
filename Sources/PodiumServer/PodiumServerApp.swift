@@ -88,6 +88,12 @@ public struct PodiumServerApp: Sendable {
             allowMethods: [.get, .post, .put, .patch, .delete, .head, .options]
         ))
 
+        // B7: every /api/* failure — including errors thrown by handlers
+        // with no explicit failure path (Search/Stats/Analytics/Updates) —
+        // renders as the canonical `CodedErrorResponse` envelope. See
+        // APIErrorEnvelopeMiddleware.swift.
+        router.middlewares.add(APIErrorEnvelopeMiddleware())
+
         // Health check (index.js line 96).
         router.get("/api/health") { _, _ -> JSONResponse in
             try JSONResponse(HealthResponse(status: "ok", timestamp: PodiumDate.now()))
