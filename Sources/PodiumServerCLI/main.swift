@@ -110,7 +110,6 @@ struct PodiumServerCLI: AsyncParsableCommand {
                     SettingsRouterMount.self,
                     ImportRouterMount.self,
                     PushRouterMount.self,
-                    DiagnosticsRouterMount.self,
                     CcConfigRouterMount.self,
                     UpdatesRouterMount.self,
                     ExportRouterMount.self,
