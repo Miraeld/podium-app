@@ -60,14 +60,17 @@ public enum HooksRouterMount: RouterMount {
                     .withUnsafeBytes { Data($0) }
             } catch {
                 await DiagnosticsRecorder.shared.recordHookFailure(reason: "unreadable request body")
-                return try JSONResponse(status: .badRequest, ErrorResponse("Invalid request body"))
+                return try JSONResponse(
+                    status: .badRequest,
+                    CodedErrorResponse(code: "INVALID_INPUT", message: "Invalid request body")
+                )
             }
 
             guard let (hookType, data) = Self.parsePayload(bodyData) else {
                 await DiagnosticsRecorder.shared.recordHookFailure(reason: "invalid payload (hook_type/data missing)")
                 return try JSONResponse(
                     status: .badRequest,
-                    HookErrorResponse(error: HookErrorDetail(code: "INVALID_INPUT", message: "hook_type and data are required"))
+                    CodedErrorResponse(code: "INVALID_INPUT", message: "hook_type and data are required")
                 )
             }
 
@@ -86,7 +89,7 @@ public enum HooksRouterMount: RouterMount {
                 await DiagnosticsRecorder.shared.recordHookFailure(reason: "session_id missing from hook data (\(hookType))")
                 return try JSONResponse(
                     status: .badRequest,
-                    HookErrorResponse(error: HookErrorDetail(code: "MISSING_SESSION", message: "session_id is required in data"))
+                    CodedErrorResponse(code: "MISSING_SESSION", message: "session_id is required in data")
                 )
             }
 
@@ -153,16 +156,4 @@ public enum HooksRouterMount: RouterMount {
 struct HookEventOkResponse: Encodable {
     let ok: Bool
     let event: JSONValue
-}
-
-/// `{"error": {"code": ..., "message": ...}}` — hooks.js's structured error
-/// body shape for this route specifically (distinct from the flat
-/// `{"error": "..."}` shape `ErrorResponse` provides for other routers).
-struct HookErrorResponse: Encodable {
-    let error: HookErrorDetail
-}
-
-struct HookErrorDetail: Encodable {
-    let code: String
-    let message: String
 }
