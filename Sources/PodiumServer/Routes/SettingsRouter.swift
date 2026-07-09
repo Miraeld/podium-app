@@ -112,6 +112,20 @@ public enum SettingsRouterMount: RouterMount {
     /// parallel P3.2 task — see `Routes/ReimportRunner.swift`. Until the
     /// orchestrator wires a concrete `ServerContext.reimportRunner`, this
     /// responds `503` instead of guessing at import semantics.
+    ///
+    /// B6 (pre-1.0 audit): flagged as a removal candidate — the vendored
+    /// client has no live caller of this route today (only `KanbanBoard`/
+    /// `Dashboard`-style UI calls were checked; none hit `/reimport`).
+    /// KEPT anyway per the audit's own rule: the client's `api.ts` still
+    /// defines a `settings.reimport()` wrapper
+    /// (`dashboard/client/src/lib/api.ts:215-217` in the reference
+    /// checkout) that constructs this exact path — a dead *helper*, not a
+    /// dead *endpoint*. Per the audit task's decision rule ("if ANYTHING
+    /// references it, even a helper function that's itself unused, KEEP
+    /// the endpoint"), removing the route here would leave that client
+    /// helper pointing at a 404 if it's ever wired up. The `api.ts`
+    /// wrapper itself is a follow-up cleanup in the *other* (client) repo,
+    /// out of scope here.
     private static func reimport(_ req: Request, _ ctx: ServerRequestContext, context: ServerContext) async throws -> JSONResponse {
         guard let runner = context.reimportRunner else {
             return try JSONResponse(
