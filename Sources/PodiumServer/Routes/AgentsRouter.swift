@@ -1,9 +1,18 @@
 // AgentsRouter — port of dashboard/server/routes/agents.js.
 //
-// Endpoints: GET / (session_id | status | plain list) · GET /:id · POST / ·
-// PATCH /:id. All SQL already existed as typed `PodiumStore` methods from
-// P1.1 (listAgentsBySession / listAgentsByStatus / listAgents / getAgent /
+// Endpoints: GET / (session_id | status | plain list) · PATCH /:id. All SQL
+// already existed as typed `PodiumStore` methods from P1.1
+// (listAgentsBySession / listAgentsByStatus / listAgents / getAgent /
 // insertAgent / updateAgent) — this router is pure HTTP mapping.
+//
+// B6 (pre-1.0 audit): `GET /:id` and `POST /` were removed — the vendored
+// client's `api.ts` `agents` group only ever exposes `list` (confirmed via
+// both the compiled WebClient bundle and the client TypeScript source; no
+// fetch of `/agents/:id` or a POST to `/agents` anywhere). `PATCH /:id` is
+// kept — it's exercised by the ingest pipeline / tests independent of the
+// client. `insertAgent` (backing the removed POST) remains a `PodiumStore`
+// method used directly by `IngestEngine`, so no store-layer code was
+// touched.
 
 import Foundation
 import Hummingbird
@@ -14,8 +23,6 @@ public enum AgentsRouterMount: RouterMount {
         let group = router.group("/api/agents")
 
         group.get { req, ctx in try await list(req, ctx, context: context) }
-        group.get("/:id") { req, ctx in try await detail(req, ctx, context: context) }
-        group.post { req, ctx in try await create(req, ctx, context: context) }
         group.patch("/:id") { req, ctx in try await patch(req, ctx, context: context) }
     }
 
@@ -51,54 +58,6 @@ public enum AgentsRouterMount: RouterMount {
         }
 
         return try JSONResponse(AgentsResponse(agents: agents, limit: limit, offset: offset))
-    }
-
-    // MARK: - GET /:id
-
-    private static func detail(_ req: Request, _ ctx: ServerRequestContext, context: ServerContext) async throws -> JSONResponse {
-        let id = try ctx.parameters.require("id")
-        guard let agent = try context.store.getAgent(id: id) else {
-            return try JSONResponse(status: .notFound, CodedErrorResponse(code: "NOT_FOUND", message: "Agent not found"))
-        }
-        return try JSONResponse(AgentDetailResponse(agent: agent))
-    }
-
-    // MARK: - POST /
-
-    /// agents.js lines 39–68: id/session_id/name required, idempotent
-    /// create-by-id, broadcasts `agent_created` only on actual insert.
-    private static func create(_ req: Request, _ ctx: ServerRequestContext, context: ServerContext) async throws -> JSONResponse {
-        var mutableRequest = req
-        let body = try await mutableRequest.decodeJSONBody(as: AgentCreateRequest.self)
-        guard let id = body.id, !id.isEmpty, !body.sessionId.isEmpty, !body.name.isEmpty else {
-            return try JSONResponse(
-                status: .badRequest,
-                CodedErrorResponse(code: "INVALID_INPUT", message: "id, session_id, and name are required")
-            )
-        }
-
-        if let existing = try context.store.getAgent(id: id) {
-            return try JSONResponse(status: .ok, AgentCreateResponse(agent: existing, created: false))
-        }
-
-        // agents.js lines 53–63: `subagent_type || null`, `task || null`,
-        // `parent_agent_id || null` — an empty string collapses to `null`
-        // BEFORE the DB call (JS `"" || null` → `null`), same as any other
-        // falsy value. Applied only to the plain string fields Node treats
-        // this way; `status`/`type` are Node's `field || "default"` case
-        // (handled separately by `?? .main`/`?? .waiting` below) and
-        // `metadata` is conditionally JSON-stringified, not `|| null`.
-        try context.store.insertAgent(
-            id: id, sessionId: body.sessionId, name: body.name, type: body.type ?? .main,
-            subagentType: collapseEmpty(body.subagentType), status: body.status ?? .waiting,
-            task: collapseEmpty(body.task), parentAgentId: collapseEmpty(body.parentAgentId),
-            metadata: body.metadata
-        )
-        guard let agent = try context.store.getAgent(id: id) else {
-            return try JSONResponse(status: .internalServerError, CodedErrorResponse(code: "INTERNAL", message: "agent insert did not persist"))
-        }
-        await context.broadcaster.broadcast(type: "agent_created", data: agent)
-        return try JSONResponse(status: .created, AgentCreateResponse(agent: agent, created: true))
     }
 
     // MARK: - PATCH /:id
@@ -141,9 +100,4 @@ public enum AgentsRouterMount: RouterMount {
 
 private struct AgentDetailResponse: Encodable {
     let agent: Agent
-}
-
-private struct AgentCreateResponse: Encodable {
-    let agent: Agent
-    let created: Bool
 }
