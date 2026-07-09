@@ -206,7 +206,11 @@ fn refresh_active_count_from_map(app: &AppHandle, sessions: &HashMap<String, Tra
 /// `/api/stats` (the server's own `active_agents` figure) rather than
 /// maintaining a second shadow tally in Rust.
 fn refresh_active_count(app: &AppHandle) {
-    let port = crate::port();
+    // B1: use the port the shell actually resolved at startup (`run`'s
+    // `port` param, mirrored into `ActivePort` in main.rs) rather than the
+    // configured target port, which may not be where podium-server ended
+    // up after a fallback.
+    let port = crate::active_port(app);
     let url = format!("http://127.0.0.1:{port}/api/stats");
     let Ok(resp) = ureq::get(&url).timeout(Duration::from_millis(1000)).call() else {
         return;

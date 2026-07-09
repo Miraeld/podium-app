@@ -11,6 +11,10 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = ["macos-private-api", "tray-icon", "image-png"] }
 tauri-plugin-shell = "2"
 tauri-plugin-notification = "2"
+# Opens external links (A2: sidebar GitHub link, any target="_blank" anchor)
+# in the OS browser — tauri-plugin-shell's `Shell::open` is deprecated in
+# favor of this.
+tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # `json` feature: ws_watcher's agent-event fallback re-derives the active

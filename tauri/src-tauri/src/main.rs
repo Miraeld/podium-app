@@ -21,19 +21,25 @@
 mod notify_settings;
 mod ws_watcher;
 
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU16, AtomicUsize, Ordering};
 use std::sync::Mutex;
 use std::time::Duration;
 
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::TrayIconBuilder;
-use tauri::{Manager, RunEvent, WindowEvent};
+use tauri::webview::{NewWindowFeatures, NewWindowResponse};
+use tauri::{Manager, RunEvent, Url, WebviewUrl, WebviewWindowBuilder, WindowEvent};
+use tauri_plugin_opener::OpenerExt;
 use tauri_plugin_shell::process::CommandChild;
 use tauri_plugin_shell::ShellExt;
 
 const DEFAULT_PORT: u16 = 4820;
 const HEALTH_TIMEOUT: Duration = Duration::from_secs(15);
 const HEALTH_POLL_INTERVAL: Duration = Duration::from_millis(300);
+/// A2/B1: how many ports above the target port podium-server itself will try
+/// (mirrors `PodiumServerLifecycle.maxPortAttempts` in the Swift server) —
+/// used as the health-poll fallback when the server-info file can't be read.
+const MAX_PORT_FALLBACK_ATTEMPTS: u16 = 20;
 
 /// Holds the sidecar's child handle IFF this app instance spawned it. `None`
 /// means either "not started yet" or "we reused a server someone else is
@@ -42,6 +48,14 @@ struct SidecarState {
     child: Mutex<Option<CommandChild>>,
     spawned_by_us: AtomicBool,
 }
+
+/// The port the dashboard window is actually pointed at right now — set once
+/// during `setup()` after port discovery (B1) resolves where podium-server
+/// really ended up (it may not be `port()`'s target if that port was taken
+/// and the server fell back). `reload_dashboard` and the WS watcher's
+/// `/api/stats` poll both read this instead of re-deriving the target port,
+/// so a Reload after a port-fallback still hits the right place.
+struct ActivePort(AtomicU16);
 
 /// Live active-agent count as last seen by the WS watcher, plus the tray's
 /// status menu item so the background thread can update its label. Shared
@@ -62,6 +76,13 @@ pub fn port() -> u16 {
 /// notification-settings file without duplicating the platform logic.
 pub fn default_data_dir_for_watcher() -> std::path::PathBuf {
     default_data_dir()
+}
+
+/// The port podium-server is actually listening on right now (B1) — set
+/// once during `setup()` after port discovery, read by `ws_watcher`'s
+/// `/api/stats` poll and by `reload_dashboard`.
+pub fn active_port(app: &tauri::AppHandle) -> u16 {
+    app.state::<ActivePort>().0.load(Ordering::SeqCst)
 }
 
 /// Platform default data dir, mirroring PodiumPaths.swift exactly:
@@ -88,30 +109,146 @@ fn health_url(port: u16) -> String {
     format!("http://127.0.0.1:{port}/api/health")
 }
 
+/// B2: `GET /api/health` on *any* process that happens to be listening on
+/// the port would previously pass this check just by answering 200 — main.rs
+/// then treated that unrelated process as "our" server and skipped spawning
+/// the real sidecar. `podium-server`'s handler
+/// (`Sources/PodiumServer/PodiumServerApp.swift`) always replies
+/// `{"status":"ok","timestamp":"<ISO8601>"}` — no generic HTTP server (or a
+/// stray dev server squatting on the port) is going to coincidentally return
+/// exactly that shape, so require both fields rather than just the status
+/// code. If the Swift server later grows a real `service`/`version` marker,
+/// prefer checking that instead.
 fn is_healthy(port: u16) -> bool {
-    ureq::get(&health_url(port))
-        .timeout(Duration::from_millis(500))
-        .call()
-        .map(|resp| resp.status() == 200)
-        .unwrap_or(false)
+    let Ok(resp) = ureq::get(&health_url(port)).timeout(Duration::from_millis(500)).call() else {
+        return false;
+    };
+    if resp.status() != 200 {
+        return false;
+    }
+    let Ok(body) = resp.into_json::<serde_json::Value>() else {
+        return false;
+    };
+    body.get("status").and_then(|v| v.as_str()) == Some("ok") && body.get("timestamp").is_some()
 }
 
-/// Blocks until /api/health returns 200 or the timeout elapses.
-fn wait_for_health(port: u16) -> bool {
+/// `~/.claude/.agent-dashboard.json` — the multi-server discovery file
+/// `ServerInfoWriter.swift`/`HookPortDiscovery` maintain. Read here (B1) to
+/// find which port a just-spawned sidecar actually bound, since
+/// `PodiumServerLifecycle` falls back to `port+1..+20` if our requested port
+/// was taken by something else.
+fn server_info_path() -> std::path::PathBuf {
+    let home = std::env::var("HOME").map(std::path::PathBuf::from).unwrap_or_default();
+    home.join(".claude").join(".agent-dashboard.json")
+}
+
+/// Looks up the port a specific pid registered in the server-info file.
+/// Returns `None` if the file is missing, unparsable, or has no entry for
+/// that pid yet (the file is written from `onListening`, strictly after the
+/// process starts, so a few misses right after spawn are expected).
+fn port_for_pid(pid: u32) -> Option<u16> {
+    let data = std::fs::read_to_string(server_info_path()).ok()?;
+    let json: serde_json::Value = serde_json::from_str(&data).ok()?;
+    let servers = json.get("servers").and_then(|v| v.as_array())?;
+    servers.iter().find_map(|entry| {
+        let entry_pid = entry.get("pid").and_then(|v| v.as_u64())?;
+        if entry_pid as u32 != pid {
+            return None;
+        }
+        entry.get("port").and_then(|v| v.as_u64()).map(|p| p as u16)
+    })
+}
+
+/// B1: resolve the port a just-spawned sidecar is actually listening on.
+/// Primary source is the server-info file keyed by pid (exact — works even
+/// if some *other* unrelated process is also listening on a nearby port).
+/// Falls back to health-polling `target_port..target_port + 20` (the same
+/// range `PodiumServerLifecycle` tries) in case the discovery file is
+/// unwritable/unreadable in this environment. Returns `None` if neither
+/// source resolves a healthy port before `HEALTH_TIMEOUT`.
+fn discover_spawned_port(target_port: u16, pid: u32) -> Option<u16> {
     let deadline = std::time::Instant::now() + HEALTH_TIMEOUT;
-    while std::time::Instant::now() < deadline {
-        if is_healthy(port) {
-            return true;
+    loop {
+        if let Some(port) = port_for_pid(pid) {
+            if is_healthy(port) {
+                return Some(port);
+            }
+        }
+        for candidate in target_port..=target_port.saturating_add(MAX_PORT_FALLBACK_ATTEMPTS) {
+            if is_healthy(candidate) {
+                return Some(candidate);
+            }
+        }
+        if std::time::Instant::now() >= deadline {
+            return None;
         }
         std::thread::sleep(HEALTH_POLL_INTERVAL);
     }
-    is_healthy(port)
+}
+
+/// A minimal `data:` URL page shown when the sidecar never became healthy
+/// (B1) — better than the window silently staying on the "Starting Podium…"
+/// placeholder forever with no indication anything went wrong.
+fn error_page_url() -> Url {
+    let html = "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>Podium</title>\
+        <style>html,body{margin:0;height:100%;background:#0b0b0e;color:#ddd;\
+        font-family:-apple-system,BlinkMacSystemFont,sans-serif;display:flex;\
+        align-items:center;justify-content:center;text-align:center;padding:0 24px}\
+        p{max-width:420px;line-height:1.5}</style></head><body>\
+        <p>Podium's server didn't start. Check the app logs, or quit and \
+        relaunch. If the problem persists, another process may be holding \
+        the port range Podium needs.</p></body></html>";
+    Url::parse(&format!("data:text/html,{}", urlencoding_escape(html)))
+        .expect("static error page URL must parse")
+}
+
+/// Tiny percent-encoder for the characters that are meaningful in URL syntax
+/// itself and would otherwise corrupt the `data:` URL below (`#` starts a
+/// fragment, `%` starts a percent-escape) — no need to pull in a crate for
+/// two characters in a static, ASCII-only string.
+fn urlencoding_escape(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    for byte in input.bytes() {
+        match byte {
+            b'#' => out.push_str("%23"),
+            b'%' => out.push_str("%25"),
+            b'"' => out.push_str("%22"),
+            _ => out.push(byte as char),
+        }
+    }
+    out
+}
+
+/// A2: only the podium-server dashboard (loopback, any port) and Tauri's own
+/// internal asset/frontendDist protocol (used for the brief "Starting
+/// Podium…" placeholder and the `data:` error page) are allowed to load
+/// in-window. Everything else — the sidebar's GitHub link, any other
+/// `target="_blank"` anchor, a stray `https://` redirect — is external and
+/// must be handed to the OS browser instead of silently no-op'ing (or
+/// worse, navigating the app's own window away from the dashboard).
+fn is_internal_url(url: &Url) -> bool {
+    match url.scheme() {
+        "http" => matches!(url.host_str(), Some("127.0.0.1") | Some("localhost")),
+        "tauri" => true,       // macOS/Linux custom-protocol asset loader
+        "data" => true,        // our inline error page
+        _ => url.host_str() == Some("tauri.localhost"), // Windows asset loader
+    }
+}
+
+/// Opens a URL in the user's default OS browser via the shell plugin, best
+/// effort — a failure here just means the click did nothing, same as the
+/// pre-fix behavior, rather than crashing the shell.
+fn open_externally(app: &tauri::AppHandle, url: &Url) {
+    if let Err(err) = app.opener().open_url(url.as_str(), None::<String>) {
+        eprintln!("failed to open external URL {url} in browser: {err}");
+    }
 }
 
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_opener::init())
         .manage(SidecarState {
             child: Mutex::new(None),
             spawned_by_us: AtomicBool::new(false),
@@ -120,20 +257,26 @@ fn main() {
             active_agents: AtomicUsize::new(0),
             status_item: Mutex::new(None),
         })
+        .manage(ActivePort(AtomicU16::new(DEFAULT_PORT)))
         .setup(|app| {
-            let port = port();
+            let target_port = port();
+            app.state::<ActivePort>().0.store(target_port, Ordering::SeqCst);
             let handle = app.handle().clone();
 
             // Reuse an already-running server (e.g. the SwiftUI app's
             // EmbeddedServer, or a manually-started podium-server) instead
-            // of spawning a second one on the same port.
-            if is_healthy(port) {
-                println!("podium-server already running on port {port}; reusing it.");
+            // of spawning a second one on the same port. B2: `is_healthy`
+            // requires the podium-server response shape, not just a 200, so
+            // an unrelated process squatting on the port is correctly
+            // treated as "taken" rather than reused.
+            let mut spawned_pid: Option<u32> = None;
+            if is_healthy(target_port) {
+                println!("podium-server already running on port {target_port}; reusing it.");
             } else {
                 let data_dir = default_data_dir();
                 let mut args: Vec<String> = vec![
                     "--port".into(),
-                    port.to_string(),
+                    target_port.to_string(),
                     "--data-dir".into(),
                     data_dir.to_string_lossy().into_owned(),
                 ];
@@ -173,43 +316,82 @@ fn main() {
                     .args(args);
 
                 let (mut _rx, child) = sidecar.spawn().expect("failed to spawn podium-server sidecar");
+                spawned_pid = Some(child.pid());
 
                 let state = handle.state::<SidecarState>();
                 *state.child.lock().unwrap() = Some(child);
                 state.spawned_by_us.store(true, Ordering::SeqCst);
-                println!("Spawned podium-server sidecar on port {port} (data dir: {data_dir:?}).");
+                println!(
+                    "Spawned podium-server sidecar (pid {}) targeting port {target_port} (data dir: {data_dir:?}).",
+                    spawned_pid.unwrap()
+                );
             }
 
-            // Wait for health (blocking the setup hook is fine here — this
-            // runs once, before any window is shown to the user).
-            let healthy = wait_for_health(port);
-            if !healthy {
+            // B1: don't just assume the sidecar bound `target_port` —
+            // podium-server falls back to target_port+1..+20 if that port
+            // was already taken by something else (PodiumServerLifecycle.swift).
+            // For a reused server we already confirmed `target_port` itself
+            // is healthy above, so there's nothing to discover. For a
+            // freshly-spawned one, resolve its real port via the
+            // server-info file (falling back to a health-poll sweep of the
+            // same range the server itself tries).
+            let resolved_port = if let Some(pid) = spawned_pid {
+                discover_spawned_port(target_port, pid)
+            } else {
+                Some(target_port)
+            };
+            let healthy = resolved_port.is_some();
+            let active_port = resolved_port.unwrap_or(target_port);
+            app.state::<ActivePort>().0.store(active_port, Ordering::SeqCst);
+            if healthy {
+                if active_port != target_port {
+                    println!(
+                        "podium-server bound port {active_port} instead of {target_port} (fallback); \
+                         pointing the window at the real port."
+                    );
+                }
+            } else {
                 eprintln!("podium-server did not become healthy within {HEALTH_TIMEOUT:?}");
             }
 
-            if let Some(window) = app.get_webview_window("main") {
-                // Native glass: blur the desktop wallpaper behind the window
-                // via NSVisualEffectView, matching the old SwiftUI app's
-                // `.hudWindow` / `.behindWindow` combo (Sources/PodiumApp/
-                // VisualEffect.swift). The webview itself is made transparent
-                // via tauri.conf.json's window `transparent: true`, so the
-                // web dashboard's own CSS glass (backdrop-filter) composites
-                // on top of this rather than an opaque white/black backing.
-                #[cfg(target_os = "macos")]
-                {
-                    use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial};
-                    if let Err(err) =
-                        apply_vibrancy(&window, NSVisualEffectMaterial::HudWindow, None, None)
-                    {
-                        eprintln!("failed to apply macOS vibrancy (non-fatal): {err}");
-                    }
-                }
+            // A2: build the window here (rather than declaratively via
+            // tauri.conf.json, which can no longer attach hooks after the
+            // fact) so `on_navigation`/`on_new_window` can gate every load —
+            // only the loopback dashboard and Tauri's own asset protocol are
+            // allowed in-window; everything else (the sidebar's GitHub link,
+            // any other `target="_blank"` anchor) is handed to the OS
+            // browser instead of silently no-op'ing.
+            let window = create_main_window(&handle)?;
 
-                let url = format!("http://127.0.0.1:{port}").parse().expect("invalid URL");
-                window
-                    .navigate(url)
-                    .expect("failed to navigate main window to podium-server");
+            // Native glass: blur the desktop wallpaper behind the window
+            // via NSVisualEffectView, matching the old SwiftUI app's
+            // `.hudWindow` / `.behindWindow` combo (Sources/PodiumApp/
+            // VisualEffect.swift). The webview itself is made transparent
+            // via `.transparent(true)` on the window builder, so the web
+            // dashboard's own CSS glass (backdrop-filter) composites on top
+            // of this rather than an opaque white/black backing.
+            #[cfg(target_os = "macos")]
+            {
+                use window_vibrancy::{apply_vibrancy, NSVisualEffectMaterial};
+                if let Err(err) =
+                    apply_vibrancy(&window, NSVisualEffectMaterial::HudWindow, None, None)
+                {
+                    eprintln!("failed to apply macOS vibrancy (non-fatal): {err}");
+                }
             }
+
+            // B1: navigate to wherever the server actually ended up, or to
+            // an inline error page if it never became healthy at all —
+            // rather than leaving the "Starting Podium…" placeholder up
+            // forever with no indication anything went wrong.
+            let target_url = if healthy {
+                format!("http://127.0.0.1:{active_port}").parse().expect("invalid URL")
+            } else {
+                error_page_url()
+            };
+            window
+                .navigate(target_url)
+                .expect("failed to navigate main window");
 
             // --- T1.4: tray icon + menu ---------------------------------
             // Initial status reflects the health check we just did, so the
@@ -254,7 +436,7 @@ fn main() {
             // --- T1.4: background WS watcher for live count + notifications
             let watcher_handle = app.handle().clone();
             std::thread::spawn(move || {
-                ws_watcher::run(watcher_handle, port);
+                ws_watcher::run(watcher_handle, active_port);
             });
 
             Ok(())
@@ -294,7 +476,10 @@ fn reload_dashboard(app: &tauri::AppHandle) {
     let Some(window) = app.get_webview_window("main") else {
         return;
     };
-    let url = format!("http://127.0.0.1:{}", port());
+    // B1: reload the port we actually resolved at startup (which may have
+    // fallen back past `port()`'s target), not the target port itself.
+    let active_port = app.state::<ActivePort>().0.load(Ordering::SeqCst);
+    let url = format!("http://127.0.0.1:{active_port}");
     match url.parse() {
         Ok(url) => {
             if let Err(err) = window.navigate(url) {
@@ -303,6 +488,49 @@ fn reload_dashboard(app: &tauri::AppHandle) {
         }
         Err(err) => eprintln!("reload_dashboard: invalid URL: {err}"),
     }
+}
+
+/// A2: builds the "main" window in code (rather than declaratively via
+/// `tauri.conf.json`, which offers no way to attach navigation hooks after
+/// the window already exists) so we can gate every load through
+/// `on_navigation`/`on_new_window`. Window chrome (size, transparency,
+/// title-bar style) mirrors the config this replaces exactly.
+fn create_main_window(app: &tauri::AppHandle) -> tauri::Result<tauri::WebviewWindow> {
+    let nav_handle = app.clone();
+    let new_window_handle = app.clone();
+
+    WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
+        .title("Podium")
+        .inner_size(1280.0, 800.0)
+        .min_inner_size(900.0, 600.0)
+        .transparent(true)
+        .decorations(true)
+        .title_bar_style(tauri::TitleBarStyle::Overlay)
+        .hidden_title(true)
+        // Top-level navigations (location.href changes, plain <a> clicks
+        // without target="_blank", redirects): allow the dashboard + our
+        // own asset/error pages, hand everything else to the OS browser and
+        // cancel the in-window navigation.
+        .on_navigation(move |url| {
+            if is_internal_url(url) {
+                true
+            } else {
+                open_externally(&nav_handle, url);
+                false
+            }
+        })
+        // `target="_blank"` anchors and `window.open()` calls go through
+        // this hook instead of `on_navigation` — the sidebar's GitHub link
+        // is exactly this case.
+        .on_new_window(move |url, _features: NewWindowFeatures| {
+            if is_internal_url(&url) {
+                NewWindowResponse::Allow
+            } else {
+                open_externally(&new_window_handle, &url);
+                NewWindowResponse::Deny
+            }
+        })
+        .build()
 }
 
 fn kill_sidecar_if_ours(app_handle: &tauri::AppHandle) {

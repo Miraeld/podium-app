@@ -7,18 +7,7 @@
     "frontendDist": "../src"
   },
   "app": {
-    "windows": [
-      {
-        "label": "main",
-        "title": "Podium",
-        "url": "index.html",
-        "width": 1280,
-        "height": 800,
-        "minWidth": 900,
-        "minHeight": 600,
-        "transparent": true
-      }
-    ],
+    "windows": [],
     "security": {
       "csp": null
     },
