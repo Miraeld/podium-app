@@ -32,6 +32,17 @@
 // parallel agent just fixed its notifier-vs-COMMIT ordering). Recording
 // happens at the HTTP layer, after the engine has already returned, so it
 // can never affect ingestion semantics or transaction ordering.
+//
+// B7 (pre-1.0 audit): this router previously used a locally-defined
+// `HookErrorResponse{error: HookErrorDetail{code, message}}` type for its
+// error responses — wire-identical to `CodedErrorResponse` but a separate
+// declaration, plus one path (`Data.write` failure) used the flat
+// `ErrorResponse("...")` shape instead. Verified neither `Sources/PodiumHook/
+// main.swift` nor `Sources/PodiumCore/Hooks/HookClient.swift` parses the hook
+// endpoint's response body at all (they only care that the process gets a
+// timely response, per this file's fast-fail contract above) — no wire
+// dependency on the old shape. All three error paths below now use the
+// canonical `CodedErrorResponse` and the local duplicate types were removed.
 
 import Foundation
 import Hummingbird
