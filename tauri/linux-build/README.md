@@ -43,8 +43,14 @@ docker run --rm -v "$PWD:/src" -w /src podium-tauri-linux-build \
 ```
 
 `build-in-container.sh` (runs **inside** the container):
-1. `swift build -c release --product podium-server` — same command
-   `build-linux.sh` uses, so the sidecar matches the release tarball build.
+1. `swift build -c release --product podium-server --scratch-path
+   .build-linux-tauri` — same command `build-linux.sh` uses (module/product),
+   but with its own scratch dir rather than the host's `.build/`. The host
+   bind-mounts the repo root read-write, so sharing `.build/` with a
+   concurrent host-side `swift build`/`swift test` interleaves writes to the
+   same SQLite-backed build database and can crash with a SQLite assertion
+   (hit during the arm64 build — see PRE-1.0-AUDIT.md B8). `.build-linux-tauri/`
+   is git-ignored.
 2. Stages the binary at `tauri/src-tauri/bin/podium-server-<rustc-host-triple>`
    (Tauri's sidecar naming convention) — e.g.
    `podium-server-aarch64-unknown-linux-gnu` or

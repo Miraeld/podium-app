@@ -11,10 +11,18 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$REPO_ROOT"
 
-echo "▶ [1/4] Building podium-server (release) for Linux..."
-swift build -c release --product podium-server
+# Dedicated scratch dir, NOT the host's own .build/. The host bind-mounts the
+# repo root read-write, so if this build shared .build/ with a concurrent
+# host-side `swift build`/`swift test`, the two toolchain runs interleave
+# writes to the same SQLite-backed build database and can trip SQLite
+# assertion crashes (B8). Keep the container's build products fully
+# separate — see .gitignore for `.build-linux-tauri/`.
+SCRATCH_DIR="$REPO_ROOT/.build-linux-tauri"
 
-BUILD_DIR="$REPO_ROOT/.build/release"
+echo "▶ [1/4] Building podium-server (release) for Linux..."
+swift build -c release --product podium-server --scratch-path "$SCRATCH_DIR"
+
+BUILD_DIR="$SCRATCH_DIR/release"
 [ -f "$BUILD_DIR/podium-server" ] || { echo "✗ podium-server binary not found at $BUILD_DIR/podium-server"; exit 1; }
 
 echo "▶ [2/4] Staging sidecar under the Rust target-triple naming Tauri expects..."
