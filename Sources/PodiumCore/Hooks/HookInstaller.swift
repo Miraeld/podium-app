@@ -202,7 +202,29 @@ public enum HookInstaller {
         // \t on some platforms; normalize to exactly 2-space indentation.
         let normalized = normalizeIndentation(String(data: data, encoding: .utf8) ?? "")
         let final = normalized.hasSuffix("\n") ? normalized : normalized + "\n"
-        try final.data(using: .utf8)?.write(to: url)
+        guard let finalData = final.data(using: .utf8) else { return }
+
+        // A7: crash mid-write must never corrupt the user's GLOBAL Claude
+        // settings.json. Back up the existing file, then write via a
+        // temp file in the SAME directory + atomic replace so the rename
+        // is on the same volume and either fully lands or doesn't.
+        if fileManager.fileExists(atPath: path) {
+            let backupPath = path + ".bak"
+            if fileManager.fileExists(atPath: backupPath) {
+                try fileManager.removeItem(atPath: backupPath)
+            }
+            try fileManager.copyItem(atPath: path, toPath: backupPath)
+        }
+
+        let tempURL = dir.appendingPathComponent(".\(url.lastPathComponent).tmp-\(UUID().uuidString)")
+        try finalData.write(to: tempURL, options: .atomic)
+        defer { try? fileManager.removeItem(at: tempURL) }
+
+        if fileManager.fileExists(atPath: path) {
+            _ = try fileManager.replaceItemAt(url, withItemAt: tempURL)
+        } else {
+            try fileManager.moveItem(at: tempURL, to: url)
+        }
     }
 
     /// JSONSerialization's prettyPrinted output uses 2-space indentation on

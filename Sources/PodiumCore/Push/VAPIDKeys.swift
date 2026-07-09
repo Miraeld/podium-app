@@ -70,6 +70,9 @@ public enum VAPIDKeyStore {
     @discardableResult
     public static func loadOrCreate(path: URL) throws -> VAPIDKeyPair {
         if FileManager.default.fileExists(atPath: path.path) {
+            // B3: defensively tighten permissions on keys created before
+            // this fix (or by any other pre-0600 codepath).
+            tightenPermissionsIfNeeded(atPath: path.path)
             let data = try Data(contentsOf: path)
             do {
                 return try decoder.decode(VAPIDKeyPair.self, from: data)
@@ -83,8 +86,21 @@ public enum VAPIDKeyStore {
             withIntermediateDirectories: true
         )
         let data = try encoder.encode(keys)
-        try data.write(to: path, options: .atomic)
+        // B3: the private key lives in this file — create it 0600 (owner
+        // read/write only) so other local users can't read it.
+        FileManager.default.createFile(atPath: path.path, contents: data, attributes: [.posixPermissions: 0o600])
         return keys
+    }
+
+    /// Tightens an existing key file's permissions to 0600 if they're
+    /// currently more permissive. Best-effort: failures are ignored since
+    /// this is a defensive hardening step, not required for correctness.
+    private static func tightenPermissionsIfNeeded(atPath path: String) {
+        guard let attrs = try? FileManager.default.attributesOfItem(atPath: path),
+              let perms = attrs[.posixPermissions] as? NSNumber else { return }
+        if perms.uint16Value & 0o777 != 0o600 {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: path)
+        }
     }
 
     /// Decodes the raw 65-byte uncompressed P-256 public key point.
