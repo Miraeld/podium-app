@@ -10,56 +10,60 @@
   live. Now: default `127.0.0.1`; `--host` flag > `PODIUM_HOST` env > default,
   stderr warning on non-loopback; `podium-server.service` opts into 0.0.0.0
   explicitly (headless LAN use). 471/471 tests.
-- **A2: sidebar GitHub link → `github.com/wp-media/maestro`** (internal codename
-  repo) on every page (`Sidebar.tsx:452,482`). Every 1.0 user who clicks gets a
-  404/private wall. Point at the public Podium repo or hide.
-- **A3: Import-upload rejects the archives its own guide tells users to make.**
-  Guide says `tar -czf claude-history.tar.gz …`; upload endpoint only accepts
-  raw `.jsonl`/`.meta.json` → `NO_JSONL` error (`ImportRouter.swift:12-19,157-164`,
-  `ImportHistory.tsx` ~155). Fix: server-side archive extraction OR remove
-  archive extensions + fix guide copy. (Client-side fix is the cheap 1.0 answer.)
-- **A4: remove dead SwiftUI scaffolding**: `project.yml`, `install.sh`,
-  `Podium-Info.plist`, `PodiumApp.entitlements`, `PodiumWidget/` (3 files),
-  root `AppIcon.icns` + `Assets.xcassets/`. All reference the deleted app;
-  `install.sh` actively fails. Tauri has its own icon pipeline.
-- **A5: `.gitignore` gaps**: add `.build-linux-tauri/`, `tauri/src-tauri/target*/`,
-  `.DS_Store`. (One `git add -A` away from vendoring gigabytes.)
-- **A6: `RELEASING.md` describes the wrong Linux artifact** (tarball vs the
-  actual `.AppImage`/`.deb` CI ships). Also clarify `scripts/build-linux.sh`
-  tarball = manual headless path, not the release.
-- **A7: HookInstaller writes `~/.claude/settings.json` non-atomically, no backup**
-  (`HookInstaller.swift:190-206`). Crash mid-write corrupts the user's GLOBAL
-  Claude settings. Fix: atomic write + `.bak`. Small, high blast-radius.
-- **A8: first-run guidance gap.** Fresh install (no DB, hooks not installed):
-  empty states render but nothing says "install hooks to see data" — the only
-  path is a buried Settings button. Minimum 1.0 fix: empty-state CTA on
-  Dashboard/Sessions linking to hook install; tour should mention it.
+- **A2 ✅ DONE (client `0f2a507`, tauri `1b97246`): sidebar GitHub link.** Now
+  points at the public `github.com/Miraeld/podium-app` (verified live origin).
+  Tauri half: window creation moved to Rust (`create_main_window()`), external
+  http(s) links open in the system browser via `tauri-plugin-opener`.
+- **A3 ✅ DONE (client `0f2a507`): import guide vs upload mismatch.** Client-side
+  fix: guide copy now says upload `.jsonl`/`.meta.json` directly (no tar step);
+  archive extensions removed from accept list + file filter. en/vi/zh mirrored.
+- **A4 ✅ DONE (`1322f7a`): dead SwiftUI scaffolding removed** (`project.yml`,
+  `install.sh`, `Podium-Info.plist`, entitlements, `PodiumWidget/`, root icons).
+  References grepped first — all self-referential.
+- **A5 ✅ DONE (`32750a2`): `.gitignore`** now covers `.build-linux-tauri/`,
+  `tauri/src-tauri/target*/`, `.DS_Store` (none were tracked).
+- **A6 ✅ DONE (`32750a2`): `RELEASING.md`** now describes the real CI artifacts
+  (`.dmg` + `.AppImage`/`.deb` via Tauri); tarball documented as the manual
+  headless-server path.
+- **A7 ✅ DONE (`1322f7a` + tests in `ee00f03`): HookInstaller** writes
+  `settings.json` via temp-file + atomic replace, with a `settings.json.bak`
+  of the previous content. Covered by `HookInstallerTests`.
+- **A8 ✅ DONE (client `0f2a507`): first-run guidance.** Dashboard/Sessions
+  zero-data states now show "install the Claude Code hooks" CTA linking to
+  `/settings#hooks` (anchor added). Tour untouched (in-flight WIP file).
 
 ## B — Should fix (small, worth it before tag)
 
-- **B1: Tauri ignores the server's port-fallback** (+1…+20 on conflict) → if
-  4820 is taken, shell polls a dead port, user sees a blank window with no
-  message. Fix: read the actual port from the server-info file, or at least
-  show an error page. (`main.rs` vs `PodiumServerLifecycle.swift:60`)
-- **B2: Tauri trusts any 200 on `/api/health`** when "reusing" a server —
-  verify a Podium marker (version field) before navigating.
-- **B3: VAPID private key written without 0600 perms** (`VAPIDKeys.swift:80-87`).
-  One-line fix.
-- **B4: import progress theater**: client handles scan/extract/parse phases the
-  server never sends — big rescan = spinner with zero feedback. 1.0-cheap fix:
-  trim client copy to reality; real per-phase progress = post-1.0 (roadmap item).
-- **B5: Workflows page has no top-level empty state** — zero-data renders 10
-  stacked empty chart husks. One `EmptyState` guard.
-- **B6: API surface trim before it becomes a compatibility promise.** Unused:
-  `GET /agents/:id`, `POST /agents`, `GET /events/:id/full`, `GET /diagnostics`,
-  `POST /settings/reimport` (dead api.ts wrapper too), `GET /export/session/:id`.
-  Remove or add explicit keep-comments; adjust ContractTests accordingly.
-  (Verify `POST /push/send` has a server-internal caller before touching.)
-- **B7: HooksRouter error shape** is a third bespoke shape; Diagnostics/Search/
-  Stats/Analytics/Updates routers don't use `CodedErrorResponse` on failure
-  paths. Standardize or document the hooks deviation.
-- **B8: `build-in-container.sh` shares the host `.build/`** → SQLite assertion
-  crash (hit during the arm64 build). Add `--scratch-path`.
+- **B1 ✅ DONE (`1b97246`): Tauri port-fallback.** Shell discovers the actual
+  port from the server-info file (pid-matched), falls back to a health-poll
+  sweep of +1…+20; unresolvable → inline error page instead of blank window.
+- **B2 ✅ DONE (`1b97246`): health-check trust.** Reuse requires the exact
+  podium-server health shape, not any 200. Post-1.0 hardening idea: add an
+  `"app":"podium"` marker field to `/api/health` for a real fingerprint.
+- **B3 ✅ DONE (in `1322f7a`, tests `ee00f03`): VAPID key** created 0600;
+  looser pre-existing files tightened on load.
+- **B4 ✅ DONE (client `0f2a507`): import progress copy** trimmed to the real
+  server phases (`complete`/`error` only) + honest "can take a few minutes"
+  message. Real per-phase progress remains post-1.0 (roadmap).
+- **B5 ✅ DONE (client `0f2a507`): Workflows** zero-data now renders one
+  `EmptyState` (with hooks CTA) instead of empty chart husks.
+- **B6 ✅ DONE (routers `2913673`…`23a757b`, tests `ee00f03`): API trim.**
+  Removed: `GET /agents/:id`, `POST /agents`, `GET /events/:id/full`,
+  `GET /diagnostics` (zero usage, verified in client src + shipped bundle).
+  KEPT (audit flags were stale): `GET /export/session/:id` — live caller in
+  `SessionDetail.tsx:313`; `POST /settings/reimport` — api.ts wrapper still
+  references it (dead wrapper cleanup = client follow-up). `POST /push/send`
+  untouched — live callers (web client ×2 + internal PushNotifier).
+- **B7 ✅ DONE (`1ebad1a` + `ee00f03`): error envelope.** New
+  `APIErrorEnvelopeMiddleware` renders every `/api/*` error as
+  `CodedErrorResponse`; HooksRouter converted (wire-identical; podium-hook is
+  fire-and-forget). Note: `DiagnosticsRouterTests.swift` (CI-gated set in
+  CLAUDE.md) deleted because its endpoint was removed — not a CI dodge.
+- **B8 ✅ DONE (`32750a2`): `build-in-container.sh`** uses
+  `--scratch-path .build-linux-tauri` — no more shared host `.build/`.
+
+> Post-A/B state: `swift test` 462/462 green, `contract-check.sh` 30/30,
+> `cargo check`/`clippy` clean, client `npm run build` clean, dist synced.
 
 ## C — Owner decisions 🟡 / deliberately post-1.0
 
