@@ -108,6 +108,33 @@ final class VAPIDKeysTests: XCTestCase {
         XCTAssertEqual(decoded.privateKey, pair.privateKey)
     }
 
+    // MARK: - B3: private key file must not be world/group readable
+
+    func testLoadOrCreateWritesKeyFileWith0600Permissions() throws {
+        let path = tempDir.appendingPathComponent("vapid-keys.json")
+        _ = try VAPIDKeyStore.loadOrCreate(path: path)
+
+        let attrs = try FileManager.default.attributesOfItem(atPath: path.path)
+        let perms = try XCTUnwrap(attrs[.posixPermissions] as? NSNumber)
+        XCTAssertEqual(perms.uint16Value & 0o777, 0o600)
+    }
+
+    func testLoadOrCreateTightensLooseExistingFilePermissions() throws {
+        let path = tempDir.appendingPathComponent("vapid-keys.json")
+        let pair = VAPIDKeyStore.generate()
+        let json = """
+        { "publicKey": "\(pair.publicKey)", "privateKey": "\(pair.privateKey)" }
+        """
+        try Data(json.utf8).write(to: path)
+        try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: path.path)
+
+        _ = try VAPIDKeyStore.loadOrCreate(path: path)
+
+        let attrs = try FileManager.default.attributesOfItem(atPath: path.path)
+        let perms = try XCTUnwrap(attrs[.posixPermissions] as? NSNumber)
+        XCTAssertEqual(perms.uint16Value & 0o777, 0o600)
+    }
+
     func testLoadOrCreateThrowsOnMalformedStoredFile() throws {
         let path = tempDir.appendingPathComponent("vapid-keys.json")
         try Data("not json at all".utf8).write(to: path)

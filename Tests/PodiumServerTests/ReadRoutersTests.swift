@@ -270,25 +270,6 @@ final class ReadRoutersTests: XCTestCase {
         XCTAssertEqual(decoded.toolNames, ["Bash", "Read"])
     }
 
-    func testEventsFullParsesJSONDataColumn() async throws {
-        try store.insertSession(id: "s1", name: nil, status: .active, cwd: nil, model: nil, metadata: nil)
-        let rowId = try store.insertEvent(sessionId: "s1", agentId: nil, eventType: "PostToolUse", toolName: "Bash", summary: nil, data: "{\"command\":\"ls\"}")
-
-        try await bootServer()
-        let (data, response) = try await get("/api/events/\(rowId)/full")
-        XCTAssertEqual(response.statusCode, 200)
-        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
-        let event = json["event"] as! [String: Any]
-        let eventData = event["data"] as! [String: Any]
-        XCTAssertEqual(eventData["command"] as? String, "ls")
-    }
-
-    func testEventsFullReturns404ForUnknownId() async throws {
-        try await bootServer()
-        let (_, response) = try await get("/api/events/99999/full")
-        XCTAssertEqual(response.statusCode, 404)
-    }
-
     // MARK: - Stats
 
     func testStatsIncludesEventsTodayAndWsConnections() async throws {

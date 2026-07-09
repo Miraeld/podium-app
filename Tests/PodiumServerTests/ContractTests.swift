@@ -172,7 +172,6 @@ final class ContractTests: XCTestCase {
                 WorkflowsRouterMount.self,
                 HooksRouterMount.self,
                 SettingsRouterMount.self,
-                DiagnosticsRouterMount.self,
                 UpdatesRouterMount.self,
                 PushRouterMount.self,
                 RunRouterMount.self,
@@ -691,17 +690,6 @@ final class ContractTests: XCTestCase {
         assertAgentShape(agent, endpoint: e)
     }
 
-    /// GET /api/agents/:id — not called by the vendored client (api.ts's
-    /// `agents` group only exposes `list`), covered lightly for parity with
-    /// the Node router surface.
-    func testAgentDetailContract() async throws {
-        try await bootAndSeed()
-        let e = "/api/agents/:id"
-        let json = try await getJSONObject("/api/agents/\(sessionA)-main")
-        let agent = try XCTUnwrap(json["agent"] as? [String: Any], "\(e): missing 'agent'")
-        assertAgentShape(agent, endpoint: e)
-    }
-
     // MARK: - /api/events family
 
     func testEventsListContract() async throws {
@@ -725,23 +713,6 @@ final class ContractTests: XCTestCase {
         XCTAssertTrue((json["event_types"] as? [String] ?? []).contains("SessionStart"))
     }
 
-    /// GET /api/events/:id/full — not referenced anywhere in the vendored
-    /// client source (no fetch of `/full` in src/**), covered lightly for
-    /// parity with the Node router surface.
-    func testEventFullContract() async throws {
-        try await bootAndSeed()
-        let e = "/api/events/:id/full"
-        let (listData, _) = try await get("/api/events?session_id=\(sessionA)&limit=1")
-        let list = try XCTUnwrap(try JSONSerialization.jsonObject(with: listData) as? [String: Any])
-        let first = try firstObject(list, "events", endpoint: e)
-        let id = try XCTUnwrap(first["id"] as? Int)
-        let json = try await getJSONObject("/api/events/\(id)/full")
-        let event = try XCTUnwrap(json["event"] as? [String: Any], "\(e): missing 'event'")
-        snake(event, "session_id", .string, endpoint: e)
-        snake(event, "event_type", .string, endpoint: e)
-        // /full parses the JSON `data` column into an object (vs string in list).
-        assertField(event, "data", .object, .null, endpoint: e)
-    }
 
     // MARK: - /api/analytics
 
@@ -1280,26 +1251,6 @@ final class ContractTests: XCTestCase {
                             "fetch_error"] {
             assertAbsent(json, camelTwin(optionalKey), endpoint: e)
         }
-    }
-
-    // MARK: - /api/diagnostics (Swift-native addition — no client caller;
-    // asserted against the Settings-page-facing DiagnosticsResponse wire shape)
-
-    func testDiagnosticsContract() async throws {
-        try await bootAndSeed()
-        let e = "/api/diagnostics"
-        let json = try await getJSONObject(e)
-        let server = try XCTUnwrap(json["server"] as? [String: Any], "\(e): missing 'server'")
-        snake(server, "uptime_seconds", .number, endpoint: e)
-        assertField(server, "platform", .string, endpoint: e)
-        snake(server, "cpu_count", .number, endpoint: e)
-        let hooks = try XCTUnwrap(json["hooks"] as? [String: Any], "\(e): missing 'hooks'")
-        assertField(hooks, "status", .string, endpoint: e)
-        snake(hooks, "last_event_at", .string, .null, endpoint: e)
-        snake(hooks, "total_events_processed", .number, endpoint: e)
-        snake(hooks, "total_events_failed", .number, endpoint: e)
-        assertField(json, "log", .array, endpoint: e)
-        XCTAssertEqual(hooks["status"] as? String, "ok", "\(e): seeding posted successful hook events")
     }
 
     // MARK: - /api/export/session/:id round trip (server-to-server bundle;

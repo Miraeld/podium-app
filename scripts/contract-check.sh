@@ -242,7 +242,8 @@ check "session stats" "/api/sessions/$SESSION_A/stats" '.session_id != null and 
 check "session transcripts list" "/api/sessions/$SESSION_A/transcripts" '.transcripts != null'
 check "session transcript" "/api/sessions/$SESSION_A/transcript" '.messages != null and (.has_more != null)'
 check "agents list" "/api/agents?session_id=$SESSION_A" '.agents[0].session_id != null'
-check "agent detail" "/api/agents/$SESSION_A-main" '.agent.session_id != null'
+# "agent detail" (GET /api/agents/:id) removed in the pre-1.0 B6 API trim —
+# no client caller; see AgentsRouter.swift.
 check "events list" "/api/events?session_id=$SESSION_A&limit=50" '.events[0].session_id != null'
 check "events facets" "/api/events/facets" '(.event_types // []) | index("SessionStart") != null'
 check "analytics" "/api/analytics?tz_offset=0" '.tokens.total_input != null and .overview.total_sessions != null'
@@ -263,7 +264,8 @@ check "cc-config skills" "/api/cc-config/skills?scope=user" '.items[0].name == "
 check "cc-config agents" "/api/cc-config/agents?scope=user" '.items[0].name == "reviewer"'
 check "cc-config mcp (camelCase projectScoped)" "/api/cc-config/mcp" '.projectScoped != null'
 check "updates status (git_repo present)" "/api/updates/status" 'has("git_repo")'
-check "diagnostics" "/api/diagnostics" '.hooks.status == "ok"'
+# "diagnostics" (GET /api/diagnostics) removed in the pre-1.0 B6 API trim —
+# no client/skill caller (the /podium skill uses /api/health + /api/stats).
 check "export session bundle" "/api/export/session/$SESSION_A" '.podium_export_version == "1.0"'
 
 # ---------------------------------------------------------------------------

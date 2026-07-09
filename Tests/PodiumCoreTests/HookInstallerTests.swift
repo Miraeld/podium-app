@@ -229,6 +229,43 @@ final class HookInstallerTests: XCTestCase {
         XCTAssertEqual(before, after)
     }
 
+    // MARK: - A7: atomic write + backup
+
+    func testInstallCreatesBackupOfPreviousSettingsAndWritesAtomically() throws {
+        let fixture = """
+        {
+          "otherSetting": "keep-me-in-backup"
+        }
+        """
+        let path = try writeFixture(fixture)
+        let previousContents = try Data(contentsOf: URL(fileURLWithPath: path))
+
+        let result = try HookInstaller.install(settingsPath: path, binaryPath: "/h/.claude/podium/podium-hook")
+        XCTAssertEqual(result.addedCount, HookInstaller.hookEvents.count)
+
+        // (a) settings.json.bak exists with the PREVIOUS content.
+        let backupPath = path + ".bak"
+        XCTAssertTrue(FileManager.default.fileExists(atPath: backupPath))
+        let backupContents = try Data(contentsOf: URL(fileURLWithPath: backupPath))
+        XCTAssertEqual(backupContents, previousContents)
+
+        // (b) the new settings.json has the expected new content — write
+        // succeeded and is not corrupted.
+        let settings = try readJSON(path)
+        XCTAssertEqual(settings["otherSetting"] as? String, "keep-me-in-backup")
+        let hooks = try XCTUnwrap(settings["hooks"] as? [String: Any])
+        for event in HookInstaller.hookEvents {
+            XCTAssertNotNil(hooks[event])
+        }
+
+        // A second install (upgrade) should refresh the backup to the
+        // *previous* (first-install) content, not overwrite it with itself.
+        let firstInstallContents = try Data(contentsOf: URL(fileURLWithPath: path))
+        _ = try HookInstaller.uninstall(settingsPath: path)
+        let backupAfterUninstall = try Data(contentsOf: URL(fileURLWithPath: backupPath))
+        XCTAssertEqual(backupAfterUninstall, firstInstallContents)
+    }
+
     // MARK: - installBinary
 
     func testInstallBinaryCopiesAndSetsExecutableBit() throws {
