@@ -1,9 +1,15 @@
 // EventsRouter — port of dashboard/server/routes/events.js.
 //
-// Endpoints: GET / (multi-dimensional filter + pagination) · GET /:id/full ·
-// GET /facets. SQL lives in PodiumStore+Filters.swift (`EventFilter`,
-// `listEventsFiltered`, `countEventsFiltered`, `getEventFull`,
-// `eventFacets`) — this file is HTTP mapping only.
+// Endpoints: GET / (multi-dimensional filter + pagination) · GET /facets.
+// SQL lives in PodiumStore+Filters.swift (`EventFilter`, `listEventsFiltered`,
+// `countEventsFiltered`, `eventFacets`) — this file is HTTP mapping only.
+//
+// B6 (pre-1.0 audit): `GET /:id/full` was removed — not referenced anywhere
+// in the vendored client source (no fetch of `/full` in src/**, confirmed
+// against both the compiled WebClient bundle and the client TypeScript
+// checkout). `PodiumStore.getEventFull` (the backing SQL) was left in place
+// since it's harmless, self-contained store surface, not HTTP-reachable
+// dead code.
 
 import Foundation
 import Hummingbird
@@ -18,7 +24,6 @@ public enum EventsRouterMount: RouterMount {
 
         group.get { req, ctx in try await list(req, ctx, context: context) }
         group.get("/facets") { req, ctx in try await facets(req, ctx, context: context) }
-        group.get("/:id/full") { req, ctx in try await full(req, ctx, context: context) }
     }
 
     // MARK: - GET /
@@ -47,70 +52,10 @@ public enum EventsRouterMount: RouterMount {
         return try JSONResponse(EventsResponse(events: events, total: total, limit: limit, offset: offset))
     }
 
-    // MARK: - GET /:id/full
-
-    /// events.js lines 104–125: single event by integer id, with `data`
-    /// left as the raw TEXT column value here — the Node handler attempts
-    /// `JSON.parse` and, if it succeeds, replaces `event.data` with the
-    /// *parsed object* (not the string) before responding. We replicate
-    /// that by re-encoding through `EventFullResponse`, which carries a
-    /// `JSONValue?` for `data` so a valid JSON string round-trips as a
-    /// structured object on the wire, exactly like Node's `res.json`.
-    private static func full(_ req: Request, _ ctx: ServerRequestContext, context: ServerContext) async throws -> JSONResponse {
-        let rawId = try ctx.parameters.require("id")
-        guard let id = Int(rawId) else {
-            return try JSONResponse(status: .badRequest, CodedErrorResponse(code: "INVALID_INPUT", message: "id must be an integer"))
-        }
-        guard let event = try context.store.getEventFull(id: id) else {
-            return try JSONResponse(status: .notFound, CodedErrorResponse(code: "NOT_FOUND", message: "Event not found"))
-        }
-
-        let parsedData: JSONValue?
-        if let raw = event.data, let rawBytes = raw.data(using: .utf8),
-           let parsed = try? PodiumJSON.decoder.decode(JSONValue.self, from: rawBytes) {
-            parsedData = parsed
-        } else if let raw = event.data {
-            parsedData = .string(raw)
-        } else {
-            parsedData = nil
-        }
-
-        let full = EventFullResponse.Event(
-            id: event.id ?? 0,
-            sessionId: event.sessionId,
-            agentId: event.agentId,
-            eventType: event.eventType,
-            toolName: event.toolName,
-            summary: event.summary,
-            data: parsedData,
-            createdAt: event.createdAt
-        )
-        return try JSONResponse(EventFullResponse(event: full))
-    }
-
     // MARK: - GET /facets
 
     private static func facets(_ req: Request, _ ctx: ServerRequestContext, context: ServerContext) async throws -> JSONResponse {
         let (eventTypes, toolNames) = try context.store.eventFacets()
         return try JSONResponse(EventFacets(eventTypes: eventTypes, toolNames: toolNames))
     }
-}
-
-/// `GET /api/events/:id/full` response — `data` is `JSONValue?` rather than
-/// `String?` (unlike the plain `DashboardEvent`/`EventFull` models) because
-/// Node's handler replaces the string column with its `JSON.parse`d form
-/// when parseable (events.js lines 116–123), so the wire shape genuinely
-/// differs from the list endpoint's `data: string | null`.
-private struct EventFullResponse: Encodable {
-    struct Event: Encodable {
-        let id: Int
-        let sessionId: String
-        let agentId: String?
-        let eventType: String
-        let toolName: String?
-        let summary: String?
-        let data: JSONValue?
-        let createdAt: String
-    }
-    let event: Event
 }
