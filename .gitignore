@@ -23,3 +23,4 @@ tauri/src-tauri/target*/
 # React client (N1 monorepo import) — source is tracked, build output isn't.
 client/node_modules/
 client/dist/
+client/tsconfig.tsbuildinfo
