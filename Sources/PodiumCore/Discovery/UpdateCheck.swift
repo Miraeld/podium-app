@@ -5,16 +5,20 @@
 // `{ update_available: false, current_sha: "podium-fork", latest_sha:
 // "podium-fork" }` (see the Node file's own header comment). The P4.3 task
 // spec explicitly asks us to adapt rather than port verbatim: check GitHub
-// releases of `wp-media/podium` (the reference repo this standalone app is
-// derived from) AND this app's own repo, returning a shape compatible with
+// releases of this app's own repo, returning a shape compatible with
 // the *real* (pre-fork) `UpdateStatusPayload` the vendored web client
 // still defines in client/src/lib/types.ts — `update_available`,
 // `current_sha`/`latest_sha` (repurposed here as version tags, since a
 // release-based check has no meaningful git SHA to compare), plus enough
 // extra fields for a UI to build a "Update available" banner. The vendored
-// build's `UpdateNotifier.tsx` component is currently a no-op consumer (the
-// Node fork disabled it) — a future macOS/web UI task can wire this real
-// endpoint up.
+// build's `UpdateNotifier.tsx` component reads this to build an
+// "Update available" toast.
+//
+// PRE-1.0 audit C2: this used to ALSO check `wp-media/podium` (the
+// plugin-era reference Node dashboard this app was originally forked from)
+// alongside the app's own repo. That half was dropped — this standalone
+// app releases only from its own repo now, and the reference-repo check was
+// leftover plugin-era intent with no product meaning post-fork.
 //
 // Network access is abstracted behind `GitHubReleaseTransport` (same
 // injectable-boundary pattern as `WebPushTransport`) so tests never make a
@@ -92,7 +96,7 @@ private struct GitHubReleaseAPIResponse: Decodable {
 }
 
 /// One repo's update status — mirrors the shape returned by
-/// `UpdateCheck.status` for `wp-media/podium` and this app's own repo.
+/// `UpdateCheck.status` for this app's own repo.
 public struct RepoUpdateStatus: Codable, Equatable, Sendable {
     public var repo: String
     public var checked: Bool
@@ -128,7 +132,7 @@ public struct RepoUpdateStatus: Codable, Equatable, Sendable {
 /// `GET /api/updates/status` / `POST /api/updates/check` response body.
 /// Field names chosen to stay a recognizable superset of the pre-fork
 /// `UpdateStatusPayload` (`update_available`, plus `current_sha`/
-/// `latest_sha` repurposed as version tags) while adding the two-repo
+/// `latest_sha` repurposed as version tags) while adding the app-repo
 /// breakdown the adapted GitHub-releases check needs.
 public struct UpdatesStatusResponse: Codable, Equatable, Sendable {
     /// types.ts `UpdateStatusPayload.git_repo` (required): whether the
@@ -138,27 +142,20 @@ public struct UpdatesStatusResponse: Codable, Equatable, Sendable {
     public var updateAvailable: Bool
     public var currentSha: String
     public var latestSha: String
-    public var podium: RepoUpdateStatus
     public var app: RepoUpdateStatus
     public var checkedAt: String
 
-    public init(gitRepo: Bool, updateAvailable: Bool, currentSha: String, latestSha: String, podium: RepoUpdateStatus, app: RepoUpdateStatus, checkedAt: String) {
+    public init(gitRepo: Bool, updateAvailable: Bool, currentSha: String, latestSha: String, app: RepoUpdateStatus, checkedAt: String) {
         self.gitRepo = gitRepo
         self.updateAvailable = updateAvailable
         self.currentSha = currentSha
         self.latestSha = latestSha
-        self.podium = podium
         self.app = app
         self.checkedAt = checkedAt
     }
 }
 
 public enum UpdateCheck {
-    /// `wp-media/podium` — the reference Node dashboard this standalone
-    /// Swift app is derived from.
-    public static let podiumOwner = "wp-media"
-    public static let podiumRepo = "podium"
-
     /// This app's own repo. Defaults to `"Miraeld/podium-app"` (the real
     /// GitHub remote this standalone app now ships releases from — see
     /// `.github/workflows/release.yml`, TASK 2.9a). Set
@@ -199,8 +196,6 @@ public enum UpdateCheck {
     /// "never blocks the caller" philosophy (its real implementation
     /// swallows git errors into `fetch_error` rather than rejecting).
     public static func status(transport: GitHubReleaseTransport = URLSessionGitHubReleaseTransport()) async -> UpdatesStatusResponse {
-        let podiumStatus = await checkRepo(owner: podiumOwner, repo: podiumRepo, currentVersion: nil, transport: transport)
-
         let appStatus: RepoUpdateStatus
         if let slug = appRepoSlug(), let sepIndex = slug.firstIndex(of: "/") {
             let owner = String(slug[slug.startIndex..<sepIndex])
@@ -216,10 +211,9 @@ public enum UpdateCheck {
 
         return UpdatesStatusResponse(
             gitRepo: runningFromGitCheckout(),
-            updateAvailable: podiumStatus.updateAvailable || appStatus.updateAvailable,
+            updateAvailable: appStatus.updateAvailable,
             currentSha: appStatus.currentVersion ?? "dev",
-            latestSha: appStatus.latestVersion ?? podiumStatus.latestVersion ?? "unknown",
-            podium: podiumStatus,
+            latestSha: appStatus.latestVersion ?? "unknown",
             app: appStatus,
             checkedAt: PodiumDate.now()
         )

@@ -25,7 +25,7 @@ changes and you need to refresh the vendored copy:
 # 1. Build the client from the reference (read-only) repo
 cd /Users/gaelrobin/Desktop/Work/Claude/podium/dashboard/client
 npm install
-npm run build          # runs `tsc -b && vite build`, outputs dist/
+PODIUM_APP_VERSION=<the release version, e.g. 0.5.3> npm run build   # runs `tsc -b && vite build`, outputs dist/
 
 # 2. Copy the built assets into this repo (replace, don't merge)
 rm -rf /Users/gaelrobin/Desktop/PodiumSwiftApp/WebClient/dist
@@ -37,6 +37,14 @@ cd /Users/gaelrobin/Desktop/PodiumSwiftApp
 swift build --product podium-server
 # then boot the server and hit http://localhost:<port>/ to sanity check
 ```
+
+**`PODIUM_APP_VERSION` is mandatory for `npm run build`.** PRE-1.0 audit D1:
+`vite.config.ts` used to silently fall back to the legacy
+`.claude-plugin/plugin.json` version when the env var was unset — this
+shipped a stale sidebar version (`v1.4.0`) TWICE. There is no fallback
+anymore: `npm run build` without `PODIUM_APP_VERSION` set now throws and
+fails the build outright. Always set it explicitly to the version you're
+releasing before building/re-vendoring.
 
 If `dist/` doesn't exist yet or is stale (i.e. files under `src/` are newer
 than `dist/index.html`), you MUST run `npm install && npm run build` first —

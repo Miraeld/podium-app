@@ -1,15 +1,16 @@
 // UpdatesRouter — port of dashboard/server/routes/updates.js, adapted per
 // the P4.3 task spec: the Node original's `getUpdatesStatus()` is a stub
 // (Podium-inside-Maestro has no standalone upstream to check — see
-// update-check.js's header). This standalone app has two real repos worth
-// checking instead: `wp-media/podium` (the reference dashboard this app
-// is derived from) and the app's own repo (once it has a GitHub remote —
+// update-check.js's header). This standalone app has one real repo worth
+// checking instead: the app's own repo (once it has a GitHub remote —
 // see `PodiumCore/Discovery/UpdateCheck.swift`'s `appRepoSlug()` doc for
-// the `PODIUM_APP_GITHUB_REPO` env var). The response shape
+// the `PODIUM_APP_GITHUB_REPO` env var). PRE-1.0 audit C2 dropped the
+// former `wp-media/podium` reference-repo half — plugin-era leftover with
+// no meaning for a standalone app. The response shape
 // (`UpdatesStatusResponse`) is a superset-compatible extension of the
 // pre-fork `UpdateStatusPayload` client/src/lib/types.ts still declares —
 // `update_available`/`current_sha`/`latest_sha` are the fields
-// `UpdateNotifier.tsx` would read if it were re-enabled.
+// `UpdateNotifier.tsx` reads.
 //
 // GET /api/updates/status  — read-only status check.
 // POST /api/updates/check  — same check, but also broadcasts

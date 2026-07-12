@@ -15,19 +15,8 @@ final class UpdateCheckTests: XCTestCase {
     func testStatusReportsNoUpdateWhenReleaseUnreachable() async {
         let transport = FakeTransport(releases: [:])
         let status = await UpdateCheck.status(transport: transport)
-        XCTAssertFalse(status.podium.checked)
-        XCTAssertFalse(status.podium.updateAvailable)
-        XCTAssertNotNil(status.podium.error)
+        XCTAssertFalse(status.app.checked || status.app.updateAvailable)
         XCTAssertFalse(status.updateAvailable)
-    }
-
-    func testStatusReportsPodiumReleaseWhenReachable() async {
-        let release = GitHubRelease(tagName: "v2.0.0", htmlUrl: "https://example.com/release", publishedAt: "2026-01-01T00:00:00Z", prerelease: false)
-        let transport = FakeTransport(releases: ["wp-media/podium": release])
-        let status = await UpdateCheck.status(transport: transport)
-        XCTAssertTrue(status.podium.checked)
-        XCTAssertEqual(status.podium.latestVersion, "v2.0.0")
-        XCTAssertEqual(status.podium.releaseUrl, "https://example.com/release")
     }
 
     func testAppRepoSlugDefaultsToMiraeldPodiumAppWithoutEnvVar() {

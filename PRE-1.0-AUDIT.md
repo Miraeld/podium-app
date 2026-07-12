@@ -69,8 +69,11 @@
 
 - **C1 🟡 macOS notarization** ($99/yr Apple Developer ID) vs the xattr dance.
   Biggest install-time trust signal; Gaël's call.
-- **C2 🟡 Drop the `wp-media/podium` half of the update check?** Standalone app
-  releases from its own repo; the reference-repo check is plugin-era intent.
+- **C2 ✅ DONE: Dropped the `wp-media/podium` half of the update check.**
+  Standalone app releases from its own repo only now — `RepoUpdateStatus`'s
+  `podium` field, `podiumOwner`/`podiumRepo`, and the extra `checkRepo` call
+  are gone from `UpdateCheck.swift`; `updateAvailable` reflects the app repo
+  alone. Client (`UpdateNotifier.tsx`, `lib/types.ts`) updated to match.
 - **C3 🟡 Nav clutter**: Dashboard / Sessions / Activity / Search overlap for a
   new user. Product judgment, not a bug.
 - **C4 🟡 "session shows error" label** (transient APIError → `error` status) —
@@ -92,16 +95,37 @@ calls; graceful shutdown cleans the discovery file.
 
 **New findings → D-list (fix at/before 1.0.0 tag):**
 
-- **D1: sidebar version = `v1.4.0` AGAIN.** The last dist re-vendor was built
-  without `PODIUM_APP_VERSION` → Vite fell back to plugin.json (1.4.0). The
-  1.0.0 rebuild MUST set it — and remove the plugin.json fallback in
-  `vite.config.ts` (fail the build instead: this bug shipped twice).
-- **D2: tab title "Podium — Maestro Observer"** (client `index.html`) —
-  internal codename in every window title / tab. → "Podium".
-- **D3: About panel labels runtime "NODE.JS: swift-5.10"** → rename label
-  (e.g. RUNTIME). Cosmetic but silly.
-- **D4: Settings About "UPTIME 0m" after ~5 min up** — counter looks broken;
-  check /api/settings/info uptime plumbing.
+- **D1 ✅ DONE: sidebar version = `v1.4.0` AGAIN.** Root cause: the last dist
+  re-vendor was built without `PODIUM_APP_VERSION` → Vite silently fell back
+  to the legacy `.claude-plugin/plugin.json` version (1.4.0). Fixed:
+  `vite.config.ts`'s plugin.json fallback is gone — `npm run build` without
+  `PODIUM_APP_VERSION` set now throws and fails the build outright (verified:
+  unset → build fails; `PODIUM_APP_VERSION=0.5.3` → build succeeds, version
+  present in the bundle). `npm run dev` still works unset (uses a "dev" tag).
+  `WebClient/SYNC.md` updated to state the env var is mandatory. Re-vendored
+  dist with `PODIUM_APP_VERSION=0.5.3`.
+- **D2 ✅ DONE: tab title "Podium — Maestro Observer"** (client
+  `index.html`) → "Podium" (`<title>`, `og:title`, `twitter:title`). Grepped
+  client `src/` + `index.html` for "Maestro Observer" — 0 remaining matches,
+  confirmed 0 in the re-vendored `WebClient/dist`.
+- **D3 ✅ DONE: About panel labeled runtime "NODE.JS: swift-5.10".** Renamed
+  the i18n label (`settings.json` `about.nodejs` key, all 3 locales:
+  en → "Runtime", zh → "运行时", vi → "Thời gian chạy") — the wire field
+  (`server.node_version`) is untouched, contract preserved.
+- **D4 ✅ INVESTIGATED, no bug found: Settings About "UPTIME 0m" after ~5 min
+  up.** Traced the whole plumbing: `ServerRuntimeInfo.uptimeSeconds`
+  (`Sources/PodiumCore/Diagnostics/ServerRuntimeInfo.swift`) is a lazily-
+  captured `static let processStartDate = Date()` plus
+  `max(0, Date().timeIntervalSince(processStartDate))` — correct and
+  monotonic. Verified live: booted `podium-server`, polled `/api/settings/info`
+  twice 6s apart, `server.uptime` went `0 → 6.02` as expected. Client
+  (`Settings.tsx`) polls `/api/settings/info` every 10s plus on WS session/
+  agent events, and `formatUptime()` (`Math.floor` on d/h/m) is correct.
+  Conclusion: the "0m" the audit observed was almost certainly a **stale
+  vendored dist** artifact (same root cause class as D1) — the fix is the
+  D1 rebuild/re-vendor already done above, not a code change. No server or
+  client logic change was needed for D4; left `UpdateCheckTests`-style
+  coverage as-is since the existing behavior was already correct.
 - **D5 (minor, post-1.0 ok): session table rows are click-divs, not links** —
   no middle-click/keyboard/a11y affordance. Also my first coordinate click
   missed silently.
