@@ -69,7 +69,7 @@
 
 - **C1 🟡 macOS notarization** ($99/yr Apple Developer ID) vs the xattr dance.
   Biggest install-time trust signal; Gaël's call.
-- **C2 ✅ DONE: Dropped the `wp-media/podium` half of the update check.**
+- **C2 ✅ DONE (`a245fdc`): Dropped the `wp-media/podium` half of the update check.**
   Standalone app releases from its own repo only now — `RepoUpdateStatus`'s
   `podium` field, `podiumOwner`/`podiumRepo`, and the extra `checkRepo` call
   are gone from `UpdateCheck.swift`; `updateAvailable` reflects the app repo
@@ -95,7 +95,7 @@ calls; graceful shutdown cleans the discovery file.
 
 **New findings → D-list (fix at/before 1.0.0 tag):**
 
-- **D1 ✅ DONE: sidebar version = `v1.4.0` AGAIN.** Root cause: the last dist
+- **D1 ✅ DONE (`a245fdc`): sidebar version = `v1.4.0` AGAIN.** Root cause: the last dist
   re-vendor was built without `PODIUM_APP_VERSION` → Vite silently fell back
   to the legacy `.claude-plugin/plugin.json` version (1.4.0). Fixed:
   `vite.config.ts`'s plugin.json fallback is gone — `npm run build` without
@@ -104,15 +104,15 @@ calls; graceful shutdown cleans the discovery file.
   present in the bundle). `npm run dev` still works unset (uses a "dev" tag).
   `WebClient/SYNC.md` updated to state the env var is mandatory. Re-vendored
   dist with `PODIUM_APP_VERSION=0.5.3`.
-- **D2 ✅ DONE: tab title "Podium — Maestro Observer"** (client
+- **D2 ✅ DONE (`a245fdc`): tab title "Podium — Maestro Observer"** (client
   `index.html`) → "Podium" (`<title>`, `og:title`, `twitter:title`). Grepped
   client `src/` + `index.html` for "Maestro Observer" — 0 remaining matches,
   confirmed 0 in the re-vendored `WebClient/dist`.
-- **D3 ✅ DONE: About panel labeled runtime "NODE.JS: swift-5.10".** Renamed
+- **D3 ✅ DONE (`a245fdc`): About panel labeled runtime "NODE.JS: swift-5.10".** Renamed
   the i18n label (`settings.json` `about.nodejs` key, all 3 locales:
   en → "Runtime", zh → "运行时", vi → "Thời gian chạy") — the wire field
   (`server.node_version`) is untouched, contract preserved.
-- **D4 ✅ INVESTIGATED, no bug found: Settings About "UPTIME 0m" after ~5 min
+- **D4 ✅ INVESTIGATED (`a245fdc`), no bug found: Settings About "UPTIME 0m" after ~5 min
   up.** Traced the whole plumbing: `ServerRuntimeInfo.uptimeSeconds`
   (`Sources/PodiumCore/Diagnostics/ServerRuntimeInfo.swift`) is a lazily-
   captured `static let processStartDate = Date()` plus
