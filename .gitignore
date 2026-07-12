@@ -24,3 +24,6 @@ tauri/src-tauri/target*/
 client/node_modules/
 client/dist/
 client/tsconfig.tsbuildinfo
+
+# Node server (N2 vendor import) — source + lockfile tracked, deps aren't.
+server/node_modules/
