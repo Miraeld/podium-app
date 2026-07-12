@@ -79,8 +79,29 @@
   repo split / de-vendor, Windows, HookInstaller legacy-marker retirement.
 - **C6: `Package.resolved` local diff** — verify intentional before tag.
 
-## Needs the live browser pass (P6.2a, before tag)
+## Live browser pass (P6.2a) — DONE 2026-07-12 ✅
 
-Fresh-install walk (what does a no-data, no-hooks user actually see);
-archive-upload repro (A3); long-rescan spinner timing (B4); Workflows page
-with zero sessions (B5); both themes screenshot pass.
+Fresh instance walked (temp data dir, port 4899, new dist): Dashboard,
+Sessions + detail (live), Workflows, CC Config, Import, Settings, Search,
+Activity; light + dark themes; **zero console errors**. Verified working:
+first-boot auto-import of `~/.claude/projects` (167→347 sessions, searchable);
+onboarding tour fires on fresh profile; A3 guide copy live ("not a zip or
+tar archive"); hooks panel green; semver update check ("dev" → no prompt,
+correct latest); session detail live-follows with error-highlighted tool
+calls; graceful shutdown cleans the discovery file.
+
+**New findings → D-list (fix at/before 1.0.0 tag):**
+
+- **D1: sidebar version = `v1.4.0` AGAIN.** The last dist re-vendor was built
+  without `PODIUM_APP_VERSION` → Vite fell back to plugin.json (1.4.0). The
+  1.0.0 rebuild MUST set it — and remove the plugin.json fallback in
+  `vite.config.ts` (fail the build instead: this bug shipped twice).
+- **D2: tab title "Podium — Maestro Observer"** (client `index.html`) —
+  internal codename in every window title / tab. → "Podium".
+- **D3: About panel labels runtime "NODE.JS: swift-5.10"** → rename label
+  (e.g. RUNTIME). Cosmetic but silly.
+- **D4: Settings About "UPTIME 0m" after ~5 min up** — counter looks broken;
+  check /api/settings/info uptime plumbing.
+- **D5 (minor, post-1.0 ok): session table rows are click-divs, not links** —
+  no middle-click/keyboard/a11y affordance. Also my first coordinate click
+  missed silently.
