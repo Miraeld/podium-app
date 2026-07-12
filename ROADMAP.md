@@ -107,7 +107,11 @@ podium-app/                       # this repo (rename from PodiumSwiftApp = N7)
   scaffolding recommended for removal. See docs/N2-GAP.md.
 - **N3 🔄 IN FLIGHT** (single agent — gap is small): 6 endpoint fixes +
   P1–P7 invariant port.
-- N4–N8: not started.
+- **N5-B (hook client) + P10 (LICENSE/attribution) 🔄 CLAIMED by a second
+  session** (2026-07-12, Gaël's other account). Scope fence: ONLY `hook/`
+  (new dir), root `LICENSE`, `README.md` attribution section. Must NOT touch
+  `server/` (N3 owns it), `client/`, `tauri/`, or this file's other entries.
+- N4, N5-A, N6–N8: not started.
 
 ## N1 — Import the front-end source (monorepo begins)
 
