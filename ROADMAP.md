@@ -111,7 +111,17 @@ podium-app/                       # this repo (rename from PodiumSwiftApp = N7)
   session** (2026-07-12, Gaël's other account). Scope fence: ONLY `hook/`
   (new dir), root `LICENSE`, `README.md` attribution section. Must NOT touch
   `server/` (N3 owns it), `client/`, `tauri/`, or this file's other entries.
-- N4, N5-A, N6–N8: not started.
+- **N5-A SPIKE ✅ DONE** (2026-07-12, scratchpad-only, no repo changes):
+  `bun build --compile` works on `server/` — 61MB arm64 single-file binary,
+  boots green, hooks event lands, swagger/redoc served. TWO patches needed:
+  (1) NEW `server/compat-bunsqlite.js` (bun:sqlite adapter w/ `.pragma()`
+  shim) + a middle try in `db.js` (better-sqlite3 → bun:sqlite → node:sqlite)
+  — bun 1.3.x has NO node:sqlite, and better-sqlite3 won't build on Node 26
+  arm64 at all, so bun:sqlite is effectively PRIMARY, not fallback;
+  (2) `lib/redoc.js` require.resolve made dynamic (redoc UMD breaks bun's
+  bundler). Full diffs + evidence: scratchpad `N5A-SPIKE-FINDINGS.md`
+  (copy diffs into the N5-A task when dispatched — scratchpad is ephemeral).
+- N4, N5-A (implementation), N6–N8: not started.
 
 ## N1 — Import the front-end source (monorepo begins)
 
