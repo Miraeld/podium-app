@@ -1,0 +1,23 @@
+{
+  "popup": {
+    "title": "Có bản cập nhật mới",
+    "lead": "Podium {{version}} đã sẵn sàng. Có gì mới:",
+    "noNotes": "Không có ghi chú phát hành cho phiên bản này.",
+    "update": "Cập nhật",
+    "dismiss": "Bỏ qua"
+  },
+  "panel": {
+    "title": "Cập nhật",
+    "description": "Phiên bản hiện tại, phiên bản mới nhất và những gì đã thay đổi.",
+    "current": "Phiên bản hiện tại",
+    "latest": "Phiên bản mới nhất",
+    "upToDate": "Bạn đang dùng phiên bản mới nhất.",
+    "available": "Có bản cập nhật",
+    "checkNow": "Kiểm tra ngay",
+    "checking": "Đang kiểm tra…",
+    "checkError": "Không thể kiểm tra cập nhật.",
+    "viewRelease": "Xem bản phát hành",
+    "noNotes": "Không có ghi chú phát hành.",
+    "lastChecked": "Kiểm tra lần cuối {{time}}"
+  }
+}

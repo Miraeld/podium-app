@@ -1,0 +1,36 @@
+{
+  "steps": {
+    "sessions": {
+      "title": "Mọi phiên làm việc, theo thời gian thực",
+      "description": "Các phiên Claude Code của bạn xuất hiện ở đây ngay khi bắt đầu. Thử ngay: mở Phiên làm việc và chọn một phiên để xem diễn biến trực tiếp."
+    },
+    "workflows": {
+      "title": "Xem toàn bộ cây agent",
+      "description": "Agent chính, subagent, bàn giao tác vụ — tất cả được ánh xạ thành một luồng công việc. Thử ngay: mở Luồng công việc và theo dõi một làn bơi từ đầu đến cuối."
+    },
+    "run": {
+      "title": "Khởi chạy một phiên mà không cần rời Podium",
+      "description": "Khởi động một phiên Claude Code ngay từ dashboard, không cần chuyển sang terminal. Thử ngay: nhấn Chạy Claude để khởi động một phiên."
+    },
+    "ccConfig": {
+      "title": "Cấu hình Claude của bạn, được ánh xạ đầy đủ",
+      "description": "Agent, hook, máy chủ MCP, quyền hạn — mọi thứ Claude Code tải đều ở một nơi. Thử ngay: mở Cấu hình Claude để xem những gì đã được kết nối."
+    },
+    "settings": {
+      "title": "Tùy chỉnh theo cách bạn làm việc",
+      "description": "Thông báo, giá, hook, dữ liệu — mọi tùy chọn đều ở đây. Thử ngay: mở Cài đặt và bật thông báo để không bao giờ bỏ lỡ một phiên thất bại."
+    }
+  },
+  "controls": {
+    "next": "Tiếp theo",
+    "previous": "Quay lại",
+    "done": "Bắt đầu thôi",
+    "skip": "Bỏ qua hướng dẫn",
+    "progress": "{{current}} / {{total}}"
+  },
+  "settingsEntry": {
+    "title": "Hướng dẫn khởi đầu",
+    "description": "Xem lại hướng dẫn về các phần chính của Podium.",
+    "button": "Xem lại hướng dẫn"
+  }
+}

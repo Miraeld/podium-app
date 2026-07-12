@@ -1,0 +1,466 @@
+/**
+ * @file index.css
+ * @description Aurora Glass design system — frosted glass cards, drifting gradient orbs,
+ *   gold signal pulses on live agents. WP Media gold #FED23A on deep navy #0A0C14.
+ * @author WP Media
+ */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── macOS native font stack ───────────────────────────────
+   SF Pro Display/Text are macOS system fonts; fall back to -apple-system
+   for maximum compatibility. Inter as a web fallback for other platforms.
+   ─────────────────────────────────────────────────────────── */
+@supports (font: -apple-system-body) {
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", system-ui, sans-serif;
+  }
+}
+
+/* ── Theme tokens ──────────────────────────────────────────
+ * Space-separated RGB channels so Tailwind's opacity modifiers work.
+ * ──────────────────────────────────────────────────────── */
+
+/* ── Light theme (default) ─────────────────────────────── */
+:root {
+  /* Page canvas */
+  --surface-0: 242 243 248;
+  --surface-1: 252 252 255;
+  --surface-2: 255 255 255;
+  --surface-3: 244 244 250;
+  --surface-4: 236 236 244;
+  --surface-5: 226 226 236;
+
+  --border: 220 220 232;
+  --border-light: 232 232 242;
+
+  --text-primary: 14 16 26;
+  --text-muted: 90 94 114;
+  --text-dim: 138 142 162;
+
+  --accent: 254 210 58;
+  --accent-hover: 224 187 43;
+  --accent-muted: rgba(254, 210, 58, 0.12);
+
+  /* Glass surfaces — semi-transparent for backdrop-filter to show orbs */
+  --glass-card: rgba(255, 255, 255, 0.68);
+  --glass-sidebar: rgba(248, 249, 255, 0.82);
+  --glass-border: rgba(0, 0, 0, 0.065);
+  --glass-border-hover: rgba(37, 99, 235, 0.40);
+
+  /* Aurora orbs — WP Media blue palette in light mode */
+  --orb-gold:  rgba(99, 102, 241, 0.29);
+  --orb-indigo: rgba(254, 210, 58, 0.32);
+  --orb-amber: rgba(251, 146, 60, 0.2);
+  /* Shadows */
+  --card-shadow: 0 1px 4px rgba(0, 0, 0, 0.05), 0 4px 16px rgba(0, 0, 0, 0.04);
+  --card-shadow-hover: 0 8px 32px rgba(0, 0, 0, 0.10), 0 2px 8px rgba(0, 0, 0, 0.06);
+  --gold-glow: 0 0 0 1px rgba(254, 210, 58, 0.35), 0 4px 20px rgba(254, 210, 58, 0.18);
+  --gold-glow-strong: 0 0 0 1.5px rgba(254, 210, 58, 0.50), 0 6px 28px rgba(254, 210, 58, 0.25);
+
+  /* Card top accent line — WP Media navy in light mode */
+  --card-top-line: linear-gradient(90deg, transparent 5%, rgba(10, 12, 20, 0.18) 30%, rgba(10, 12, 20, 0.18) 70%, transparent 95%);
+
+  /* Active card glow — navy in light mode */
+  --sweep-color-mid: rgba(37, 99, 235, 0.30);
+  --sweep-color-bright: rgba(37, 99, 235, 0.55);
+
+  /* Sidebar logo glow — strong blue in light mode */
+  --logo-shadow: 0 0 20px 4px rgba(37, 99, 235, 0.55), 0 2px 8px rgba(0, 0, 0, 0.18);
+}
+
+/* ── Dark theme — deep navy, gold pops ─────────────────── */
+.dark {
+  --surface-0: 10 12 20;
+  --surface-1: 13 16 26;
+  --surface-2: 17 20 32;
+  --surface-3: 24 28 44;
+  --surface-4: 32 37 56;
+  --surface-5: 42 48 70;
+
+  --border: 34 39 58;
+  --border-light: 48 54 76;
+
+  --text-primary: 238 240 250;
+  --text-muted: 148 154 178;
+  --text-dim: 90 98 124;
+
+  --accent: 254 210 58;
+  --accent-hover: 255 223 90;
+  --accent-muted: rgba(254, 210, 58, 0.12);
+
+  /* Glass surfaces — dark semi-transparent for the aurora to bleed through */
+  --glass-card: rgba(17, 20, 34, 0.55);
+  --glass-sidebar: rgba(12, 15, 24, 0.80);
+  --glass-border: rgba(255, 255, 255, 0.055);
+  --glass-border-hover: rgba(254, 210, 58, 0.40);
+
+  /* Aurora orbs — cinematic in dark mode */
+  --orb-gold: rgba(254, 210, 58, 0.32);
+  --orb-indigo: rgba(99, 102, 241, 0.29);
+  --orb-amber: rgba(251, 146, 60, 0.2);
+
+  /* Shadows */
+  --card-shadow: 0 2px 8px rgba(0, 0, 0, 0.32), 0 1px 2px rgba(0, 0, 0, 0.20);
+  --card-shadow-hover: 0 8px 32px rgba(0, 0, 0, 0.50), 0 2px 8px rgba(0, 0, 0, 0.30);
+  --gold-glow: 0 0 0 1px rgba(254, 210, 58, 0.35), 0 4px 20px rgba(254, 210, 58, 0.20);
+  --gold-glow-strong: 0 0 0 1.5px rgba(254, 210, 58, 0.55), 0 8px 32px rgba(254, 210, 58, 0.28);
+
+  /* Card top accent line — gold in dark mode */
+  --card-top-line: linear-gradient(90deg, transparent 5%, rgba(254, 210, 58, 0.55) 30%, rgba(254, 210, 58, 0.55) 70%, transparent 95%);
+
+  /* Active card glow — gold in dark mode */
+  --sweep-color-mid: rgba(254, 210, 58, 0.38);
+  --sweep-color-bright: rgba(254, 210, 58, 0.75);
+
+  /* Sidebar logo glow — strong gold in dark mode */
+  --logo-shadow: 0 0 20px 4px rgba(201, 162, 39, 0.60), 0 2px 8px rgba(0, 0, 0, 0.40);
+}
+
+/* ── Base ───────────────────────────────────────────────── */
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", 'Inter', 'Segoe UI', sans-serif;
+  color: rgb(var(--text-primary));
+  background-color: rgb(var(--surface-0));
+  background-image: linear-gradient(
+    155deg,
+    rgba(37, 99, 235, 0.05) 0%,
+    transparent 38%,
+    rgba(99, 102, 241, 0.04) 100%
+  );
+  background-attachment: fixed;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  letter-spacing: -0.01em;
+  line-height: 1.5;
+}
+
+.dark body {
+  background-image: linear-gradient(
+    155deg,
+    rgba(254, 210, 58, 0.05) 0%,
+    transparent 40%,
+    rgba(99, 102, 241, 0.04) 100%
+  );
+}
+
+@layer base {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(var(--border-light)) transparent;
+  }
+  *::-webkit-scrollbar { width: 6px; height: 6px; }
+  *::-webkit-scrollbar-track { background: transparent; }
+  *::-webkit-scrollbar-thumb {
+    background: rgb(var(--border-light));
+    border-radius: 3px;
+  }
+  *::-webkit-scrollbar-thumb:hover { background: rgb(var(--text-dim)); }
+
+  ::selection {
+    background: rgba(254, 210, 58, 0.28);
+    color: rgb(var(--text-primary));
+  }
+
+  ::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+    opacity: 0.7;
+    transition: opacity 0.2s;
+  }
+  .dark ::-webkit-calendar-picker-indicator { filter: invert(1) brightness(0.8); }
+  ::-webkit-calendar-picker-indicator:hover { opacity: 1; }
+  .time-input-custom::-webkit-calendar-picker-indicator {
+    display: none;
+    -webkit-appearance: none;
+  }
+}
+
+/* ── Aurora Orb Animations ─────────────────────────────── */
+@keyframes orb-float-1 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  25%       { transform: translate(50px, -35px) scale(1.08); }
+  50%       { transform: translate(20px, 60px) scale(0.96); }
+  75%       { transform: translate(-40px, 20px) scale(1.04); }
+}
+
+@keyframes orb-float-2 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  30%       { transform: translate(-55px, 40px) scale(1.06); }
+  60%       { transform: translate(35px, -50px) scale(0.93); }
+  80%       { transform: translate(-20px, -25px) scale(1.02); }
+}
+
+@keyframes orb-float-3 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  20%       { transform: translate(40px, 55px) scale(1.10); }
+  55%       { transform: translate(-50px, -30px) scale(0.95); }
+  80%       { transform: translate(25px, 15px) scale(1.03); }
+}
+
+/* ── Active card glow — border breathes with a soft glow pulse ─────────── */
+@keyframes card-glow-breathe {
+  0%, 100% {
+    border-color: var(--sweep-color-mid);
+    box-shadow: var(--card-shadow), 0 0 8px -4px var(--sweep-color-mid);
+  }
+  50% {
+    border-color: var(--sweep-color-bright);
+    box-shadow: var(--card-shadow), 0 0 18px -4px var(--sweep-color-bright);
+  }
+}
+
+/* ── Gold dot pulse for active indicators ── */
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.5; transform: scale(0.85); }
+}
+.animate-pulse-dot { animation: pulse-dot 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+
+/* ── Sidebar logo badge ─────────────────────────────────── */
+.logo-badge {
+  background: #0D0F1A;
+  box-shadow: var(--logo-shadow);
+}
+
+/* ── Card ───────────────────────────────────────────────── */
+@layer components {
+  /* Base glass card — increased padding for native macOS spacing */
+  .card {
+    position: relative;
+    background: var(--glass-card);
+    backdrop-filter: blur(18px) saturate(160%);
+    -webkit-backdrop-filter: blur(18px) saturate(160%);
+    border-radius: 0.875rem;
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--card-shadow);
+    transition: box-shadow 0.25s ease, transform 0.25s ease, border-color 0.25s ease;
+    padding: 1.125rem;
+  }
+
+  /* Top accent line — WP navy in light / gold in dark */
+  .card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: var(--card-top-line);
+    pointer-events: none;
+  }
+
+  /* Hoverable card */
+  .card-hover {
+    @apply card cursor-pointer;
+  }
+  .card-hover:hover {
+    box-shadow: var(--card-shadow-hover);
+    border-color: var(--glass-border-hover);
+    transform: translateY(-2px);
+  }
+  .card-hover:active {
+    transform: translateY(0);
+    box-shadow: var(--card-shadow);
+  }
+
+  /* Active card — breathing glow pulse on the border */
+  .card-active {
+    animation: card-glow-breathe 4.5s ease-in-out infinite;
+  }
+
+  /* Waiting agent card — amber tint */
+  .card-waiting {
+    border-left: 2px solid rgba(251, 146, 60, 0.65);
+  }
+
+  /* ── Sidebar glass ── */
+  .sidebar-glass {
+    background: var(--glass-sidebar);
+    backdrop-filter: blur(28px) saturate(180%);
+    -webkit-backdrop-filter: blur(28px) saturate(180%);
+    border: 1px solid var(--glass-border);
+    /* Navy right-edge shadow in light mode — makes sidebar pop */
+    box-shadow: 4px 0 24px rgba(10, 12, 20, 0.12), 1px 0 0 rgba(10, 12, 20, 0.06);
+  }
+
+  .dark .sidebar-glass {
+    box-shadow: 4px 0 28px -2px rgba(254, 210, 58, 0.16), 1px 0 0 rgba(254, 210, 58, 0.10);
+  }
+
+  /* ── Logo badge — shadow/glow comes from the --logo-shadow token ── */
+  .logo-badge {
+    background: #0D0F1A;
+    box-shadow: var(--logo-shadow);
+  }
+
+  /* ── Buttons — increased padding for native macOS feel ── */
+  .btn-primary {
+    @apply inline-flex items-center gap-2 px-5 py-2.5 text-gray-900 text-sm font-semibold rounded-lg transition-all duration-150;
+    background: rgb(var(--accent));
+  }
+  .btn-primary:hover {
+    background: rgb(var(--accent-hover));
+    box-shadow: var(--gold-glow);
+    transform: translateY(-1px);
+  }
+  .btn-primary:active {
+    transform: translateY(0);
+    box-shadow: none;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-surface-3 rounded-lg transition-all duration-150;
+  }
+
+  .badge {
+    @apply inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-full whitespace-nowrap shrink-0;
+    border: 1px solid transparent;
+  }
+
+  .input {
+    @apply rounded-lg px-3.5 py-2.5 text-sm text-gray-800 dark:text-white placeholder-gray-400 dark:placeholder-gray-400 focus:outline-none transition-colors;
+    background: var(--glass-card);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--glass-border);
+  }
+  .input:focus {
+    border-color: rgba(254, 210, 58, 0.55);
+    box-shadow: 0 0 0 3px rgba(254, 210, 58, 0.12);
+  }
+
+  /* Page header — glass panel with native macOS spacing */
+  .page-header {
+    background: var(--glass-card);
+    backdrop-filter: blur(20px) saturate(160%);
+    -webkit-backdrop-filter: blur(20px) saturate(160%);
+    border: 1px solid var(--glass-border);
+    border-radius: 0.875rem;
+    box-shadow: 0px 7px 28px -2px rgba(254, 210, 58, 0.16), 0px 0px 0 rgba(254, 210, 58, 0.10);
+    padding: 1.5rem 1.875rem;
+  }
+
+  /* Section label */
+  .section-label {
+    @apply text-[10px] font-bold uppercase tracking-widest text-gray-500 dark:text-gray-600;
+  }
+
+  /* ── Sidebar nav ── */
+  .neu-nav {
+    border: 1px solid transparent;
+    transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease;
+  }
+  .neu-nav:hover {
+    background-color: rgba(255, 255, 255, 0.06);
+  }
+  .dark .neu-nav:hover {
+    background-color: rgba(255, 255, 255, 0.04);
+  }
+  /* Light mode: navy text on gold tint — readable contrast */
+  .neu-nav.is-active {
+    background-color: rgba(254, 210, 58, 0.15);
+    border-color: rgba(254, 210, 58, 0.45);
+    color: rgb(10, 12, 20);
+    font-weight: 600;
+    box-shadow: 0 0 14px -4px rgba(254, 210, 58, 0.20);
+  }
+  /* Dark mode: gold text on gold tint — the cinematic look */
+  .dark .neu-nav.is-active {
+    color: rgb(var(--accent));
+    box-shadow: 0 0 16px -4px rgba(254, 210, 58, 0.30);
+  }
+
+  /* Flat interactive button */
+  .neu-btn {
+    border: 1px solid var(--glass-border);
+    border-radius: 0.5rem;
+    background: var(--glass-card);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    transition: box-shadow 0.18s ease, color 0.15s ease, background-color 0.15s ease,
+      border-color 0.15s ease, transform 0.18s ease;
+  }
+  .neu-btn:hover {
+    border-color: rgba(254, 210, 58, 0.35);
+    box-shadow: var(--gold-glow);
+    transform: translateY(-1px);
+  }
+  .neu-btn:active {
+    transform: translateY(0);
+    box-shadow: none;
+  }
+}
+
+/* ── Native app feel ───────────────────────────────────────
+ * UI chrome (nav, sidebar, buttons, tabs, card headers) reads like app
+ * controls, not selectable web text — no text cursor, no drag-select.
+ * Explicitly excluded: inputs/textareas/contenteditable, and content that
+ * should stay copyable (code blocks, transcript/message text, logs, ids).
+ * ──────────────────────────────────────────────────────── */
+nav,
+aside,
+.neu-nav,
+.neu-btn,
+.btn-primary,
+.btn-secondary,
+button,
+[role="tab"],
+[role="tablist"],
+.card > h3,
+.card-header {
+  -webkit-user-select: none;
+  user-select: none;
+  cursor: default;
+}
+
+/* Actionable controls keep a pointer cursor even though selection stays off. */
+button:not(:disabled),
+[role="tab"],
+a[href] {
+  cursor: pointer;
+}
+
+/* Copyable content opts back in to normal text selection/cursor. */
+pre,
+code,
+kbd,
+.selectable,
+input,
+textarea,
+[contenteditable="true"],
+[contenteditable=""] {
+  -webkit-user-select: text;
+  user-select: text;
+  cursor: auto;
+}
+
+/* ── Reduced motion ────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .aurora-orb,
+  .card-active {
+    animation: none !important;
+  }
+  .card-active {
+    border-color: var(--sweep-color-mid) !important;
+    box-shadow: var(--card-shadow), 0 0 14px -3px var(--sweep-color-mid) !important;
+  }
+}
+
+/* ── macOS titlebar safe area for Tauri overlay titlebar ─ */
+@supports (padding: max(0px)) {
+  html {
+    padding-top: max(0px, env(safe-area-inset-top, 0px));
+  }
+}
+
+/* Ensure main content respects titlebar drag area on macOS */
+@media (platform: macos) {
+  main, [data-tauri-drag-region] {
+    /* Allows Tauri titlebar to be draggable while content flows normally */
+    -webkit-app-region: no-drag;
+  }
+}

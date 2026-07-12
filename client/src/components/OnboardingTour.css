@@ -1,0 +1,76 @@
+/**
+ * @file OnboardingTour.css
+ * @description Theming overrides for driver.js's popover so the onboarding
+ * tour matches Podium's Aurora Glass design system (surface/border/accent
+ * CSS variables defined in src/index.css) in both light and dark mode,
+ * instead of driver.js's default plain white/black look.
+ * @author Gael Robin <robin.gael@gmail.com>
+ */
+
+.podium-tour-popover.driver-popover {
+  background-color: rgb(var(--surface-2));
+  color: rgb(var(--text-primary));
+  border: 1px solid rgb(var(--border));
+  border-radius: 0.75rem;
+  box-shadow: var(--card-shadow-hover);
+  font-family: inherit;
+  max-width: 340px;
+}
+
+.podium-tour-popover .driver-popover-title {
+  color: rgb(var(--text-primary));
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.podium-tour-popover .driver-popover-description {
+  color: rgb(var(--text-muted));
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+.podium-tour-popover .driver-popover-progress-text {
+  color: rgb(var(--text-dim));
+  font-size: 0.75rem;
+}
+
+.podium-tour-popover .driver-popover-footer button {
+  background-color: rgb(var(--surface-3));
+  color: rgb(var(--text-primary));
+  border: 1px solid rgb(var(--border));
+  text-shadow: none;
+  font-size: 0.8125rem;
+  border-radius: 0.5rem;
+  padding: 0.3rem 0.75rem;
+}
+
+.podium-tour-popover .driver-popover-footer button:hover {
+  background-color: rgb(var(--surface-4));
+}
+
+.podium-tour-popover .driver-popover-footer .driver-popover-next-btn {
+  background-color: rgb(var(--accent));
+  color: rgb(14 16 26);
+  border-color: rgb(var(--accent));
+  font-weight: 600;
+}
+
+.podium-tour-popover .driver-popover-footer .driver-popover-next-btn:hover {
+  background-color: rgb(var(--accent-hover));
+}
+
+.podium-tour-popover .driver-popover-close-btn {
+  color: rgb(var(--text-dim));
+}
+
+.podium-tour-popover .driver-popover-close-btn:hover {
+  color: rgb(var(--text-primary));
+}
+
+.podium-tour-popover .driver-popover-arrow-side-right.driver-popover-arrow {
+  border-right-color: rgb(var(--surface-2));
+}
+
+.driver-active-element {
+  border-radius: 0.5rem;
+}

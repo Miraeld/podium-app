@@ -1,0 +1,23 @@
+{
+  "popup": {
+    "title": "New update available",
+    "lead": "Podium {{version}} is ready. Here's what's new:",
+    "noNotes": "No release notes for this version.",
+    "update": "Update",
+    "dismiss": "Dismiss"
+  },
+  "panel": {
+    "title": "Updates",
+    "description": "Current version, latest release, and what changed.",
+    "current": "Current version",
+    "latest": "Latest version",
+    "upToDate": "You're up to date.",
+    "available": "Update available",
+    "checkNow": "Check now",
+    "checking": "Checking…",
+    "checkError": "Could not check for updates.",
+    "viewRelease": "View release",
+    "noNotes": "No release notes available.",
+    "lastChecked": "Last checked {{time}}"
+  }
+}

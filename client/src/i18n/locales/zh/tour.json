@@ -1,0 +1,36 @@
+{
+  "steps": {
+    "sessions": {
+      "title": "实时查看每个会话",
+      "description": "Claude Code 会话一启动就会出现在这里。试试看：打开「会话」，选一个实时查看它的进展。"
+    },
+    "workflows": {
+      "title": "查看完整的智能体树",
+      "description": "主智能体、子智能体、任务交接——全部映射为一个工作流。试试看：打开「工作流」，追踪一条泳道的完整过程。"
+    },
+    "run": {
+      "title": "无需离开 Podium 即可启动运行",
+      "description": "直接从仪表盘启动一个 Claude Code 会话，无需切换终端。试试看：点击「运行 Claude」启动一个会话。"
+    },
+    "ccConfig": {
+      "title": "你的 Claude 配置一览无余",
+      "description": "智能体、钩子、MCP 服务器、权限——Claude Code 加载的一切都在这里。试试看：打开「Claude 配置」查看已接入的内容。"
+    },
+    "settings": {
+      "title": "按你的方式调整它",
+      "description": "通知、定价、钩子、数据——所有设置都在这里。试试看：打开「设置」开启通知，再也不会错过失败的运行。"
+    }
+  },
+  "controls": {
+    "next": "下一步",
+    "previous": "上一步",
+    "done": "开始使用",
+    "skip": "跳过导览",
+    "progress": "{{current}} / {{total}}"
+  },
+  "settingsEntry": {
+    "title": "新手导览",
+    "description": "重新播放 Podium 主要功能区的导览。",
+    "button": "重新导览"
+  }
+}

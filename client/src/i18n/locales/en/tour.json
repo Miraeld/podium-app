@@ -1,0 +1,36 @@
+{
+  "steps": {
+    "sessions": {
+      "title": "Every session, live",
+      "description": "Your Claude Code sessions land here the moment they start. Try this: open Sessions and pick one to watch it unfold in real time."
+    },
+    "workflows": {
+      "title": "See the whole agent tree",
+      "description": "Main agents, subagents, handoffs — all mapped as one workflow. Try this: open Workflows and trace an agent's swim lane end to end."
+    },
+    "run": {
+      "title": "Launch a run without leaving Podium",
+      "description": "Spawn a Claude Code session right from the dashboard, no terminal switch required. Try this: hit Run Claude and kick one off."
+    },
+    "ccConfig": {
+      "title": "Your Claude setup, mapped",
+      "description": "Agents, hooks, MCP servers, permissions — everything Claude Code loads, in one place. Try this: open Claude Config and inspect what's wired up."
+    },
+    "settings": {
+      "title": "Tune it to how you work",
+      "description": "Notifications, pricing, hooks, data — all the knobs live here. Try this: open Settings and turn on notifications so you never miss a failed run."
+    }
+  },
+  "controls": {
+    "next": "Next",
+    "previous": "Back",
+    "done": "Let's go",
+    "skip": "Skip tour",
+    "progress": "{{current}} of {{total}}"
+  },
+  "settingsEntry": {
+    "title": "Onboarding tour",
+    "description": "Replay the guided tour of Podium's main sections.",
+    "button": "Replay tour"
+  }
+}
