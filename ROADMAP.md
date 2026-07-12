@@ -107,8 +107,8 @@ podium-app/                       # this repo (rename from PodiumSwiftApp = N7)
   scaffolding recommended for removal. See docs/N2-GAP.md.
 - **N3 🔄 IN FLIGHT** (single agent — gap is small): 6 endpoint fixes +
   P1–P7 invariant port.
-- **N5-B (hook client) + P10 (LICENSE/attribution) 🔄 CLAIMED by a second
-  session** (2026-07-12, Gaël's other account). Scope fence: ONLY `hook/`
+- **N5-B (hook client) + P10 (LICENSE/attribution) 🔄 IN FLIGHT** (2026-07-12,
+  Sonnet subagent from the orchestrator session). Scope fence: ONLY `hook/`
   (new dir), root `LICENSE`, `README.md` attribution section. Must NOT touch
   `server/` (N3 owns it), `client/`, `tauri/`, or this file's other entries.
 - **N5-A SPIKE ✅ DONE** (2026-07-12, scratchpad-only, no repo changes):
