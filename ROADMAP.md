@@ -98,9 +98,16 @@ podium-app/                       # this repo (rename from PodiumSwiftApp = N7)
 
 - **N1 ✅ DONE** (`585d850` + `888a493`, 2026-07-12): 164 files in `client/`,
   builds green, D1 guard verified, zero old-repo path leaks.
-- **N2 🔄 IN FLIGHT** (agent dispatched 2026-07-12, evening): upstream vendor
-  + gap analysis → `docs/N2-GAP.md`.
-- N3–N8: not started.
+- **N2 ✅ DONE** (`84ee74f`): upstream vendored at `f8b52a8` (boots green,
+  better-sqlite3 fine on Node 26). Gap: **46 OK / 2 ADAPT / 4 MISSING of 52**
+  → **B-as-base CONFIRMED** (no flip). ADAPT: updates status/check (needs the
+  GitHub-releases check, P2/P7). MISSING: /api/search, /api/import/session,
+  /api/export/session/:id (port from plugin-era routes/search.js+export.js or
+  Swift routers). EXTRAS: keep-dormant/flagged; only Docker/K8s deploy
+  scaffolding recommended for removal. See docs/N2-GAP.md.
+- **N3 🔄 IN FLIGHT** (single agent — gap is small): 6 endpoint fixes +
+  P1–P7 invariant port.
+- N4–N8: not started.
 
 ## N1 — Import the front-end source (monorepo begins)
 
