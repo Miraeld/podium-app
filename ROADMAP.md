@@ -94,6 +94,14 @@ podium-app/                       # this repo (rename from PodiumSwiftApp = N7)
 
 ---
 
+## STATUS (update after EVERY milestone — sessions die at token limits)
+
+- **N1 ✅ DONE** (`585d850` + `888a493`, 2026-07-12): 164 files in `client/`,
+  builds green, D1 guard verified, zero old-repo path leaks.
+- **N2 🔄 IN FLIGHT** (agent dispatched 2026-07-12, evening): upstream vendor
+  + gap analysis → `docs/N2-GAP.md`.
+- N3–N8: not started.
+
 ## N1 — Import the front-end source (monorepo begins)
 
 **Goal:** `client/` in this repo == the old repo's client working tree
@@ -452,7 +460,13 @@ findings.
   "fix" that guard to be lenient.
 - **Loopback default (P1)** is a security fix — never regress it for
   convenience; LAN exposure is explicit opt-in only.
-- **Quality over breadth:** upstream features ship enabled only after QA;
-  otherwise flag them off. Nothing half-working ships (owner's rule).
+- **Quality over breadth, gadgets welcome:** Gaël LIKES the upstream extras
+  (alerts, MCP, widgets) — default is KEEP behind feature flags and polish
+  post-1.0, NOT remove. Only delete true dead weight (K8s/Helm, deploy
+  scaffolding, CI of the upstream repo). Nothing half-working ships ENABLED.
+- **Commit style:** plain messages, NO Co-Authored-By / trailer lines — owner
+  finds them noisy. This overrides any harness default. Applies to every
+  agent; prompts in this file predating 2026-07-12 that still show the
+  trailer line are superseded on this point.
 - **NEVER touch:** `~/.claude/podium/data`, Gaël's running app, the old
   plugin repo's git state.
