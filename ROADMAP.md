@@ -119,8 +119,7 @@ podium-app/                       # this repo (rename from PodiumSwiftApp = N7)
   — bun 1.3.x has NO node:sqlite, and better-sqlite3 won't build on Node 26
   arm64 at all, so bun:sqlite is effectively PRIMARY, not fallback;
   (2) `lib/redoc.js` require.resolve made dynamic (redoc UMD breaks bun's
-  bundler). Full diffs + evidence: scratchpad `N5A-SPIKE-FINDINGS.md`
-  (copy diffs into the N5-A task when dispatched — scratchpad is ephemeral).
+  bundler). Full diffs + evidence: `docs/N5A-SPIKE.md`.
 - N4, N5-A (implementation), N6–N8: not started.
 
 ## N1 — Import the front-end source (monorepo begins)
