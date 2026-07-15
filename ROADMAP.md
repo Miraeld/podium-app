@@ -131,6 +131,12 @@ podium-app/                       # this repo (rename from PodiumSwiftApp = N7)
   N5-A/N4: `server/index.js` auto-installs hooks on EVERY boot keyed off
   $HOME — scratch boots must override HOME or they rewrite the real
   `~/.claude/settings.json` + `.agent-dashboard.json`.
+- **N5-A 🔄 IN FLIGHT** (2026-07-15, Sonnet from the orchestrator session).
+  Scope: spike patches (docs/N5A-SPIKE.md) onto server/db.js +
+  compat-bunsqlite.js + lib/redoc.js, server argv (--port/--data-dir/
+  --web-dist), server-info reconciliation, tauri/prepare-sidecar.sh, run.sh.
+  Fence: must NOT touch server/tests/ or server/package.json (N4 owns those,
+  running in a parallel session).
 - **N3 verification (orchestrator, 2026-07-15):** confirmed — 60/60 node:test
   green on the touched suites; live curl: search/export/updates shapes match
   types.ts, P2 (dev → no prompt), P5 (envelope incl. 404), P7 (Miraeld only).
