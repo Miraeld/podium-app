@@ -32,5 +32,34 @@
     "title": "Onboarding tour",
     "description": "Replay the guided tour of Podium's main sections.",
     "button": "Replay tour"
+  },
+  "sessionSteps": {
+    "header": {
+      "title": "Your session at a glance",
+      "description": "Name, live status, model, and elapsed time all sit right here. The status badge tracks whether the run is still active, and a red error chip only shows up when something actually went wrong."
+    },
+    "headerActions": {
+      "title": "Note, share, refresh",
+      "description": "Jot a private note on this session, export it as JSON or copy a shareable link, and force a refresh if the data ever looks stale."
+    },
+    "tabs": {
+      "title": "Four ways to read this session",
+      "description": "Agents shows who ran and in what order. Conversation replays the transcript like a chat. Thinking surfaces the model's extended reasoning. Timeline is the raw, filterable event feed."
+    },
+    "agentTree": {
+      "title": "Who ran, and in what order",
+      "description": "Each row is one agent — the main agent on top, subagents nested underneath. Click a row with children to expand its subagents, or click a leaf agent to jump straight to its conversation."
+    },
+    "conversation": {
+      "title": "The conversation, replayed",
+      "description": "Every message and tool call from the transcript, in the order it happened. Pick a different agent from the Agents tab to switch which conversation is shown here."
+    },
+    "runSummary": {
+      "title": "The finished run at a glance",
+      "description": "Once a session completes, expand this card to see total cost, duration, tool calls, errors, and files touched — no need to dig through the timeline for the headline numbers."
+    }
+  },
+  "sessionHelp": {
+    "label": "Show session tour"
   }
 }

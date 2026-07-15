@@ -32,5 +32,34 @@
     "title": "Hướng dẫn khởi đầu",
     "description": "Xem lại hướng dẫn về các phần chính của Podium.",
     "button": "Xem lại hướng dẫn"
+  },
+  "sessionSteps": {
+    "header": {
+      "title": "Tổng quan phiên làm việc",
+      "description": "Tên, trạng thái trực tiếp, model và thời gian đã trôi qua đều nằm ở đây. Huy hiệu trạng thái cho biết phiên còn đang chạy hay không, còn thẻ lỗi màu đỏ chỉ xuất hiện khi có sự cố thực sự."
+    },
+    "headerActions": {
+      "title": "Ghi chú, chia sẻ, làm mới",
+      "description": "Ghi chú riêng cho phiên này, xuất ra JSON hoặc sao chép liên kết chia sẻ, và làm mới nếu dữ liệu có vẻ chưa cập nhật."
+    },
+    "tabs": {
+      "title": "Bốn cách để đọc phiên này",
+      "description": "Agent hiển thị ai đã chạy và theo thứ tự nào. Hội thoại phát lại bản ghi như một cuộc trò chuyện. Suy nghĩ hiển thị quá trình suy luận mở rộng của model. Dòng thời gian là luồng sự kiện thô, có thể lọc."
+    },
+    "agentTree": {
+      "title": "Ai đã chạy, theo thứ tự nào",
+      "description": "Mỗi dòng là một agent — agent chính ở trên, các subagent lồng bên dưới. Nhấp vào dòng có con để mở rộng subagent, hoặc nhấp vào agent lá để chuyển thẳng đến hội thoại của nó."
+    },
+    "conversation": {
+      "title": "Cuộc hội thoại, được phát lại",
+      "description": "Mọi tin nhắn và lệnh gọi công cụ từ bản ghi, theo đúng thứ tự xảy ra. Chọn một agent khác ở tab Agent để đổi hội thoại hiển thị ở đây."
+    },
+    "runSummary": {
+      "title": "Tổng kết phiên đã hoàn tất",
+      "description": "Khi một phiên hoàn tất, mở rộng thẻ này để xem tổng chi phí, thời lượng, số lệnh gọi công cụ, lỗi và số file đã thay đổi — không cần lục lại dòng thời gian để tìm các con số chính."
+    }
+  },
+  "sessionHelp": {
+    "label": "Xem hướng dẫn phiên làm việc"
   }
 }

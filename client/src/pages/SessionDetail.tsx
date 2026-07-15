@@ -32,12 +32,15 @@ import {
   Check,
   Wrench,
   FileEdit,
+  HelpCircle,
 } from "lucide-react";
 import { api } from "../lib/api";
 import { loadAdvancedMetrics } from "../lib/displaySettings";
 import { eventBus } from "../lib/eventBus";
 import { AgentCard } from "../components/AgentCard";
 import { SessionOverview } from "../components/SessionOverview";
+import { SessionOnboardingTour } from "../components/SessionOnboardingTour";
+import { requestSessionTourStart } from "../lib/tour";
 import { ConversationView } from "../components/conversation/ConversationView";
 import { SessionStatusBadge, AgentStatusBadge } from "../components/StatusBadge";
 import { effectiveSessionStatus } from "../lib/types";
@@ -97,6 +100,7 @@ export function SessionDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { t } = useTranslation("sessions");
+  const { t: tTour } = useTranslation("tour");
   const [session, setSession] = useState<Session | null>(null);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [events, setEvents] = useState<DashboardEvent[]>([]);
@@ -694,12 +698,13 @@ export function SessionDetail() {
 
   return (
     <div className="animate-fade-in space-y-8">
+      <SessionOnboardingTour sessionId={session.id} />
       {/* Header */}
       <div className="flex items-start gap-4">
         <button onClick={goBack} className="btn-ghost mt-1">
           <ArrowLeft className="w-4 h-4" />
         </button>
-        <div className="flex-1">
+        <div className="flex-1" data-tour="session-header">
           <div className="flex items-center gap-3 mb-2">
             <h2 className="text-xl font-bold text-gray-900 dark:text-white">
               {session.name || `${t("defaultName")}${session.id.slice(0, 8)}`}
@@ -791,8 +796,16 @@ export function SessionDetail() {
           )}
         </div>
 
-        {/* Header actions: note · share · refresh */}
-        <div className="flex items-center gap-1 flex-shrink-0">
+        {/* Header actions: note · share · refresh · help */}
+        <div className="flex items-center gap-1 flex-shrink-0" data-tour="session-header-actions">
+          <button
+            onClick={() => requestSessionTourStart()}
+            className="btn-ghost"
+            title={tTour("sessionHelp.label")}
+            aria-label={tTour("sessionHelp.label")}
+          >
+            <HelpCircle className="w-4 h-4" />
+          </button>
           <button
             onClick={() => setAnnotationOpen((v) => !v)}
             className="btn-ghost"
@@ -874,7 +887,7 @@ export function SessionDetail() {
 
       {/* Run Summary card (Task 4) — only for finished sessions, collapsed by default. */}
       {(session.status === "completed" || session.status === "error") && (
-        <div className="card p-4">
+        <div className="card p-4" data-tour="session-run-summary">
           <button
             type="button"
             onClick={() => setShowSummary((v) => !v)}
@@ -937,7 +950,7 @@ export function SessionDetail() {
       )}
 
       {/* Tab Navigation */}
-      <div className="flex items-center gap-1 border-b border-border">
+      <div className="flex items-center gap-1 border-b border-border" data-tour="session-tabs">
         <button
           onClick={() => selectTab("agents")}
           className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
@@ -1013,7 +1026,7 @@ export function SessionDetail() {
                   {t("detail.agents")}
                   <span className="text-gray-400 dark:text-gray-500 font-mono">· {agents.length}</span>
                 </h3>
-                <div className="space-y-2" data-testid="agent-tree">
+                <div className="space-y-2" data-testid="agent-tree" data-tour="session-agent-tree">
                 {(() => {
                   // Build parent→children map for the full tree (works at any depth)
                   const agentMap = new Map(agents.map((a) => [a.id, a]));
@@ -1223,7 +1236,7 @@ export function SessionDetail() {
       )}
 
       {visitedTabs.has("conversation") && (
-        <div hidden={activeTab !== "conversation"}>
+        <div hidden={activeTab !== "conversation"} data-tour="session-conversation">
           <ConversationView sessionId={session.id} initialTranscriptId={pendingTranscriptId} />
         </div>
       )}
