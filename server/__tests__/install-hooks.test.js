@@ -112,3 +112,57 @@ describe("install-hooks host-only guard (#193)", () => {
     assert.equal(isInsideContainer(), false);
   });
 });
+
+describe("install-hooks atomic write + .bak backup (ROADMAP §2 P3)", () => {
+  beforeEach(() => {
+    clearEnv();
+    rmSettings();
+    try {
+      fs.unlinkSync(SETTINGS + ".bak");
+    } catch {
+      /* not present */
+    }
+  });
+
+  after(() => {
+    clearEnv();
+  });
+
+  it("writes no .bak on first install (nothing to back up yet)", () => {
+    process.env.CCAM_FORCE_HOST = "1";
+    installHooks(true);
+    assert.equal(fs.existsSync(SETTINGS), true);
+    assert.equal(fs.existsSync(SETTINGS + ".bak"), false);
+  });
+
+  it("backs up the prior settings.json to .bak on a subsequent write", () => {
+    process.env.CCAM_FORCE_HOST = "1";
+    installHooks(true);
+    const firstWrite = fs.readFileSync(SETTINGS, "utf8");
+
+    // Simulate an unrelated pre-existing user setting that must survive a
+    // re-install untouched, and confirm .bak captures the PRIOR state.
+    const settings = JSON.parse(firstWrite);
+    settings.someUnrelatedUserSetting = "keep-me";
+    fs.writeFileSync(SETTINGS, JSON.stringify(settings, null, 2) + "\n", "utf8");
+    const beforeSecondWrite = fs.readFileSync(SETTINGS, "utf8");
+
+    installHooks(true);
+
+    assert.equal(fs.existsSync(SETTINGS + ".bak"), true);
+    const backup = fs.readFileSync(SETTINGS + ".bak", "utf8");
+    assert.equal(backup, beforeSecondWrite, ".bak must capture the settings.json state just before the write");
+
+    const final = JSON.parse(fs.readFileSync(SETTINGS, "utf8"));
+    assert.equal(final.someUnrelatedUserSetting, "keep-me", "unrelated settings must survive re-install");
+  });
+
+  it("never leaves a stray .tmp-* file behind after a successful write", () => {
+    process.env.CCAM_FORCE_HOST = "1";
+    installHooks(true);
+    installHooks(true);
+    const dirEntries = fs.readdirSync(TMP_HOME);
+    const strayTemp = dirEntries.filter((f) => f.includes(".tmp-"));
+    assert.deepEqual(strayTemp, [], `expected no stray temp files, found: ${strayTemp}`);
+  });
+});

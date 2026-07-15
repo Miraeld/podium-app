@@ -12,13 +12,30 @@ const { getDataDir } = require("./claude-home");
 // web app and the native apps reuse one set of VAPID keys.
 const KEYS_PATH = path.join(getDataDir(), "vapid-keys.json");
 
+// P4 (ROADMAP §2, ported from audit B3): the VAPID private key is a secret —
+// anyone who reads it can forge push messages to every subscribed browser.
+// Create the file `0600` (owner read/write only) up front, and tighten any
+// pre-existing file found looser than that on load (e.g. one written before
+// this fix landed, or restored from a backup with permissive umask).
+const VAPID_FILE_MODE = 0o600;
+
 function loadOrCreateVapidKeys() {
   if (fs.existsSync(KEYS_PATH)) {
+    try {
+      const mode = fs.statSync(KEYS_PATH).mode & 0o777;
+      if (mode !== VAPID_FILE_MODE) fs.chmodSync(KEYS_PATH, VAPID_FILE_MODE);
+    } catch {
+      // Non-fatal — a chmod failure (e.g. read-only filesystem) shouldn't
+      // block the server from starting; the key still loads below.
+    }
     return JSON.parse(fs.readFileSync(KEYS_PATH, "utf8"));
   }
   const keys = webpush.generateVAPIDKeys();
   fs.mkdirSync(path.dirname(KEYS_PATH), { recursive: true });
-  fs.writeFileSync(KEYS_PATH, JSON.stringify(keys, null, 2));
+  fs.writeFileSync(KEYS_PATH, JSON.stringify(keys, null, 2), { mode: VAPID_FILE_MODE });
+  // `writeFileSync`'s `mode` option only takes effect when creating a new
+  // file; belt-and-suspenders against umask surprises with an explicit chmod.
+  fs.chmodSync(KEYS_PATH, VAPID_FILE_MODE);
   return keys;
 }
 

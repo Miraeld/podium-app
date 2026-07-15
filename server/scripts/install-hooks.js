@@ -108,6 +108,40 @@ function makeHookEntry(hookType) {
   return entry;
 }
 
+/**
+ * P3 (ROADMAP §2, ported from `Sources/PodiumCore/Hooks/HookInstaller.swift`
+ * `writeSettings`, audit A7): a crash mid-write must never corrupt the
+ * user's GLOBAL Claude `settings.json`. Back up any existing file to
+ * `<path>.bak`, then write via a temp file in the SAME directory (so the
+ * rename stays on one volume) + atomic rename so the replace either fully
+ * lands or doesn't.
+ * @param {string} settingsPath
+ * @param {object} settings
+ */
+function writeSettingsAtomic(settingsPath, settings) {
+  const dir = path.dirname(settingsPath);
+  fs.mkdirSync(dir, { recursive: true });
+
+  if (fs.existsSync(settingsPath)) {
+    const backupPath = settingsPath + ".bak";
+    fs.copyFileSync(settingsPath, backupPath);
+  }
+
+  const tempPath = path.join(dir, `.${path.basename(settingsPath)}.tmp-${process.pid}-${Date.now()}`);
+  const body = JSON.stringify(settings, null, 2) + "\n";
+  fs.writeFileSync(tempPath, body, "utf8");
+  try {
+    fs.renameSync(tempPath, settingsPath);
+  } catch (err) {
+    try {
+      fs.unlinkSync(tempPath);
+    } catch {
+      /* best-effort cleanup */
+    }
+    throw err;
+  }
+}
+
 function isOurEntry(entry) {
   // Matches old format (entry.command) and new format (entry.hooks[].command)
   if (entry.command && entry.command.includes("hook-handler.js")) return true;
@@ -157,9 +191,7 @@ function installHooks(silent = false) {
     }
   }
 
-  const dir = path.dirname(SETTINGS_PATH);
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(SETTINGS_PATH, JSON.stringify(settings, null, 2) + "\n", "utf8");
+  writeSettingsAtomic(SETTINGS_PATH, settings);
 
   if (!silent) {
     console.log(`Hook handler: ${HOOK_HANDLER}`);
@@ -176,4 +208,4 @@ if (require.main === module) {
   if (!installHooks(false)) process.exitCode = 1;
 }
 
-module.exports = { installHooks, isInsideContainer };
+module.exports = { installHooks, isInsideContainer, writeSettingsAtomic };
