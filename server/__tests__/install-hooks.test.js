@@ -20,11 +20,42 @@ const os = require("os");
 const path = require("path");
 
 // Point the installer at a throwaway CLAUDE_HOME BEFORE requiring it — the
-// settings path is resolved at module load. (`node --test` isolates each test
-// file in its own process, so this does not leak into other suites.)
+// settings path is resolved at module load (install-hooks.js line ~14), so
+// every describe block in this file necessarily shares this ONE home; a
+// per-describe home cannot take effect without refactoring the installer.
+// (`node --test` isolates each test file in its own process, so this does
+// not leak into other suites.)
+//
+// Because it is shared, NO individual describe's after() may delete it —
+// that exact bug (block 1's after() rmSync'ing TMP_HOME while block 3 still
+// used it) caused 10 ENOENT failures on fresh clones. Cleanup happens ONCE,
+// in the file-level after() below, when every suite has finished.
 const TMP_HOME = fs.mkdtempSync(path.join(os.tmpdir(), "ccam-hooks-"));
 process.env.CLAUDE_HOME = TMP_HOME;
 const SETTINGS = path.join(TMP_HOME, "settings.json");
+
+// A fake podium-hook binary injected via PODIUM_HOOK_BIN for the suites that
+// test the GUARD and WRITE behavior (not binary resolution — that's the
+// dedicated resolveHookBinary suite). Without this, those suites silently
+// depend on hook/dist/podium-hook existing in the checkout (a gitignored
+// build artifact): present in a warm repo and in CI (ci.yml builds it), but
+// ABSENT in a fresh clone — where installHooks skips and 9 tests fail.
+const FAKE_HOOK_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "ccam-fake-hook-"));
+const FAKE_HOOK_BIN = (() => {
+  const p = path.join(FAKE_HOOK_DIR, "podium-hook");
+  fs.writeFileSync(p, "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+  return p;
+})();
+
+after(() => {
+  for (const dir of [TMP_HOME, FAKE_HOOK_DIR]) {
+    try {
+      fs.rmSync(dir, { recursive: true, force: true });
+    } catch {
+      /* best effort */
+    }
+  }
+});
 
 const { installHooks, isInsideContainer, resolveHookBinary } = require("../scripts/install-hooks");
 
@@ -74,15 +105,17 @@ describe("install-hooks host-only guard (#193)", () => {
   beforeEach(() => {
     clearEnv();
     rmSettings();
+    // Guard tests exercise container detection + settings writing, not
+    // binary resolution — inject the fake so they pass on fresh clones
+    // where hook/dist/podium-hook hasn't been built.
+    process.env.PODIUM_HOOK_BIN = FAKE_HOOK_BIN;
   });
 
   after(() => {
     clearEnv();
-    try {
-      fs.rmSync(TMP_HOME, { recursive: true, force: true });
-    } catch {
-      /* best effort */
-    }
+    // TMP_HOME is shared by the later describe blocks (module-load-resolved
+    // settings path) — do NOT delete it here; the file-level after() does.
+    rmSettings();
   });
 
   it("refuses inside a container and writes no settings file", () => {
@@ -339,6 +372,9 @@ describe("install-hooks atomic write + .bak backup (ROADMAP §2 P3)", () => {
     } catch {
       /* not present */
     }
+    // Same fresh-clone independence as the guard suite above: these tests
+    // verify the atomic-write/.bak mechanics, not binary resolution.
+    process.env.PODIUM_HOOK_BIN = FAKE_HOOK_BIN;
   });
 
   after(() => {
