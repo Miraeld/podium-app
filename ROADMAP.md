@@ -251,8 +251,15 @@ podium-app/                       # this repo (rename from PodiumSwiftApp = N7)
   already) and is a loose end from N3/N5-B, not from N5-A; needs a
   follow-up wiring `install-hooks.js` to the real `hook/dist/podium-hook`
   binary path.
-- N6–N8: not started. N6 requires N4 + N5-A both landed (both now ✅ — next
-  session should pick up N6). N7 waits for daylight + owner presence.
+- **HOOK-BUNDLE STAGING 🔒 CLAIMED** (2026-07-15, orchestrator session C):
+  stage podium-hook into the Tauri bundle so a packaged install (.dmg/
+  .AppImage — no repo checkout) still gets working hooks. Scope:
+  prepare-sidecar.sh builds hook via bun compile + stages as externalBin;
+  tauri.conf.json externalBin += bin/podium-hook; verify install-hooks.js's
+  next-to-execPath fallback matches where Tauri places externalBin at
+  runtime (name + triple-stripping); .gitignore the hook/.*.bun-build temp
+  artifacts. release.yml should need nothing (it calls prepare-sidecar.sh).
+- N7–N8: not started. N7 waits for daylight + owner presence.
 
 ## N1 — Import the front-end source (monorepo begins)
 
