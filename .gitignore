@@ -30,3 +30,8 @@ server/node_modules/
 # bun's incremental build cache (dropped alongside server/ by `bun build
 # --compile`, ROADMAP N5 TASK A) — not a build artifact anyone consumes.
 server/*.bun-build
+# same bun build-cache droppings, but from hook/'s own `bun run build`
+# (hook/package.json) and from tauri/prepare-sidecar.sh compiling hook/
+# (HOOK-BUNDLE STAGING).
+hook/*.bun-build
+hook/.*.bun-build

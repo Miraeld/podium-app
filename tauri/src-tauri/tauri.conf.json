@@ -26,7 +26,7 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "externalBin": ["bin/podium-server"],
+    "externalBin": ["bin/podium-server", "bin/podium-hook"],
     "resources": ["web-dist/"],
     "macOS": {
       "signingIdentity": "-",

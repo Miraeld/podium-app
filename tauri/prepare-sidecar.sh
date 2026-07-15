@@ -32,23 +32,34 @@
 #     time. Building with it unset bakes in `isProduction = false` forever
 #     (the compiled binary then 404s on `/` — the API still works, but the
 #     dashboard UI never loads), regardless of what's passed at run time.
+#   - `BUN_NO_CODESIGN_MACHO_BINARY=1` is REQUIRED on every `bun build
+#     --compile` here (HOOK-BUNDLE STAGING finding): bun 1.3.x's own Mach-O
+#     ad-hoc self-signing step is buggy on some compiles (oven-sh/bun#29120,
+#     truncated code signature) and produces a binary that
+#     `codesign --force` (what Tauri's bundler runs on every externalBin at
+#     package time, even with signingIdentity "-") rejects outright with
+#     "main executable failed strict validation" — reproduced consistently
+#     for hook/'s compile on this toolchain, entitlements make no
+#     difference. This flag makes bun skip its own broken self-signing so
+#     Tauri's codesign pass is the only one that ever touches the binary,
+#     which then succeeds normally.
 #
-# Hook client: still NOT built/staged here. hook/ has its own bun-compile
-# build (`cd hook && bun run build` -> hook/dist/podium-hook, per
-# hook/package.json). server/scripts/install-hooks.js (the HOOK-WIRING FIX,
-# ROADMAP §F) resolves that binary at runtime via, in order: an explicit
-# PODIUM_HOOK_BIN env override, then hook/dist/podium-hook relative to the
-# repo (covers `npm start` / a checked-out clone — this is the path that
-# matters today), then — for a FUTURE fully-packaged app — a `podium-hook`
-# binary sitting next to `process.execPath` (the running podium-server
-# sidecar). That third tier has no effect yet: doing it properly needs a
-# `bundle.resources` (or externalBin) entry in tauri.conf.json plus a
-# resource-dir lookup in main.rs, both out of this task's scope (server/
-# scripts/install-hooks.js + tests + this file only) — left for N6
-# (CI + packaging, ROADMAP). Until then, a packaged app with no repo checkout
-# alongside it will skip hook installation with a clear warning rather than
-# install a dead command, which is strictly better than the pre-fix behavior
-# (every boot silently wrote a broken hook-handler.js command).
+# Hook client: now built + staged here too (HOOK-BUNDLE STAGING). hook/ has
+# its own bun-compile build (`cd hook && bun run build` -> hook/dist/
+# podium-hook, per hook/package.json) — this script drives that build
+# directly and stages the result as a SECOND Tauri externalBin, using the
+# exact same target-triple naming convention as podium-server
+# (podium-hook-<rust-triple>). Tauri strips the triple suffix when it copies
+# externalBin entries into the bundle, so both binaries end up side by side
+# in the final app (Contents/MacOS/ on macOS) as `podium-server` and
+# `podium-hook`. That is exactly the layout server/scripts/install-hooks.js's
+# third resolution tier expects: a `podium-hook` binary sitting next to
+# `process.execPath` (the running podium-server sidecar) — see that file's
+# `resolveHookBinary()` for the full PODIUM_HOOK_BIN env > repo hook/dist/
+# podium-hook > next-to-execPath resolution order. In a packaged install
+# (.dmg/.AppImage, no repo checkout alongside it) the first two tiers miss
+# and this third tier is what makes hook installation succeed instead of
+# skipping with a warning.
 #
 # Usage: tauri/prepare-sidecar.sh
 set -euo pipefail
@@ -71,7 +82,7 @@ trap 'rm -rf "$BUILD_TMP"' EXIT
 
 (
   cd "$REPO_ROOT/server"
-  NODE_ENV=production "$BUN_BIN" build --compile --external better-sqlite3 \
+  NODE_ENV=production BUN_NO_CODESIGN_MACHO_BINARY=1 "$BUN_BIN" build --compile --external better-sqlite3 \
     index.js --outfile "$BUILD_TMP/podium-server"
 )
 
@@ -92,6 +103,18 @@ cp "$BUILD_TMP/podium-server" "$DEST"
 chmod +x "$DEST"
 
 echo "Staged sidecar: $DEST ($(du -h "$DEST" | cut -f1))"
+
+echo "Installing hook/ dependencies..."
+(cd "$REPO_ROOT/hook" && "$BUN_BIN" install)
+
+echo "Compiling podium-hook (bun run build)..."
+(cd "$REPO_ROOT/hook" && BUN_NO_CODESIGN_MACHO_BINARY=1 "$BUN_BIN" run build)
+
+HOOK_DEST="$DEST_DIR/podium-hook-$TRIPLE"
+cp "$REPO_ROOT/hook/dist/podium-hook" "$HOOK_DEST"
+chmod +x "$HOOK_DEST"
+
+echo "Staged hook: $HOOK_DEST ($(du -h "$HOOK_DEST" | cut -f1))"
 
 WEB_DIST_SRC="$REPO_ROOT/client/dist"
 WEB_DIST_DEST="$SCRIPT_DIR/src-tauri/web-dist"
