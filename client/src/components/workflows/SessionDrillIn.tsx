@@ -49,6 +49,16 @@ function safeTimestamp(raw: string): string {
   }
 }
 
+// Parse a timestamp that may or may not already carry timezone info.
+// Mirrors the guard in safeTimestamp() — blindly appending "Z" to a
+// string that already ends in "Z" (or a +/-HH:MM offset) produces an
+// unparseable "...ZZ" string, which silently yields Invalid Date / NaN
+// durations (surfaced as "NaNs" in the Agent Tree).
+function parseTimestamp(raw: string): Date {
+  const normalized = /[Zz]$|[+-]\d{2}:\d{2}$/.test(raw) ? raw : raw.replace(" ", "T") + "Z";
+  return new Date(normalized);
+}
+
 // ── Tab bar ───────────────────────────────────────────────────────────────────
 
 interface TabBarProps {
@@ -112,7 +122,7 @@ function TreeNode({ node, depth }: TreeNodeProps) {
     ? formatMs(
         Math.max(
           0,
-          new Date(node.ended_at + "Z").getTime() - new Date(node.started_at + "Z").getTime()
+          parseTimestamp(node.ended_at).getTime() - parseTimestamp(node.started_at).getTime()
         )
       )
     : t("common:running");
