@@ -149,7 +149,10 @@ podium-app/                       # this repo (rename from PodiumSwiftApp = N7)
   arm64 at all, so bun:sqlite is effectively PRIMARY, not fallback;
   (2) `lib/redoc.js` require.resolve made dynamic (redoc UMD breaks bun's
   bundler). Full diffs + evidence: `docs/N5A-SPIKE.md`.
-- N4, N5-A (implementation), N6–N8: not started.
+- **N4 🔄 IN FLIGHT** (2026-07-15, Sonnet from the Fable session): contract
+  gate port. Owns `server/tests/` + `server/package.json` (N5-A fenced out).
+- N6–N8: not started. N6 requires N4 + N5-A both landed; Fable session picks
+  it up after verifying both. N7 waits for daylight + owner presence.
 
 ## N1 — Import the front-end source (monorepo begins)
 
