@@ -1,0 +1,16 @@
+{
+  "name": "podium-hook",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Native hook client for Claude Code — POSTs hook events to every live Podium dashboard server. Port of Sources/PodiumHook (Swift) for the Node/Bun era (N5-B).",
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "build": "bun build --compile --outfile=dist/podium-hook src/index.ts",
+    "start": "bun run src/index.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.0",
+    "typescript": "^5.6.0"
+  }
+}
