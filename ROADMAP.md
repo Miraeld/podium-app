@@ -329,6 +329,40 @@ podium-app/                       # this repo (rename from PodiumSwiftApp = N7)
   hygiene queued behind it: git rm HANDOVER.md PRE-1.0-AUDIT.md docs/N2-GAP.md
   docs/N5A-SPIKE.md ROADMAP.md (owner decision: simple rm, no history scrub,
   no @author sweep) → version ritual → tag v1.0.0 → owner publishes.
+- **N8 browser QA pass (P6.2a rerun) ✅ DONE** (2026-07-15, `223464a`): full
+  walk of Dashboard/Sessions(+detail)/Activity/Analytics/Workflows/CC Config/
+  Import/Settings/Search, light + dark, against a scratch-HOME + scratch-port
+  Node server seeded via `POST /api/hooks/event` (real `~/.claude` verified
+  untouched before/after — content diff clean, only the user's own Clawd/
+  Podium hook activity touched its mtime). Zero console errors on any page
+  in either theme. D2 (title "Podium"), version string (`v1.0.0-rc`), update
+  popup (dev app-version → `update_available: false`, no prompt) all hold.
+  Hooks panel green (7/7 event types). **1 BLOCKER fixed inline**: Workflows
+  → Session Drilldown → Agent Tree showed "NaNs" for every node's duration —
+  `TreeNode` in `client/src/components/workflows/SessionDrillIn.tsx` appended
+  a bare `"Z"` to `node.ended_at`/`started_at`, but the server already returns
+  tz-suffixed ISO strings, producing an unparseable `...ZZ` string (silent
+  `Invalid Date` → `NaN`). Fixed by reusing the same guarded-normalize
+  pattern the file's own `safeTimestamp()` already used one function up.
+  Verified live post-fix: durations render correctly (`0s` for near-instant
+  seeded events). Client build green with `PODIUM_APP_VERSION=1.0.0-rc`
+  (client has no dedicated test suite — `tsc -b && vite build` is the gate).
+  **2 MINOR, not new, not fixed (pre-existing, tracked)**: (a) D5 from the
+  original P6.2a audit — Sessions table rows are click-divs with no
+  keyboard/middle-click affordance, confirmed still present, same class of
+  issue on the Workflows Session Drilldown's session-picker dropdown (mouse
+  clicks on result rows are flaky/silently miss ~50% of the time; keyboard
+  Enter also didn't select) — real UX papercut, but session selection does
+  work in general once a click lands, so not release-blocking; worth a
+  follow-up ticket to make these `<button>`/`<a>` semantics more robust.
+  (b) A synthetic-seeding gotcha, not a product bug: booting the Node server
+  without `DASHBOARD_LIVENESS_PROBE=0` reaps hook-seeded sessions (no real
+  `claude` process backs them) within about a minute of boot — matches the
+  contract-test harness's documented env, just easy to forget for a manual
+  QA boot; noting here so the next person doesn't lose an hour to it.
+  **GO for tagging 1.0.0** — no other regressions found; Linux GUI QA and
+  the macOS app-level pass (close-to-tray, About-panel attribution) remain
+  per the N8 checklist items 2 and 4, out of scope for this browser-only pass.
 
 ## N1 — Import the front-end source (monorepo begins)
 
