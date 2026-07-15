@@ -1,9 +1,15 @@
 /**
- * @file Tests the host-only guard in scripts/install-hooks.js (issue #193):
- * the installer must refuse to write a container-internal handler path into a
- * (possibly bind-mounted) host ~/.claude/settings.json. Container detection is
- * driven deterministically via CCAM_FORCE_CONTAINER / CCAM_FORCE_HOST so these
- * tests pass whether or not the CI runner itself is containerized.
+ * @file Tests scripts/install-hooks.js:
+ *  - the host-only guard (issue #193): the installer must refuse to write a
+ *    container-internal handler path into a (possibly bind-mounted) host
+ *    ~/.claude/settings.json. Container detection is driven deterministically
+ *    via CCAM_FORCE_CONTAINER / CCAM_FORCE_HOST so these tests pass whether or
+ *    not the CI runner itself is containerized.
+ *  - the podium-hook binary resolution order (env override > repo-relative
+ *    hook/dist/podium-hook > packaged-layout sibling of the running server
+ *    binary > skip with a warning if none exist) and the write-through of the
+ *    resolved binary path into settings.json, replacing legacy markers
+ *    (including the never-vendored hook-handler.js) in place.
  * @author Son Nguyen <hoangson091104@gmail.com>
  */
 
@@ -20,7 +26,21 @@ const TMP_HOME = fs.mkdtempSync(path.join(os.tmpdir(), "ccam-hooks-"));
 process.env.CLAUDE_HOME = TMP_HOME;
 const SETTINGS = path.join(TMP_HOME, "settings.json");
 
-const { installHooks, isInsideContainer } = require("../scripts/install-hooks");
+const { installHooks, isInsideContainer, resolveHookBinary } = require("../scripts/install-hooks");
+
+// The real hook/dist/podium-hook binary, built by `cd hook && bun run build`
+// (hook/package.json). Present in this repo checkout after that build step —
+// see server/__tests__ setup notes / ROADMAP HOOK-WIRING FIX task.
+const REPO_ROOT = path.resolve(__dirname, "..", "..");
+const REAL_HOOK_BIN = path.join(REPO_ROOT, "hook", "dist", "podium-hook");
+
+/** A fake, executable-enough stand-in binary for tests that don't need the real build. */
+function makeFakeBinary(dir, name = "podium-hook") {
+  fs.mkdirSync(dir, { recursive: true });
+  const p = path.join(dir, name);
+  fs.writeFileSync(p, "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+  return p;
+}
 
 const HOOK_TYPES = [
   "PreToolUse",
@@ -37,6 +57,7 @@ function clearEnv() {
   delete process.env.CCAM_FORCE_CONTAINER;
   delete process.env.CCAM_FORCE_HOST;
   delete process.env.CCAM_ALLOW_CONTAINER_HOOKS;
+  delete process.env.PODIUM_HOOK_BIN;
 }
 
 function rmSettings() {
@@ -82,7 +103,7 @@ describe("install-hooks host-only guard (#193)", () => {
     const settings = JSON.parse(fs.readFileSync(SETTINGS, "utf8"));
     for (const type of HOOK_TYPES) {
       assert.ok(Array.isArray(settings.hooks[type]), `missing hook list for ${type}`);
-      assert.match(JSON.stringify(settings.hooks[type]), /hook-handler\.js/, `${type} not wired`);
+      assert.match(JSON.stringify(settings.hooks[type]), /podium-hook/, `${type} not wired`);
     }
   });
 
@@ -99,7 +120,7 @@ describe("install-hooks host-only guard (#193)", () => {
     installHooks(true);
     const settings = JSON.parse(fs.readFileSync(SETTINGS, "utf8"));
     const ours = settings.hooks.PreToolUse.filter((e) =>
-      JSON.stringify(e).includes("hook-handler.js")
+      JSON.stringify(e).includes("podium-hook")
     );
     assert.equal(ours.length, 1, "must not duplicate our hook entry on re-run");
   });
@@ -110,6 +131,120 @@ describe("install-hooks host-only guard (#193)", () => {
     delete process.env.CCAM_FORCE_CONTAINER;
     process.env.CCAM_FORCE_HOST = "1";
     assert.equal(isInsideContainer(), false);
+  });
+
+  it("upgrades a legacy hook-handler.js entry in place instead of duplicating it", () => {
+    process.env.CCAM_FORCE_HOST = "1";
+    // Simulate the pre-fix broken install: a hook-handler.js command that can
+    // never resolve, written by every boot before this fix.
+    const legacySettings = {
+      hooks: {
+        PreToolUse: [
+          {
+            matcher: "*",
+            hooks: [{ type: "command", command: 'node "/some/repo/server/scripts/hook-handler.js" PreToolUse' }],
+          },
+        ],
+      },
+    };
+    fs.writeFileSync(SETTINGS, JSON.stringify(legacySettings, null, 2) + "\n", "utf8");
+
+    const ok = installHooks(true);
+    assert.equal(ok, true);
+    const settings = JSON.parse(fs.readFileSync(SETTINGS, "utf8"));
+    assert.equal(settings.hooks.PreToolUse.length, 1, "legacy entry must be replaced, not duplicated");
+    assert.match(
+      JSON.stringify(settings.hooks.PreToolUse[0]),
+      /podium-hook/,
+      "legacy hook-handler.js entry must be upgraded to the real podium-hook binary"
+    );
+    assert.doesNotMatch(JSON.stringify(settings.hooks.PreToolUse[0]), /hook-handler\.js/);
+  });
+
+  it("end-to-end: PODIUM_HOOK_BIN override is what actually lands in settings.json", () => {
+    process.env.CCAM_FORCE_HOST = "1";
+    const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "podium-hook-e2e-"));
+    const explicit = makeFakeBinary(scratch, "my-custom-podium-hook");
+    process.env.PODIUM_HOOK_BIN = explicit;
+    try {
+      const ok = installHooks(true);
+      assert.equal(ok, true);
+      const settings = JSON.parse(fs.readFileSync(SETTINGS, "utf8"));
+      assert.match(JSON.stringify(settings.hooks.SessionStart), /my-custom-podium-hook/);
+    } finally {
+      delete process.env.PODIUM_HOOK_BIN;
+      fs.rmSync(scratch, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("resolveHookBinary resolution order", () => {
+  let scratch;
+
+  beforeEach(() => {
+    scratch = fs.mkdtempSync(path.join(os.tmpdir(), "podium-hook-resolve-"));
+  });
+
+  after(() => {
+    clearEnv();
+  });
+
+  it("prefers the real repo-relative hook/dist/podium-hook build when present", () => {
+    // Built by `cd hook && bun install && bun run build` per hook/package.json —
+    // required by this task's verification step. Skip gracefully if absent so
+    // this suite doesn't hard-fail an environment that hasn't built it yet.
+    if (!fs.existsSync(REAL_HOOK_BIN)) {
+      console.warn(`SKIP: ${REAL_HOOK_BIN} not built — run: cd hook && bun install && bun run build`);
+      return;
+    }
+    const resolved = resolveHookBinary({ repoRoot: REPO_ROOT, env: {}, execPath: null });
+    assert.ok(resolved, "expected the repo-relative build to resolve");
+    assert.equal(resolved.path, REAL_HOOK_BIN);
+    assert.match(resolved.source, /repo/);
+  });
+
+  it("PODIUM_HOOK_BIN env override wins over everything else", () => {
+    const explicit = makeFakeBinary(path.join(scratch, "explicit-dir"), "custom-hook-bin");
+    const repoDir = path.join(scratch, "fake-repo");
+    makeFakeBinary(path.join(repoDir, "hook", "dist"), "podium-hook");
+
+    const resolved = resolveHookBinary({
+      env: { PODIUM_HOOK_BIN: explicit },
+      repoRoot: repoDir,
+      execPath: null,
+    });
+    assert.ok(resolved);
+    assert.equal(resolved.path, explicit);
+    assert.match(resolved.source, /env/);
+  });
+
+  it("falls back to hook/dist/podium-hook relative to a given repo root", () => {
+    const repoDir = path.join(scratch, "fake-repo");
+    const built = makeFakeBinary(path.join(repoDir, "hook", "dist"), "podium-hook");
+
+    const resolved = resolveHookBinary({ env: {}, repoRoot: repoDir, execPath: null });
+    assert.ok(resolved);
+    assert.equal(resolved.path, built);
+    assert.match(resolved.source, /repo/);
+  });
+
+  it("falls back to a podium-hook binary sitting next to the running server binary (packaged layout)", () => {
+    const repoDir = path.join(scratch, "fake-repo-no-hook"); // no hook/dist here
+    const packagedDir = path.join(scratch, "packaged");
+    const sibling = makeFakeBinary(packagedDir, "podium-hook");
+    const fakeExecPath = path.join(packagedDir, "podium-server");
+
+    const resolved = resolveHookBinary({ env: {}, repoRoot: repoDir, execPath: fakeExecPath });
+    assert.ok(resolved);
+    assert.equal(resolved.path, sibling);
+    assert.match(resolved.source, /packaged/);
+  });
+
+  it("returns null (and installHooks skips) when no binary exists anywhere", () => {
+    const repoDir = path.join(scratch, "empty-repo");
+    fs.mkdirSync(repoDir, { recursive: true });
+    const resolved = resolveHookBinary({ env: {}, repoRoot: repoDir, execPath: path.join(scratch, "nowhere", "node") });
+    assert.equal(resolved, null);
   });
 });
 

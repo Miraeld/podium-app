@@ -33,14 +33,22 @@
 #     (the compiled binary then 404s on `/` — the API still works, but the
 #     dashboard UI never loads), regardless of what's passed at run time.
 #
-# Hook client: NOT built here. hook/ has its own bun-compile build
-# (`cd hook && bun run build` -> hook/dist/podium-hook, per package.json) —
-# it's a standalone artifact, not a Tauri externalBin, since hooks are
-# installed by podium-server itself at runtime (server/scripts/install-hooks.js,
-# invoked from server/index.js on every boot) rather than staged into the
-# app bundle. The old Swift-era version of this script never built a hook
-# binary either (same runtime-install design), so this preserves the
-# existing convention rather than introducing a new one.
+# Hook client: still NOT built/staged here. hook/ has its own bun-compile
+# build (`cd hook && bun run build` -> hook/dist/podium-hook, per
+# hook/package.json). server/scripts/install-hooks.js (the HOOK-WIRING FIX,
+# ROADMAP §F) resolves that binary at runtime via, in order: an explicit
+# PODIUM_HOOK_BIN env override, then hook/dist/podium-hook relative to the
+# repo (covers `npm start` / a checked-out clone — this is the path that
+# matters today), then — for a FUTURE fully-packaged app — a `podium-hook`
+# binary sitting next to `process.execPath` (the running podium-server
+# sidecar). That third tier has no effect yet: doing it properly needs a
+# `bundle.resources` (or externalBin) entry in tauri.conf.json plus a
+# resource-dir lookup in main.rs, both out of this task's scope (server/
+# scripts/install-hooks.js + tests + this file only) — left for N6
+# (CI + packaging, ROADMAP). Until then, a packaged app with no repo checkout
+# alongside it will skip hook installation with a clear warning rather than
+# install a dead command, which is strictly better than the pre-fix behavior
+# (every boot silently wrote a broken hook-handler.js command).
 #
 # Usage: tauri/prepare-sidecar.sh
 set -euo pipefail

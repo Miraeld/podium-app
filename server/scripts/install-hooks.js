@@ -12,7 +12,52 @@ const path = require("path");
 
 const { getSettingsPath } = require("../lib/claude-home");
 const SETTINGS_PATH = getSettingsPath();
-const HOOK_HANDLER = path.resolve(__dirname, "hook-handler.js").replace(/\\/g, "/");
+
+/**
+ * Resolve the podium-hook binary to register in settings.json.
+ *
+ * Port of the resolution philosophy in `Sources/PodiumCore/Hooks/HookInstaller.swift`
+ * (native binary path registered directly, no interpreter prefix) adapted for
+ * the Node/Bun era's hook client (`hook/src/index.ts`, compiled via
+ * `cd hook && bun run build` -> `hook/dist/podium-hook`, see hook/package.json).
+ *
+ * Order (first match wins):
+ *   1. `PODIUM_HOOK_BIN` env override — explicit, for tests/power users/CI.
+ *   2. `hook/dist/podium-hook` relative to this repo's layout (dev / `npm start`
+ *      / a checked-out clone running the server directly).
+ *   3. Packaged-app layout: a `podium-hook` binary sitting next to the
+ *      currently-running server binary (mirrors how the Tauri sidecar and the
+ *      Swift-era installer located co-located native binaries — see
+ *      `tauri/prepare-sidecar.sh`, which stages `hook/dist/podium-hook` next
+ *      to the `podium-server` sidecar for exactly this case).
+ *
+ * Returns `{ path, source }` for the first candidate that exists on disk, or
+ * `null` if none do. Never throws.
+ *
+ * @param {{env?: object, repoRoot?: string, execPath?: string}} [opts]
+ *   Injectable for tests; defaults to real process.env / repo root / process.execPath.
+ */
+function resolveHookBinary(opts = {}) {
+  const env = opts.env || process.env;
+  const repoRoot = opts.repoRoot || path.resolve(__dirname, "..", "..");
+  const execPath = opts.execPath !== undefined ? opts.execPath : process.execPath;
+
+  const override = env.PODIUM_HOOK_BIN;
+  if (override) {
+    const resolved = path.resolve(override);
+    if (fs.existsSync(resolved)) return { path: resolved, source: "env (PODIUM_HOOK_BIN)" };
+  }
+
+  const repoRelative = path.join(repoRoot, "hook", "dist", "podium-hook");
+  if (fs.existsSync(repoRelative)) return { path: repoRelative, source: "repo (hook/dist/podium-hook)" };
+
+  if (execPath) {
+    const sibling = path.join(path.dirname(execPath), "podium-hook");
+    if (fs.existsSync(sibling)) return { path: sibling, source: "packaged (next to server binary)" };
+  }
+
+  return null;
+}
 
 function envFlag(name) {
   return ["1", "true", "yes", "on"].includes(String(process.env[name] || "").toLowerCase());
@@ -58,11 +103,12 @@ function isInsideContainer() {
 
 /** Multi-line message explaining why a container install is refused. */
 function containerRefusalMessage() {
+  const hookBin = (resolveHookBinary() || {}).path || "<podium-hook binary path>";
   return [
     "✖ Refusing to install Claude Code hooks from inside a container.",
     "",
-    `  The hook command would embed this handler path:`,
-    `      ${HOOK_HANDLER}`,
+    `  The hook command would embed this binary path:`,
+    `      ${hookBin}`,
     `  written into:`,
     `      ${SETTINGS_PATH}`,
     "",
@@ -93,12 +139,28 @@ const HOOKS_WITH_MATCHER = ["PreToolUse", "PostToolUse", "Stop", "SubagentStop",
 const HOOKS_WITHOUT_MATCHER = ["SessionStart", "SessionEnd", "UserPromptSubmit"];
 const HOOK_TYPES = [...HOOKS_WITH_MATCHER, ...HOOKS_WITHOUT_MATCHER];
 
-function makeHookEntry(hookType) {
+/**
+ * Legacy markers recognized (and upgraded in place, not duplicated) so
+ * pre-existing installs — including the never-vendored `hook-handler.js`
+ * entries every boot wrote before this fix — get replaced by the real
+ * `podium-hook` binary path. Ported from `HookInstaller.swift`'s
+ * `legacyMarkers`.
+ */
+const LEGACY_MARKERS = [
+  "hook-handler.js",
+  ".claude/podium/hook.mjs",
+  "plugins/cache/wp-media/podium",
+  "podium/dashboard/scripts",
+];
+/** Marker substring identifying our own current native-binary entry. */
+const OUR_MARKER = "podium-hook";
+
+function makeHookEntry(hookType, hookBinPath) {
   const entry = {
     hooks: [
       {
         type: "command",
-        command: `node "${HOOK_HANDLER}" ${hookType}`,
+        command: `"${hookBinPath}"`,
       },
     ],
   };
@@ -143,10 +205,11 @@ function writeSettingsAtomic(settingsPath, settings) {
 }
 
 function isOurEntry(entry) {
+  const markers = [OUR_MARKER, ...LEGACY_MARKERS];
   // Matches old format (entry.command) and new format (entry.hooks[].command)
-  if (entry.command && entry.command.includes("hook-handler.js")) return true;
+  if (entry.command && markers.some((m) => entry.command.includes(m))) return true;
   if (Array.isArray(entry.hooks)) {
-    return entry.hooks.some((h) => h.command && h.command.includes("hook-handler.js"));
+    return entry.hooks.some((h) => h.command && markers.some((m) => h.command.includes(m)));
   }
   return false;
 }
@@ -157,6 +220,19 @@ function installHooks(silent = false) {
   // opt-out for the rare case of running Claude Code inside this same container.
   if (isInsideContainer() && !envFlag("CCAM_ALLOW_CONTAINER_HOOKS")) {
     if (!silent) console.error(containerRefusalMessage());
+    return false;
+  }
+
+  const resolved = resolveHookBinary();
+  if (!resolved) {
+    // Better no hooks than dead hooks: never write an entry pointing at a
+    // binary that doesn't exist (this was the pre-fix bug — every boot wrote
+    // a hook-handler.js command that could never resolve).
+    console.error(
+      "podium-hook binary not found (checked PODIUM_HOOK_BIN, hook/dist/podium-hook, " +
+        "and next to the running server binary) — skipping hook installation. " +
+        "Build it with: cd hook && bun install && bun run build"
+    );
     return false;
   }
 
@@ -180,7 +256,7 @@ function installHooks(silent = false) {
     if (!settings.hooks[hookType]) settings.hooks[hookType] = [];
 
     const existing = settings.hooks[hookType].findIndex(isOurEntry);
-    const entry = makeHookEntry(hookType);
+    const entry = makeHookEntry(hookType, resolved.path);
 
     if (existing >= 0) {
       settings.hooks[hookType][existing] = entry;
@@ -194,7 +270,7 @@ function installHooks(silent = false) {
   writeSettingsAtomic(SETTINGS_PATH, settings);
 
   if (!silent) {
-    console.log(`Hook handler: ${HOOK_HANDLER}`);
+    console.log(`Hook binary: ${resolved.path} (via ${resolved.source})`);
     console.log(`Settings file: ${SETTINGS_PATH}`);
     console.log(`Installed: ${installed} new, updated: ${updated} existing`);
     console.log("Claude Code hooks configured. Start a new Claude Code session to begin tracking.");
@@ -208,4 +284,4 @@ if (require.main === module) {
   if (!installHooks(false)) process.exitCode = 1;
 }
 
-module.exports = { installHooks, isInsideContainer, writeSettingsAtomic };
+module.exports = { installHooks, isInsideContainer, writeSettingsAtomic, resolveHookBinary };
