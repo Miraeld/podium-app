@@ -142,19 +142,30 @@ jobs:
         run: |
           cd tauri
           cargo tauri icon src-tauri/icon-source.png
-      - name: Build Tauri app (.AppImage + .deb)
-        # NO_STRIP: linuxdeploy runs `strip` on every bundled binary by
-        # default; the bun-compiled sidecars (podium-server / podium-hook,
-        # ~63MB ELFs with embedded bytecode+assets) make strip fail, which
-        # surfaces only as linuxdeploy's generic "failed to run linuxdeploy"
-        # (v1.0.0-rc-1 run 29428948113 — identical yml bundled fine at
-        # v0.5.3, before the bun sidecars existed). Stripping them is
-        # pointless anyway (the bulk is the embedded blob, not symbols).
+      # .deb first: Tauri's deb bundler doesn't involve linuxdeploy, so a
+      # linuxdeploy/AppImage failure can never block the .deb (or the whole
+      # release). The cargo build is shared — the AppImage step below reuses it.
+      - name: Build Tauri app (.deb)
+        run: |
+          cd tauri
+          cargo tauri build --bundles deb
+      # AppImage is best-effort until the linuxdeploy failure is understood:
+      # "failed to run linuxdeploy" (runs 29428948113 + 29438033805, both
+      # with fuse+libfuse2 installed and the second with NO_STRIP=true) hides
+      # the underlying error at default verbosity — --verbose surfaces
+      # linuxdeploy's own log. v0.5.3 bundled fine on the same yml before the
+      # two ~63MB bun sidecars entered the bundle; suspicion is on how
+      # linuxdeploy processes those. continue-on-error keeps dmg+deb releases
+      # flowing while the verbose log gives the real diagnosis; the AppImage
+      # rejoins the release the moment the root cause lands. NO_STRIP kept —
+      # stripping the sidecars is pointless (their bulk is embedded blob).
+      - name: Build Tauri app (.AppImage, best-effort + verbose)
+        continue-on-error: true
         env:
           NO_STRIP: "true"
         run: |
           cd tauri
-          cargo tauri build --bundles appimage,deb
+          cargo tauri build --bundles appimage --verbose
       # TODO(T2.3): same updater-signing slot as the macOS job above —
       # add the Tauri signing key env vars here once it exists, so this
       # job also emits .AppImage.tar.gz + .sig for the updater manifest.
@@ -162,6 +173,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: linux-bundles
+          # deb is mandatory (if-no-files-found: error still bites when it's
+          # missing); the AppImage glob simply matches nothing when that
+          # best-effort step failed.
           path: |
             tauri/src-tauri/target/release/bundle/appimage/*.AppImage
             tauri/src-tauri/target/release/bundle/deb/*.deb
