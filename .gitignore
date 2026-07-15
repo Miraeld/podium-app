@@ -26,3 +26,9 @@ hook/.*.bun-build
 
 # Claude Code harness team file (local)
 .podium-team
+
+# Internal working docs — local only, never on GitHub (owner decision 2026-07-15)
+HANDOVER.md
+PRE-1.0-AUDIT.md
+docs/N2-GAP.md
+docs/N5A-SPIKE.md
