@@ -120,10 +120,20 @@ podium-app/                       # this repo (rename from PodiumSwiftApp = N7)
   across the touched files); full contract gate is N4. Pre-existing failures
   in ccam-cli / hook-handler / plugins-marketplace tests are environment
   debt from upstream (fail identically on the untouched tree) — for N4.
-- **N5-B (hook client) + P10 (LICENSE/attribution) 🔄 IN FLIGHT** (2026-07-12,
-  Sonnet subagent from the orchestrator session). Scope fence: ONLY `hook/`
-  (new dir), root `LICENSE`, `README.md` attribution section. Must NOT touch
-  `server/` (N3 owns it), `client/`, `tauri/`, or this file's other entries.
+- **N5-B (hook client) + P10 ✅ DONE** (`acfd56b`, 2026-07-15, orchestrator-
+  verified): `hook/src/index.ts` (zero-dep TS, bun-compiles to 59MB single
+  binary, dist/ gitignored) — stdin JSON → 8-event gate → CLAUDE_DASHBOARD_PORT
+  override > `~/.claude/.agent-dashboard.json` discovery (multi+legacy formats,
+  pid liveness) > 4820 fallback → POST per port, 1s req / 1.5s deadline,
+  always exit 0. Verified end-to-end: event landed on a real server boot via
+  both discovery paths; malformed/dead-port/no-file cases all exit 0.
+  LICENSE = MIT dual copyright; README Attribution section (P10). CAVEAT for
+  N5-A/N4: `server/index.js` auto-installs hooks on EVERY boot keyed off
+  $HOME — scratch boots must override HOME or they rewrite the real
+  `~/.claude/settings.json` + `.agent-dashboard.json`.
+- **N3 verification (orchestrator, 2026-07-15):** confirmed — 60/60 node:test
+  green on the touched suites; live curl: search/export/updates shapes match
+  types.ts, P2 (dev → no prompt), P5 (envelope incl. 404), P7 (Miraeld only).
 - **N5-A SPIKE ✅ DONE** (2026-07-12, scratchpad-only, no repo changes):
   `bun build --compile` works on `server/` — 61MB arm64 single-file binary,
   boots green, hooks event lands, swagger/redoc served. TWO patches needed:
