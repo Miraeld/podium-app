@@ -135,6 +135,10 @@ export function Sidebar({ wsConnected, collapsed, onToggle }: SidebarProps) {
   // Temporarily hidden per product decision — flip to true to restore the
   // website link in both the expanded and collapsed sidebar footers.
   const SHOW_WEBSITE_LINK = false;
+  // Temporarily hidden (owner, 2026-07-15): the link misbehaves in the Tauri
+  // shell — revisit post-1.0 (likely needs the shell's external-open handler),
+  // then flip back to true.
+  const SHOW_GITHUB_LINK = false;
 
   // Kanban visibility — hidden by default, toggled via Settings
   const [kanbanVisible, setKanbanVisible] = useState(loadKanbanVisible);
@@ -449,18 +453,20 @@ export function Sidebar({ wsConnected, collapsed, onToggle }: SidebarProps) {
         </button>
         {!collapsed && (
           <div className="space-y-1.5">
-            <a
-              href="https://github.com/Miraeld/podium-app"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="group flex items-center gap-2.5 rounded-lg border border-transparent px-2.5 py-2 text-xs text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-gray-200 hover:bg-surface-3 hover:border-border transition-colors"
-              title="GitHub"
-            >
-              <span className="w-6 h-6 rounded-md bg-surface-3 flex items-center justify-center">
-                <Github className="w-3.5 h-3.5 flex-shrink-0" />
-              </span>
-              <span className="font-medium">GitHub</span>
-            </a>
+            {SHOW_GITHUB_LINK && (
+              <a
+                href="https://github.com/Miraeld/podium-app"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="group flex items-center gap-2.5 rounded-lg border border-transparent px-2.5 py-2 text-xs text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-gray-200 hover:bg-surface-3 hover:border-border transition-colors"
+                title="GitHub"
+              >
+                <span className="w-6 h-6 rounded-md bg-surface-3 flex items-center justify-center">
+                  <Github className="w-3.5 h-3.5 flex-shrink-0" />
+                </span>
+                <span className="font-medium">GitHub</span>
+              </a>
+            )}
             {SHOW_WEBSITE_LINK && (
               <a
                 href="https://wp-media.me"
@@ -479,16 +485,18 @@ export function Sidebar({ wsConnected, collapsed, onToggle }: SidebarProps) {
         )}
         {collapsed && (
           <div className="flex flex-col items-center gap-2 pt-0.5">
-            <a
-              href="https://github.com/Miraeld/podium-app"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="w-8 h-8 rounded-md border border-transparent flex items-center justify-center text-gray-700 dark:text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-300 hover:bg-surface-3 hover:border-border transition-colors"
-              title="GitHub"
-              aria-label="GitHub"
-            >
-              <Github className="w-3.5 h-3.5" />
-            </a>
+            {SHOW_GITHUB_LINK && (
+              <a
+                href="https://github.com/Miraeld/podium-app"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-8 h-8 rounded-md border border-transparent flex items-center justify-center text-gray-700 dark:text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-300 hover:bg-surface-3 hover:border-border transition-colors"
+                title="GitHub"
+                aria-label="GitHub"
+              >
+                <Github className="w-3.5 h-3.5" />
+              </a>
+            )}
             {SHOW_WEBSITE_LINK && (
               <a
                 href="https://wp-media.me"
