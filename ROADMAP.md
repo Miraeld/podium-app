@@ -291,10 +291,36 @@ podium-app/                       # this repo (rename from PodiumSwiftApp = N7)
   release). Fixed in `476014b`: cfg-gate + ci.yml generates the gitignored
   icons/ via npx tauri icon. **CI GREEN on `476014b` — all 3 jobs. N6 runner
   proof complete.**
-- **N7 🔄 CLAIMED + DISPATCHED** (2026-07-15, orchestrator session, owner
-  present and gave the go). Preconditions verified: N4 gate green, N5
-  end-to-end done, N6 CI green on run 29422887113 (91e4f0d). Scope: per the
-  N7 prompt below. N8 queued behind it (same session).
+- **N7 ✅ DONE** (`b7d325e`, 2026-07-15): Swift fully removed. Deleted
+  `Sources/`, `Tests/`, `Package.swift`, `Package.resolved`, `WebClient/`
+  (148 files, ~34.6k LOC) plus `tauri/linux-build/` (Swift-toolchain Docker
+  recipe, dead since N6's bun-based CI Linux path — 3 files, ~253 LOC).
+  Confirmed `prepare-sidecar.sh` and `server/index.js` already pointed at
+  `client/dist` before deleting `WebClient/`. Rewrote `CLAUDE.md`,
+  `README.md`, `tauri/README.md` for the Node+Tauri era (layout, commands,
+  footguns: P8, auto-commit hook, frozen plugin repo, wire-contract gate,
+  P1 loopback, hook auto-install keyed off `$HOME`, bun:sqlite,
+  `BUN_NO_CODESIGN_MACHO_BINARY`). Ported `scripts/contract-check.sh` off
+  building/booting a Swift release binary onto booting `server/index.js`
+  (or a staged bun sidecar). Dropped Swift-only `.gitignore` entries.
+  `rg -i swift` repo-wide: remaining hits are exclusively "ported from
+  <Swift file>" provenance comments and docs' own historical narration —
+  no live build/doc references left. **Verification (evidence a-f):**
+  (a) swift-sweep above; (b) `server && npm test` 568/568 green (scratch
+  HOME); (c) `client` build green with `PODIUM_APP_VERSION` set, fails
+  correctly without it (P8 intact); (d) `tauri/prepare-sidecar.sh` green
+  (bun-compiled both binaries, staged `client/dist`); (e) `cargo check` in
+  `tauri/src-tauri` green; (f) fresh-clone simulation
+  (`git clone . /tmp/podium-fresh`): client build green (P8 both ways)
+  and server 558/568 — the 10 failures are a **pre-existing** test-isolation
+  bug in `server/__tests__/install-hooks.test.js` (shared `TMP_HOME` temp
+  dir across `describe` blocks, one block's `after()` deletes it before
+  another finishes) that reproduces identically on the pre-N7 commit in a
+  fresh clone too (confirmed by checking out `881fd0c`'s `server/` into a
+  separate fresh clone) — NOT a Swift-removal regression, not touched here
+  per §F (never weaken/delete a test); flagged as a follow-up task, not
+  fixed in this session. Repo rename (`PodiumSwiftApp` → `podium-app`)
+  still pending — owner does that per the note below. N8 queued next.
 - N8: queued — starts after N7 is orchestrator-verified.
 
 ## N1 — Import the front-end source (monorepo begins)
