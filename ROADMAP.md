@@ -137,15 +137,29 @@ podium-app/                       # this repo (rename from PodiumSwiftApp = N7)
   two sessions because neither saw a claim; the node:test version won and
   the duplicate ~200k-token Vitest effort was discarded. Claim → commit →
   dispatch, always.
-- **HOOK-WIRING FIX 🔄 CLAIMED** (2026-07-15, orchestrator session): wire
-  `server/scripts/install-hooks.js` to the real `hook/dist/podium-hook`
-  binary (build it if absent) instead of the never-vendored
-  `hook-handler.js` (see N5-A caveat below). Scope: server/scripts/
-  install-hooks.js + its tests + hook/ build wiring; nothing else.
-- **N6 (CI + packaging) 🔄 CLAIMED** (2026-07-15, orchestrator session).
-  Scope: .github/workflows/, scripts/ (repo root), RELEASING.md. Fence: no
-  server/ (except reading), no client/, no tauri/ beyond what N6's prompt
-  says about prepare-sidecar.sh usage in CI.
+- **HOOK-WIRING FIX ✅ DONE** (`04cac9e` + `d95f34e`, 2026-07-15,
+  orchestrator-verified): install-hooks.js resolves PODIUM_HOOK_BIN env >
+  repo hook/dist/podium-hook > binary next to process.execPath; installs
+  NOTHING (stderr warning) if no binary found — no more dead entries.
+  Legacy-marker upgrade ported from HookInstaller.swift (hook-handler.js,
+  hook.mjs, plugin-cache paths replaced in place). P3 atomic+.bak intact.
+  Owner healing: boot the app once — legacy upgrade repairs the real
+  settings.json automatically. Follow-up in d95f34e: podium-hook now
+  forwards Stop + Notification (server waiting-badge/watchdog depend on
+  them; verified live — all 3 event types recorded). 565/565 tests green.
+  REMAINING (noted, unclaimed): staging podium-hook into the Tauri bundle
+  needs tauri.conf.json/main.rs wiring (TODO in prepare-sidecar.sh).
+- **N6 ✅ DONE** (`0560858`, 2026-07-15, orchestrator-verified): ci.yml =
+  client (P8-stamped build) / server (npm test, 565) / tauri (cargo check),
+  zero Swift steps (verified by grep). release.yml keeps tag→draft flow,
+  bun via oven-sh/setup-bun, sidecar via prepare-sidecar.sh, P8 stamped
+  with the real tag version in both OS jobs. Headless Linux = bun-compiled
+  binaries (server+hook) via oven/bun:1 docker; service unit gained
+  DASHBOARD_WEB_DIST (real bug: compiled binary's web-dist fallback only
+  resolves in the source tree). RELEASING.md rewritten. Local verification:
+  yaml lint, bash -n, client build, server 565/565, cargo check — actual
+  runner proof pending first push. Docker path read-verified only (docker
+  not running locally).
 - **N3 verification (orchestrator, 2026-07-15):** confirmed — 60/60 node:test
   green on the touched suites; live curl: search/export/updates shapes match
   types.ts, P2 (dev → no prompt), P5 (envelope incl. 404), P7 (Miraeld only).
