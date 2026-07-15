@@ -30,16 +30,21 @@ const FALLBACK_PORTS = [4820];
 const REQUEST_TIMEOUT_MS = 1000;
 const PROCESS_DEADLINE_MS = 1500;
 
-// The 8 hook events Podium registers for (kept in sync with the installer).
+// Superset of the hook types install-hooks.js registers (HOOK_TYPES):
+// routes/hooks.js depends on Stop (waiting badge) and Notification
+// (blocked-waiting detection + watchdog) — dropping them here silently
+// breaks those features even though the hooks fire.
 const HANDLED_EVENTS = new Set([
   "SessionStart",
   "UserPromptSubmit",
   "PreToolUse",
   "PostToolUse",
   "PostToolUseFailure",
+  "Stop",
   "SubagentStart",
   "SubagentStop",
   "SessionEnd",
+  "Notification",
 ]);
 
 function homeDirectory(): string {
