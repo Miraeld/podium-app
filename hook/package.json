@@ -6,7 +6,7 @@
   "type": "module",
   "main": "src/index.ts",
   "scripts": {
-    "build": "bun build --compile --outfile=dist/podium-hook src/index.ts",
+    "build": "BUN_NO_CODESIGN_MACHO_BINARY=1 bun build --compile --outfile=dist/podium-hook src/index.ts && { [ \"$(uname)\" != Darwin ] || codesign -s - --force dist/podium-hook; }",
     "start": "bun run src/index.ts"
   },
   "devDependencies": {

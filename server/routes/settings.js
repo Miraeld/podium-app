@@ -56,11 +56,16 @@ function getHookStatus() {
     const hooks = {};
     for (const ht of hookTypes) {
       const entries = settings.hooks?.[ht] || [];
+      // "podium-hook" is OUR_MARKER in scripts/install-hooks.js — the binary
+      // path the installer writes. "hook-handler.js" was the upstream repo's
+      // script name; recognized so a not-yet-upgraded install still reads as
+      // present (the installer upgrades it in place on next boot).
+      const isOurs = (cmd) =>
+        typeof cmd === "string" && (cmd.includes("podium-hook") || cmd.includes("hook-handler.js"));
       hooks[ht] = entries.some(
         (e) =>
-          (e.command && e.command.includes("hook-handler.js")) ||
-          (Array.isArray(e.hooks) &&
-            e.hooks.some((h) => h.command && h.command.includes("hook-handler.js")))
+          isOurs(e.command) ||
+          (Array.isArray(e.hooks) && e.hooks.some((h) => isOurs(h.command)))
       );
     }
     const installed = Object.values(hooks).every(Boolean);

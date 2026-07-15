@@ -110,6 +110,16 @@ echo "Installing hook/ dependencies..."
 echo "Compiling podium-hook (bun run build)..."
 (cd "$REPO_ROOT/hook" && BUN_NO_CODESIGN_MACHO_BINARY=1 "$BUN_BIN" run build)
 
+# hook/dist/podium-hook is used DIRECTLY by install-hooks.js's second
+# resolution tier (repo checkout → ~/.claude/settings.json points straight at
+# it). Tauri's codesign pass only ever signs the staged sidecar copy below, so
+# without an ad-hoc signature here the repo copy — unsigned because of
+# BUN_NO_CODESIGN_MACHO_BINARY above — is SIGKILLed by macOS on every hook
+# event (arm64 refuses unsigned/invalid Mach-O executables).
+if [ "$(uname)" = "Darwin" ]; then
+  codesign -s - --force "$REPO_ROOT/hook/dist/podium-hook"
+fi
+
 HOOK_DEST="$DEST_DIR/podium-hook-$TRIPLE"
 cp "$REPO_ROOT/hook/dist/podium-hook" "$HOOK_DEST"
 chmod +x "$HOOK_DEST"
