@@ -837,6 +837,16 @@ export interface TranscriptListResult {
   transcripts: TranscriptInfo[];
 }
 
+/** Native (Tauri) OS notification toggles — mirrors
+ *  tauri/src-tauri/src/notify_settings.rs's NotifySettings, persisted as
+ *  flat JSON at <data_dir>/tauri-notifications.json and served/edited via
+ *  GET/PUT /api/settings/tauri-notifications. */
+export interface TauriNotifySettings {
+  on_completed: boolean;
+  on_error: boolean;
+  on_awaiting_input: boolean;
+}
+
 export const SESSION_STATUS_CONFIG: Record<
   EffectiveSessionStatus,
   { labelKey: string; color: string; bg: string; dot: string }

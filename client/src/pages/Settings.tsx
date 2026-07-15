@@ -63,7 +63,7 @@ import { KANBAN_VISIBLE_KEY, loadKanbanVisible } from "../components/Sidebar";
 import { requestTourStart } from "../lib/tour";
 import { browserNotificationsUnavailable } from "../lib/platform";
 import { tabbyPrefs } from "../components/Tabby/prefs";
-import type { ModelPricing, WSMessage } from "../lib/types";
+import type { ModelPricing, TauriNotifySettings, WSMessage } from "../lib/types";
 
 // ─── Notification preferences ───
 
@@ -365,6 +365,8 @@ export function Settings() {
   } | null>(null);
   const [confirmAction, setConfirmAction] = useState<string | null>(null);
   const [notifPrefs, setNotifPrefs] = useState<NotifPrefs>(loadNotifPrefs);
+  const [tauriNotify, setTauriNotify] = useState<TauriNotifySettings | null>(null);
+  const [tauriNotifySaving, setTauriNotifySaving] = useState(false);
   const [tabbyEnabled, setTabbyEnabled] = useState(() => tabbyPrefs.getEnabled());
   const setTabby = useCallback((v: boolean) => {
     tabbyPrefs.setEnabled(v);
@@ -438,6 +440,36 @@ export function Settings() {
     return () => clearTimeout(timeout);
   }, [actionResult]);
 
+  const notifUnavailable = browserNotificationsUnavailable();
+
+  // Native (Tauri) notification toggles — only relevant when the browser
+  // Notification API is unavailable (i.e. running inside the Tauri shell).
+  useEffect(() => {
+    if (!notifUnavailable) return;
+    api.settings.tauriNotifications
+      .get()
+      .then(setTauriNotify)
+      .catch(() => {});
+  }, [notifUnavailable]);
+
+  const updateTauriNotify = useCallback(async (patch: Partial<TauriNotifySettings>) => {
+    setTauriNotify((prev) => (prev ? { ...prev, ...patch } : prev));
+    setTauriNotifySaving(true);
+    try {
+      const next = await api.settings.tauriNotifications.set(patch);
+      setTauriNotify(next);
+    } catch {
+      // Revert to server state on failure rather than leaving an optimistic
+      // toggle the write never actually persisted.
+      api.settings.tauriNotifications
+        .get()
+        .then(setTauriNotify)
+        .catch(() => {});
+    } finally {
+      setTauriNotifySaving(false);
+    }
+  }, []);
+
   const updateNotifPrefs = (patch: Partial<NotifPrefs>) => {
     setNotifPrefs((prev) => {
       const next = { ...prev, ...patch };
@@ -445,8 +477,6 @@ export function Settings() {
       return next;
     });
   };
-
-  const notifUnavailable = browserNotificationsUnavailable();
 
   const requestNotifPermission = async () => {
     if (!("Notification" in window)) return;
@@ -1156,14 +1186,57 @@ export function Settings() {
 
         <div className="card p-5 space-y-5">
           {notifUnavailable ? (
-            <div className="flex items-center gap-3 flex-wrap">
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-surface-2 border border-border flex-shrink-0">
-                <Bell className="w-5 h-5 text-gray-700 dark:text-gray-500" />
+            <div className="space-y-4">
+              <div className="flex items-center gap-3 flex-wrap">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-surface-2 border border-border flex-shrink-0">
+                  <Bell className="w-5 h-5 text-gray-700 dark:text-gray-500" />
+                </div>
+                <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-500">
+                  <Info className="w-3.5 h-3.5 flex-shrink-0" />
+                  {t("notifications.nativeHandled")}
+                </div>
               </div>
-              <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-500">
-                <Info className="w-3.5 h-3.5 flex-shrink-0" />
-                {t("notifications.nativeHandled")}
-              </div>
+
+              {tauriNotify ? (
+                <div className="space-y-3 pt-4 border-t border-border">
+                  <p className="text-sm text-gray-600 dark:text-gray-500 uppercase tracking-wider font-semibold">
+                    {t("notifications.notifyWhen")}
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div className="flex items-center gap-3 bg-surface-2 rounded-lg px-3.5 py-3">
+                      <CheckCircle className="w-4 h-4 text-indigo-700 dark:text-indigo-400 flex-shrink-0" />
+                      <Toggle
+                        checked={tauriNotify.on_completed}
+                        onChange={(v) => updateTauriNotify({ on_completed: v })}
+                        label={t("notifications.sessionComplete")}
+                      />
+                    </div>
+                    <div className="flex items-center gap-3 bg-surface-2 rounded-lg px-3.5 py-3">
+                      <AlertCircle className="w-4 h-4 text-red-700 dark:text-red-400 flex-shrink-0" />
+                      <Toggle
+                        checked={tauriNotify.on_error}
+                        onChange={(v) => updateTauriNotify({ on_error: v })}
+                        label={t("notifications.sessionError")}
+                      />
+                    </div>
+                    <div className="flex items-center gap-3 bg-surface-2 rounded-lg px-3.5 py-3">
+                      <Clock className="w-4 h-4 text-amber-700 dark:text-amber-400 flex-shrink-0" />
+                      <Toggle
+                        checked={tauriNotify.on_awaiting_input}
+                        onChange={(v) => updateTauriNotify({ on_awaiting_input: v })}
+                        label={t("notifications.awaitingInput")}
+                      />
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-gray-700 dark:text-gray-500 flex items-start gap-1.5 pt-1">
+                    <Info className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                    {t("notifications.nativeCaption")}
+                    {tauriNotifySaving && <span className="ml-1">{t("notifications.saving")}</span>}
+                  </p>
+                </div>
+              ) : (
+                <p className="text-sm text-gray-600 dark:text-gray-500">{t("notifications.loading")}</p>
+              )}
             </div>
           ) : (
             <div className="flex items-center justify-between flex-wrap gap-3">

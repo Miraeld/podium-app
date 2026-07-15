@@ -19,6 +19,7 @@ import type {
   SessionDrillIn,
   SessionStats,
   Stats,
+  TauriNotifySettings,
   TranscriptListResult,
   TranscriptResult,
   WebhookDelivery,
@@ -240,6 +241,14 @@ export const api = {
         method: "POST",
       }),
     exportData: () => `${BASE}/settings/export`,
+    tauriNotifications: {
+      get: () => request<TauriNotifySettings>("/settings/tauri-notifications"),
+      set: (patch: Partial<TauriNotifySettings>) =>
+        request<TauriNotifySettings>("/settings/tauri-notifications", {
+          method: "PUT",
+          body: JSON.stringify(patch),
+        }),
+    },
     cleanup: (params: { abandon_hours?: number; purge_days?: number }) =>
       request<{
         ok: boolean;

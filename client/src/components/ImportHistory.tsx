@@ -29,12 +29,34 @@ import {
   Info,
   XCircle,
   History,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 import { api, type ImportResult } from "../lib/api";
 import { eventBus } from "../lib/eventBus";
 import type { WSMessage, ImportProgressMessage } from "../lib/types";
 
 type Mode = "rescan" | "path" | "upload";
+
+// Collapsed by default (rc-2: this block used to hog the top of Settings),
+// persisted the same way Workflows.tsx persists its accordion sections.
+const SECTION_OPEN_KEY = "podium-import-history-open";
+
+function loadSectionOpen(): boolean {
+  try {
+    return localStorage.getItem(SECTION_OPEN_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
+function saveSectionOpen(open: boolean) {
+  try {
+    localStorage.setItem(SECTION_OPEN_KEY, String(open));
+  } catch {
+    // ignore — persistence is a nicety, not required for correctness
+  }
+}
 
 type GuideResponse = Awaited<ReturnType<typeof api.import.guide>>;
 type Progress = ImportProgressMessage;
@@ -52,6 +74,14 @@ export function ImportHistory() {
   const [instructionsOpen, setInstructionsOpen] = useState(true);
   const [dragging, setDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [sectionOpen, setSectionOpen] = useState(loadSectionOpen);
+  const toggleSection = useCallback(() => {
+    setSectionOpen((prev) => {
+      const next = !prev;
+      saveSectionOpen(next);
+      return next;
+    });
+  }, []);
 
   // Load the guide once. If the API isn't reachable, fall back to sensible
   // defaults so the UI still explains what to do.
@@ -173,10 +203,29 @@ export function ImportHistory() {
 
   return (
     <section>
-      <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center gap-2 mb-1">
-        <History className="w-4 h-4 text-gray-700 dark:text-gray-500" />
-        {t("import.title")}
-      </h3>
+      <button
+        type="button"
+        onClick={toggleSection}
+        aria-expanded={sectionOpen}
+        className="w-full flex items-center justify-between gap-2 mb-1 text-left group"
+      >
+        <span className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center gap-2">
+          <History className="w-4 h-4 text-gray-700 dark:text-gray-500" />
+          {t("import.title")}
+        </span>
+        {sectionOpen ? (
+          <ChevronDown className="w-4 h-4 text-gray-500 flex-shrink-0" />
+        ) : (
+          <ChevronRight className="w-4 h-4 text-gray-500 flex-shrink-0" />
+        )}
+      </button>
+
+      {!sectionOpen && (
+        <p className="text-sm text-gray-600 dark:text-gray-500">{t("import.description")}</p>
+      )}
+
+      {sectionOpen && (
+        <>
       <p className="text-sm text-gray-600 dark:text-gray-500 mb-4">{t("import.description")}</p>
 
       <div className="card p-5 space-y-5">
@@ -438,6 +487,8 @@ export function ImportHistory() {
           </div>
         )}
       </div>
+        </>
+      )}
     </section>
   );
 }

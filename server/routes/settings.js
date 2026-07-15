@@ -13,7 +13,7 @@ const { transcriptCache } = require("./hooks");
 
 const router = Router();
 
-const { getSettingsPath, getClaudeHome, setClaudeHome } = require("../lib/claude-home");
+const { getSettingsPath, getClaudeHome, setClaudeHome, getDataDir } = require("../lib/claude-home");
 const CLAUDE_SETTINGS_PATH = getSettingsPath();
 
 function getDbSize() {
@@ -236,6 +236,58 @@ router.put("/claude-home", (req, res) => {
       error: { code: "INVALID_PATH", message: err.message },
     });
   }
+});
+
+// ── Tauri native notification toggles ───────────────────────────────────
+// Mirrors tauri/src-tauri/src/notify_settings.rs's NotifySettings struct,
+// persisted as flat JSON at <data_dir>/tauri-notifications.json. The Rust
+// ws_watcher hot-reloads that file on change (see its load_or_create calls),
+// so a write from here takes effect live with no Tauri IPC round trip.
+const TAURI_NOTIFY_KEYS = ["on_completed", "on_error", "on_awaiting_input"];
+const DEFAULT_TAURI_NOTIFY_SETTINGS = { on_completed: true, on_error: true, on_awaiting_input: true };
+
+function getTauriNotifySettingsPath() {
+  return path.join(getDataDir(), "tauri-notifications.json");
+}
+
+function readTauriNotifySettings() {
+  try {
+    const raw = fs.readFileSync(getTauriNotifySettingsPath(), "utf8");
+    const parsed = JSON.parse(raw);
+    return { ...DEFAULT_TAURI_NOTIFY_SETTINGS, ...parsed };
+  } catch {
+    return { ...DEFAULT_TAURI_NOTIFY_SETTINGS };
+  }
+}
+
+// GET /api/settings/tauri-notifications — read native notification toggles.
+// Returns defaults (all true) without creating the file if it doesn't exist
+// yet; the file is created on first PUT (mirrors the Rust side's
+// load_or_create default value, minus the eager write).
+router.get("/tauri-notifications", (_req, res) => {
+  res.json(readTauriNotifySettings());
+});
+
+// PUT /api/settings/tauri-notifications — merge + persist toggles. Body may
+// supply any subset of the three boolean keys; unknown/non-boolean values
+// on a supplied key are rejected, unsupplied keys keep their current value.
+router.put("/tauri-notifications", (req, res) => {
+  const body = req.body || {};
+  for (const key of TAURI_NOTIFY_KEYS) {
+    if (key in body && typeof body[key] !== "boolean") {
+      return res.status(400).json({
+        error: { code: "INVALID_VALUE", message: `${key} must be a boolean` },
+      });
+    }
+  }
+  const next = { ...readTauriNotifySettings() };
+  for (const key of TAURI_NOTIFY_KEYS) {
+    if (key in body) next[key] = body[key];
+  }
+  const notifyPath = getTauriNotifySettingsPath();
+  fs.mkdirSync(path.dirname(notifyPath), { recursive: true });
+  fs.writeFileSync(notifyPath, JSON.stringify(next, null, 2) + "\n");
+  res.json(next);
 });
 
 // POST /api/settings/cleanup — abandon stale sessions, purge old data

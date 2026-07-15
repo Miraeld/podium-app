@@ -897,6 +897,23 @@ describe("GET /api/settings/info", () => {
   });
 });
 
+// ── /api/settings/tauri-notifications ─────────────────────────────────────
+
+describe("GET /api/settings/tauri-notifications", () => {
+  it("matches types.ts TauriNotifySettings — snake_case, all-true defaults", async () => {
+    const e = "/api/settings/tauri-notifications";
+    const json = await get(e);
+
+    snake(json, "on_completed", ["bool"], e);
+    snake(json, "on_error", ["bool"], e);
+    snake(json, "on_awaiting_input", ["bool"], e);
+    // Fresh data dir → the notify_settings.rs defaults (all true).
+    assert.equal(json.on_completed, true, `${e}: default on_completed must be true`);
+    assert.equal(json.on_error, true, `${e}: default on_error must be true`);
+    assert.equal(json.on_awaiting_input, true, `${e}: default on_awaiting_input must be true`);
+  });
+});
+
 // ── /api/workflows (camelCase exception family) ──────────────────────────
 
 describe("GET /api/workflows family", () => {
