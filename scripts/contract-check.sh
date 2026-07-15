@@ -1,19 +1,19 @@
 #!/bin/bash
-# Out-of-process smoke complement to Tests/PodiumServerTests/ContractTests.swift.
+# Out-of-process smoke complement to server/tests/contract/contract.test.js.
 #
-# ContractTests boots podium-server IN-PROCESS (same executable, same test
-# binary) and asserts against raw JSON via XCTest. This script instead builds
-# and boots the REAL release binary as a separate process, seeds it through
-# the same recorded-style hook sequence (see ContractTests.seedViaHooks), and
-# curls every GET endpoint the client covers — a coarser but more "real world"
-# check that the shipped binary, not just the test target, honors the wire
-# contract.
+# The contract test suite boots server/index.js IN-PROCESS (child_process,
+# same source tree) and asserts against raw JSON via node:test. This script
+# instead boots the REAL server entrypoint (or the bun-compiled sidecar, if
+# staged) as a separate process, seeds it through the same recorded-style
+# hook sequence, and curls every GET endpoint the client covers — a coarser
+# but more "real world" check that the shipped server, not just the test
+# target, honors the wire contract.
 #
 # Usage:
 #   scripts/contract-check.sh
 #
-# Exit code: 0 on PASS, non-zero on any failure (build, boot, seed, or
-# assertion). Never touches ~/.claude or ~/.claude/podium/data — CLAUDE_HOME,
+# Exit code: 0 on PASS, non-zero on any failure (boot, seed, or assertion).
+# Never touches ~/.claude or ~/.claude/podium/data — CLAUDE_HOME,
 # DASHBOARD_DATA_DIR, and HOME are all redirected to a throwaway mktemp dir
 # for the lifetime of the server process.
 
@@ -22,24 +22,21 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$SCRIPT_DIR"
 
-BIN_PATH="$SCRIPT_DIR/.build/release/podium-server"
+# Prefer a bun-compiled sidecar if one is already staged (tauri/prepare-
+# sidecar.sh output); otherwise fall back to running the source entrypoint
+# directly with node — no build step needed for this smoke check.
+SIDECAR_GLOB=("$SCRIPT_DIR"/tauri/src-tauri/bin/podium-server-*)
+BIN_PATH=""
+if [ -x "${SIDECAR_GLOB[0]:-}" ]; then
+  BIN_PATH="${SIDECAR_GLOB[0]}"
+  echo "▶ Using staged sidecar binary: $BIN_PATH"
+else
+  echo "▶ No staged sidecar binary found — running server/index.js with node"
+fi
 
 PASS_COUNT=0
 FAIL_COUNT=0
 FAILURES=()
-
-# ---------------------------------------------------------------------------
-# Step 1: build the release binary if missing
-# ---------------------------------------------------------------------------
-
-if [ ! -x "$BIN_PATH" ]; then
-  echo "▶ Release binary not found — building podium-server (release)…"
-  swift build -c release --product podium-server
-else
-  echo "▶ Release binary already present: $BIN_PATH"
-fi
-
-[ -x "$BIN_PATH" ] || { echo "✗ podium-server binary not found at $BIN_PATH after build"; exit 1; }
 
 # ---------------------------------------------------------------------------
 # Step 2: boot on a random high port, fully isolated fixture dir
@@ -92,7 +89,11 @@ trap cleanup EXIT
 PORT=$(( (RANDOM % 10000) + 30000 ))
 
 echo "▶ Booting podium-server on port $PORT (CLAUDE_HOME=$CLAUDE_HOME_DIR, HOME=$FIXTURE_DIR)…"
-"$BIN_PATH" --port "$PORT" --data-dir "$DATA_DIR" --no-hooks >"$SERVER_LOG" 2>&1 &
+if [ -n "$BIN_PATH" ]; then
+  "$BIN_PATH" --port "$PORT" --data-dir "$DATA_DIR" >"$SERVER_LOG" 2>&1 &
+else
+  node "$SCRIPT_DIR/server/index.js" --port "$PORT" --data-dir "$DATA_DIR" >"$SERVER_LOG" 2>&1 &
+fi
 SERVER_PID=$!
 
 BASE_URL="http://127.0.0.1:$PORT"
@@ -243,7 +244,7 @@ check "session transcripts list" "/api/sessions/$SESSION_A/transcripts" '.transc
 check "session transcript" "/api/sessions/$SESSION_A/transcript" '.messages != null and (.has_more != null)'
 check "agents list" "/api/agents?session_id=$SESSION_A" '.agents[0].session_id != null'
 # "agent detail" (GET /api/agents/:id) removed in the pre-1.0 B6 API trim —
-# no client caller; see AgentsRouter.swift.
+# no client caller; kept dormant upstream per P6 (see routes/agents.js).
 check "events list" "/api/events?session_id=$SESSION_A&limit=50" '.events[0].session_id != null'
 check "events facets" "/api/events/facets" '(.event_types // []) | index("SessionStart") != null'
 check "analytics" "/api/analytics?tz_offset=0" '.tokens.total_input != null and .overview.total_sessions != null'

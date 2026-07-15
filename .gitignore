@@ -1,22 +1,10 @@
-.build/
-.swiftpm/
-*.o
-*.d
 *.swp
 .DS_Store
-PodiumApp.app/
 
-# Local signing team + generated Xcode project
-.podium-team
-Podium.xcodeproj/
-# scripts/package-macos.sh + scripts/build-linux.sh output — root-anchored
-# so this doesn't also match the vendored WebClient/dist/ (tracked, see
-# WebClient/SYNC.md).
+# scripts/package-macos.sh + scripts/build-linux.sh output.
 /dist/
 /dist-linux/
-# tauri/linux-build/build-in-container.sh's dedicated scratch dir — kept
-# separate from the host's own .build/ to avoid SQLite build-db corruption
-# when host and container builds interleave (PRE-1.0-AUDIT.md B8).
+# tauri/linux-build/build-in-container.sh's dedicated scratch dir.
 .build-linux-tauri/
 tauri/src-tauri/target*/
 

@@ -1,128 +1,137 @@
 # Podium — Claude Context
 
 Standalone (no plugin, no Docker) macOS app + Linux daemon that observes Claude
-Code agent sessions in real time. Backed by a local SQLite database, serving a
-vendored React dashboard (`WebClient/dist`) over HTTP from the same Swift
-server on both platforms.
+Code agent sessions in real time. Node server + local SQLite database, serving
+the React dashboard (`client/`, built to `client/dist`) over HTTP from the
+same server on both platforms. Packaged as a native app by Tauri (`tauri/`),
+which spawns the server as a sidecar.
 
 ## How to run / build / test
 
 ```bash
-./run.sh                    # build sidecar + cargo tauri dev (Tauri shell, recommended)
-swift build                 # build all products
-swift test                  # run PodiumCoreTests + PodiumServerTests
-scripts/build-linux.sh      # release build → dist-linux tarball (swift:6.1 docker by default)
+./run.sh                                        # prepare-sidecar.sh + cargo tauri dev (recommended)
+cd client && npm ci && PODIUM_APP_VERSION=0.0.0-dev npm run build   # build the React dashboard
+cd server && npm ci && npm test                 # 568 node:test tests, incl. server/tests/contract/
+cd tauri/src-tauri && cargo check                # Rust shell sanity check
+cargo tauri build                                # release packaging (.dmg / .AppImage / .deb)
+scripts/build-linux.sh                          # headless Linux release → dist-linux tarball
 ```
 
-`run.sh` builds the `podium-server` sidecar (`tauri/prepare-sidecar.sh`) and
-runs the Tauri app in dev mode (`cargo tauri dev`) — see `tauri/README.md` for
-the full lifecycle and prerequisites. Release packaging (`.dmg`/`.AppImage`/
-`.deb`) goes through `cargo tauri build`; see `tauri/README.md`.
+`run.sh` builds the `podium-server` + `podium-hook` sidecars
+(`tauri/prepare-sidecar.sh`, bun-compiled) and stages `client/dist`, then runs
+the Tauri app in dev mode (`cargo tauri dev`) — see `tauri/README.md` for the
+full lifecycle and prerequisites.
 
 ## Project structure
 
 ```
-PodiumSwiftApp/
-├── Package.swift                    # SPM manifest: PodiumCore, PodiumServer (libraries);
-│                                     #   podium-server, podium-hook (executables)
-├── run.sh, scripts/                 # dev launcher (Tauri) + packaging (build-linux.sh,
-│                                     #   install-linux.sh, podium-server.service)
-├── tauri/                           # Tauri v2 shell — native app wrapping podium-server as a sidecar
-├── WebClient/dist                   # vendored React build, served as static files
-├── Sources/
-│   ├── CSQLite/                     # system library wrapping libsqlite3
-│   ├── PodiumCore/                  # cross-platform: models, store, ingestion, discovery,
-│   │   ├── Database/                #   runs, push. No UI, no Apple-only APIs.
-│   │   ├── Models/                  #   PodiumJSON.swift, model types
-│   │   ├── Ingest/                  #   hook event state machine
-│   │   ├── Transcripts/             #   JSONL parsing + cursor pagination
-│   │   ├── Discovery/               #   server-info file, cc-config, hook port discovery
-│   │   ├── Workflows/                #   agent tree / swim-lane aggregation
-│   │   ├── Runs/                    #   RunSpawner (spawns claude processes)
-│   │   ├── Push/                    #   VAPID + RFC 8291 web push
-│   │   ├── Hooks/                   #   HookInstaller, HookClient
-│   │   ├── Pricing/                 #   cost calculation
-│   │   └── Diagnostics/             #   log ring buffer, runtime info
-│   ├── PodiumServer/                 # Hummingbird 2 HTTP + WebSocket server
-│   │   ├── Routes/                  #   one router per resource (see below)
-│   │   ├── WebSocket/                #   Broadcaster actor
-│   │   ├── Static/                  #   hand-rolled static file handler
-│   │   └── Services/                #   background services (import, sweep, watchdog)
-│   ├── PodiumServerCLI/main.swift   # podium-server executable (headless daemon)
-│   └── PodiumHook/main.swift        # podium-hook executable (native hook.mjs replacement)
-└── Tests/
-    ├── PodiumCoreTests/
-    └── PodiumServerTests/           # includes ContractTests.swift — wire-format gate
+podium-app/ (repo dir currently PodiumSwiftApp — rename pending, see ROADMAP.md N7)
+├── client/                # React dashboard source (Vite + TS). Builds to client/dist,
+│                           #   which the server serves as static files (or Tauri stages
+│                           #   into the .app bundle as web-dist).
+├── server/                # Node HTTP + WebSocket server (Express-based, from
+│                           #   hoangsonww/Claude-Code-Agent-Monitor upstream, adapted)
+│   ├── index.js            #   entrypoint; parses --port/--data-dir/--web-dist sidecar flags
+│   ├── db.js                #   SQLite access (better-sqlite3 → bun:sqlite → node:sqlite)
+│   ├── routes/              #   one router per resource: sessions, agents, events, stats,
+│   │                        #   analytics, search, pricing, settings, import, export, push,
+│   │                        #   run, workflows, cc-config, updates, hooks, alerts, webhooks
+│   ├── lib/                  #   claude-home, cc-discovery/mutate/watcher, error-envelope,
+│   │                        #   push (VAPID), pricing, run-spawner, server-info, update-check,
+│   │                        #   session-transfer, transcript-cache, token-usage
+│   ├── scripts/              #   install-hooks.js (writes ~/.claude/settings.json hook entries)
+│   └── tests/contract/        #   contract.test.js — wire-format gate (asserts against
+│                              #   client/src/lib/types.ts)
+├── hook/                  # podium-hook: zero-dep TS, bun-compiles to a single binary.
+│                           #   stdin JSON → 8-event gate → POST to discovered server port.
+├── tauri/                 # Tauri v2 shell — native app wrapping podium-server as a sidecar
+│   ├── prepare-sidecar.sh  #   bun-compiles server + hook, stages client/dist as web-dist
+│   └── src-tauri/           #   Rust (main.rs spawns/health-polls the sidecar, tray, notifications)
+├── run.sh, scripts/       # dev launcher (Tauri) + packaging (build-linux.sh,
+│                           #   install-linux.sh, podium-server.service, contract-check.sh)
+└── docs/ (README, RELEASING, PRE-1.0-AUDIT, ROADMAP.md)
 ```
 
 ## Key decisions & non-obvious constraints
 
-**PodiumJSON** (`Sources/PodiumCore/Models/PodiumJSON.swift`): shared
-snake_case encoder/decoder for wire parity with the old Node dashboard.
-Timestamps are stored as plain `String` (not `Date`) so decode → encode
-round-trips exactly, with `PodiumDate` helpers on top.
+**P8 — mandatory version env var at client build:** `PODIUM_APP_VERSION` MUST
+be set when running `npm run build` in `client/`; the build FAILS if it's
+unset. Never weaken this guard — it exists so a shipped dashboard can never
+silently claim the wrong version. Verify with an unset-var build (expect
+failure) whenever touching the build config.
 
-**Never mix explicit snake_case `CodingKeys` with `.convertFromSnakeCase`** —
-it silently decodes fields to `nil`. Documented as a footgun in
-`PodiumJSON.swift`; bit the project once already (P1.2).
+**Auto-commit hook fires on saves in this repo.** Its commits are automatic
+and separate from anything you're doing — ignore them, never `git commit
+--amend` or rebase to "clean them up".
 
-**`JSONResponse(fields:)`**: Hummingbird 2's default encoder is plain camelCase
-with no snake_case hook, and `KeyEncodingStrategy.convertToSnakeCase` cannot be
-bypassed per-key even with `CodingKeys` (it re-transforms the resolved key
-string). Route handlers needing intentionally-camelCase top-level keys (e.g.
-`WorkflowsRouter`, the run live-handle family) use `JSONResponse(fields:)`,
-which encodes each sub-object independently via `PodiumJSON.encoder` and
-splices the result under literal camelCase keys.
+**Frozen old plugin repo:** `~/Desktop/Work/Claude/podium` is the pre-pivot
+source of the client and is FROZEN — read-only reference only. Never run git
+commands there, never edit it, never sync anything back into it.
 
-**`PodiumJSON.AnyEncodable`**: for structs where individual *fields* (not just
-top-level keys) must stay camelCase on the wire (cc-config responses), a
-custom `Encodable` builds a `[String: AnyEncodable]` — dictionary keys bypass
-`keyEncodingStrategy` at any nesting depth.
+**Wire-contract gate:** `server/tests/contract/contract.test.js` (31 tests,
+ported 1:1 from the old Swift `ContractTests.swift`) boots the real
+`server/index.js` as a child process, seeds it via `POST /api/hooks/event`,
+and asserts every GET endpoint's raw JSON shape against
+`client/src/lib/types.ts` — snake_case keys, and the deliberate camelCase
+exception families (Workflows, cc-config, Run "live" handle family) asserted
+the other way. `client/src/lib/types.ts` is the spec; any router change
+should keep this suite green.
 
-**Error envelope**: all error responses are `CodedErrorResponse`
-(`{"error":{"code","message"}}`), not a flat `{"error":"…"}`. Route handlers
-should return this shape, never a bare string.
+**P1 — loopback default:** the server binds `127.0.0.1` by default;
+`--host`/`PODIUM_HOST` is opt-in only, with a stderr warning on any
+non-loopback bind. This is a security fix from the pre-1.0 audit — never
+regress it for convenience.
 
-**`ContractTests.swift`** (`Tests/PodiumServerTests/ContractTests.swift`, 29
-tests): boots a real `podium-server`, seeds it via `/api/hooks/event`, and
-asserts every GET endpoint's shape against the vendored client's `types.ts`.
-This is the wire-format regression gate — any router change should keep it
-green.
+**Server auto-installs hooks on every boot, keyed off `$HOME`:**
+`server/scripts/install-hooks.js` runs on every `server/index.js` boot and
+writes/upgrades hook entries into `~/.claude/settings.json` (atomic write +
+`.bak` backup). Any scratch/test boot of the server MUST override `HOME` (and
+usually `DASHBOARD_DATA_DIR`) to a throwaway directory, or it will rewrite the
+owner's real `~/.claude/settings.json`. `CLAUDE_HOME` is a separate override
+for the `.claude` directory root itself (`server/lib/claude-home.js`).
+
+**`bun:sqlite` is the primary SQLite driver in compiled binaries.**
+`better-sqlite3` has no working prebuilt/source build on Node 26 arm64 in
+this environment, and bun 1.3.x has no `node:sqlite`, so `db.js`'s driver
+chain (better-sqlite3 → bun:sqlite → node:sqlite) resolves to `bun:sqlite` in
+practice for `bun build --compile` sidecars. See `server/compat-bunsqlite.js`.
+
+**`BUN_NO_CODESIGN_MACHO_BINARY=1`** is required on both bun compile
+invocations in `tauri/prepare-sidecar.sh` on macOS — bun 1.3.14's Mach-O
+self-signing is broken (truncated code signature) and corrupts the binary
+before Tauri's own codesign pass runs.
 
 **`/usr/bin/true`, not `/bin/true`**, for test process spawns: modern macOS
 (Darwin 25+) has no `/bin/true`; `/usr/bin/true` exists on both macOS and
-Linux (usr-merged). See `ContractTests.swift` around line 150.
+Linux (usr-merged). Referenced in `server/tests/contract/contract.test.js`
+and other node:test files that spawn placeholder child processes.
 
-**CI truth policy**: tests that pass locally (macOS + local Linux docker)
-but fail on GitHub-hosted runners due to runner-environment behavior are
-gated with `XCTSkip` under `GITHUB_ACTIONS` + a comment naming the observed
-runner behavior. Never delete such a test, never skip unconditionally, never
-gate a test that also fails locally. Gated set: DiagnosticsRouterTests +
-ContractTests health-wait (Linux container networking), HookClientTests
-dead-port latency (both OSes). Never block in `Task`/`Task.detached`
-(`waitUntilExit`, sync waits) — the cooperative pool's width is the CPU
-count and small CI runners deadlock; use `Thread.detachNewThread` (see
-`RunSpawner.swift`).
+**CI truth policy:** tests that pass locally but fail on GitHub-hosted
+runners due to runner-environment behavior (not a real bug) are skipped with
+a documented reason under `GITHUB_ACTIONS`, never deleted, never skipped
+unconditionally, never skipped if they also fail locally.
 
-**Data paths** (`Sources/PodiumCore/Database/PodiumPaths.swift`):
-`DASHBOARD_DB_PATH` > `DASHBOARD_DATA_DIR` > platform default
+**Never block in `Task`/`Task.detached`-equivalent async patterns** on a
+small CI runner (the historical Swift-era cooperative-pool deadlock lesson —
+carries over conceptually: don't synchronously wait on a child process from
+inside code that shares a small fixed-size worker pool).
+
+**Data paths:** `DASHBOARD_DB_PATH` > `DASHBOARD_DATA_DIR` > platform default
 (`~/Library/Application Support/Podium` on macOS, `$XDG_DATA_HOME/podium` or
 `~/.local/share/podium` on Linux).
 
-**Hook install**: `HookInstaller` (`Sources/PodiumCore/Hooks/`) upgrades
-legacy plugin-era hook entries in `~/.claude/settings.json` in place and
-installs the native `podium-hook` binary path — see the file's header comment
-for the exact legacy markers it detects and removes.
+## Historical (Swift era, removed N7 — 2026-07-15)
 
-**Server API surface**: the server is now in this repo — see
-`Sources/PodiumServer/Routes/` for the authoritative list of endpoints (one
-router file per resource: Sessions, Agents, Events, Stats, Analytics, Search,
-Pricing, Settings, Import, Export, Push, Run, Workflows, CcConfig, Updates,
-Diagnostics, Hooks).
+Podium originally shipped as a Swift server (Hummingbird 2) + SwiftUI macOS
+app. It was fully removed in favor of a Node server + Tauri shell — see
+`ROADMAP.md` §0 for the rationale and N1-N7 for the migration history. Swift-
+specific footguns (CodingKeys/snake_case decoding traps, Hummingbird's
+`JSONResponse(fields:)` encoder workaround) no longer apply; they're
+preserved only in git history if ever needed for archaeology.
 
 ## What's not yet built
 
-- P6.2a: full browser walk of every page against the Swift server (contract
+- P6.2a: full browser walk of every page against the Node server (contract
   tests cover the wire format; a manual/automated UI pass is still pending).
 - Async reimport with progress (cold-cache first import is CPU-bound
   seconds-per-hundred-files today).

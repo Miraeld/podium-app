@@ -4,7 +4,7 @@ Podium observes your Claude Code agent sessions in real time — sessions, agent
 tool events, transcripts, workflows, cost, and the ability to spawn new runs — all
 backed by a local SQLite database, in a **native desktop app on macOS and Linux**.
 
-Under the hood it's one React dashboard served by a bundled Swift server
+Under the hood it's one React dashboard served by a bundled Node server
 (`podium-server`), wrapped in a [Tauri](https://v2.tauri.app) native window. The
 app runs the server for you, keeps observing in the background from the tray, and
 needs no terminal, no Docker, and no separate "start the server" step.
@@ -37,8 +37,8 @@ Same app, same experience as macOS — a real window, not a browser tab.
 On launch Podium spawns `podium-server` (bundled as a Tauri sidecar), waits for
 it to answer `/api/health`, then shows the dashboard in the window. The server:
 
-- installs the Claude Code hook entries into `~/.claude/settings.json` itself
-  (native `podium-hook` binary — no Node, no `hook.mjs`),
+- installs the Claude Code hook entries into `~/.claude/settings.json` itself,
+  pointing at the bun-compiled `podium-hook` binary,
 - imports your existing session history on first launch,
 - reads/writes a local SQLite database at the platform default
   (macOS `~/Library/Application Support/Podium`, Linux `~/.local/share/podium`).
@@ -51,35 +51,36 @@ the app connects to it instead of double-hosting.
 
 ## Architecture
 
-- **`PodiumCore`** — models, SQLite store, hook ingestion, transcripts, pricing,
-  discovery, run-spawning, web push. Cross-platform, no Apple-only APIs.
-- **`PodiumServer`** — Hummingbird 2 HTTP + WebSocket server; one router per
-  resource under `Sources/PodiumServer/Routes/`.
-- **`podium-server`** (`Sources/PodiumServerCLI`) — the server as a standalone
-  binary; serves the vendored React client (`WebClient/dist`) as static files
-  and the REST + WS API. This is what the Tauri app bundles as a sidecar, and
-  what runs headless on a Linux server.
-- **`podium-hook`** (`Sources/PodiumHook`) — a tiny native binary Claude Code
-  shells out to on every hook event; it POSTs to `/api/hooks/event`.
-- **`tauri/`** — the Tauri v2 shell: spawns the sidecar, shows the dashboard in
-  a native window with macOS vibrancy, tray + notifications, and packages the
-  `.dmg` / `.AppImage` / `.deb`. See [`tauri/README.md`](tauri/README.md).
-- **`WebClient/dist`** — vendored build of the React dashboard (source lives in
-  a separate repo; see [`WebClient/SYNC.md`](WebClient/SYNC.md)).
+- **`client/`** — the React dashboard source (Vite + TypeScript). Builds to
+  `client/dist`, served by the Node server as static files (or staged into
+  the Tauri `.app` bundle as `web-dist`).
+- **`server/`** — the Node HTTP + WebSocket server (`podium-server`), adapted
+  from the upstream `Claude-Code-Agent-Monitor` (see Attribution below). One
+  router per resource under `server/routes/`: sessions, agents, events,
+  stats, analytics, search, pricing, settings, import, export, push, run,
+  workflows, cc-config, updates, hooks, alerts, webhooks. This is what the
+  Tauri app bundles as a sidecar, and what runs headless on a Linux server.
+- **`hook/`** — `podium-hook`, a tiny zero-dependency binary (bun-compiled
+  from TypeScript) Claude Code shells out to on every hook event; it POSTs to
+  `/api/hooks/event`.
+- **`tauri/`** — the Tauri v2 shell: spawns the sidecar, shows the dashboard
+  in a native window with macOS vibrancy, tray + notifications, and packages
+  the `.dmg` / `.AppImage` / `.deb`. See [`tauri/README.md`](tauri/README.md).
 
 ## Dev
 
 ```bash
-swift build                      # build the libraries + podium-server + podium-hook
-swift test                       # PodiumCoreTests + PodiumServerTests (465 tests)
-./run.sh                         # build the sidecar + launch the Tauri app (dev)
-cd tauri && cargo tauri build    # release build → .dmg / .app (macOS)
+cd client && npm ci && PODIUM_APP_VERSION=0.0.0-dev npm run build   # build the dashboard
+cd server && npm ci && npm test                                    # 568 tests
+./run.sh                                                            # sidecar + Tauri app (dev)
+cd tauri/src-tauri && cargo check                                    # Rust shell sanity check
+cargo tauri build                                                   # release build → .dmg / .app
 ```
 
-For Linux installers (`.AppImage` / `.deb`), see
-[`tauri/linux-build/README.md`](tauri/linux-build/README.md) (built in a
-`swift:6.1`-based container). Release installers are produced by CI on `v*`
-tags — see [`.github/workflows/release.yml`](.github/workflows/release.yml).
+For a headless Linux server (no GUI), see `scripts/build-linux.sh`, which
+bun-compiles `podium-server` + `podium-hook` into a tarball (`dist-linux/`).
+Linux `.AppImage` / `.deb` GUI installers are produced by CI on `v*` tags —
+see [`.github/workflows/release.yml`](.github/workflows/release.yml).
 
 ## Attribution
 
@@ -92,7 +93,7 @@ upstream copyright notice is retained there and in
 
 ## Wire-format gate
 
-`Tests/PodiumServerTests/ContractTests.swift` (29 tests) locks the wire format
-of every REST/WS response against the vendored React client's `types.ts`, so
-server regressions surface as test failures rather than silent breakage in the
-UI. Keep it green after any server change.
+`server/tests/contract/contract.test.js` (31 tests) locks the wire format of
+every REST/WS response against `client/src/lib/types.ts`, so server
+regressions surface as test failures rather than silent breakage in the UI.
+Keep it green after any server change.
