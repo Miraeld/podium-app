@@ -123,5 +123,12 @@ jobs:
           mkdir -p bin web-dist
           touch "bin/podium-server-$TRIPLE" "bin/podium-hook-$TRIPLE"
           touch web-dist/index.html
+      # icons/ is git-ignored (generated from icon-source.png); tauri's
+      # context proc macro opens the real PNGs at compile time, so
+      # placeholders won't do. npx tauri CLI beats `cargo install tauri-cli`
+      # here (~seconds vs ~minutes, node is preinstalled on runners).
+      - name: Generate app icons
+        working-directory: tauri
+        run: npx --yes @tauri-apps/cli@^2 icon src-tauri/icon-source.png
       - name: cargo check
         run: cargo check

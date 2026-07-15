@@ -499,14 +499,19 @@ fn create_main_window(app: &tauri::AppHandle) -> tauri::Result<tauri::WebviewWin
     let nav_handle = app.clone();
     let new_window_handle = app.clone();
 
-    WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
+    let builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
         .title("Podium")
         .inner_size(1280.0, 800.0)
         .min_inner_size(900.0, 600.0)
         .transparent(true)
-        .decorations(true)
+        .decorations(true);
+    // Overlay title bar is a macOS-only WebviewWindowBuilder API (doesn't
+    // exist on Linux/Windows builds of tauri — compile error, not a no-op).
+    #[cfg(target_os = "macos")]
+    let builder = builder
         .title_bar_style(tauri::TitleBarStyle::Overlay)
-        .hidden_title(true)
+        .hidden_title(true);
+    builder
         // Top-level navigations (location.href changes, plain <a> clicks
         // without target="_blank", redirects): allow the dashboard + our
         // own asset/error pages, hand everything else to the OS browser and
