@@ -16,7 +16,14 @@
  * @returns {string}
  */
 function redocBundlePath() {
-  return require.resolve("redoc/bundles/redoc.standalone.js");
+  // Computed (not a static string literal) require.resolve — ROADMAP N5
+  // TASK A: bun's bundler pre-resolves static require.resolve() string
+  // arguments at `bun build --compile` time, and the redoc UMD bundle this
+  // resolves to contains a literal `require("null")` that breaks bun's
+  // bundler when it walks that resolved module. Building the path at
+  // runtime from parts dodges bun's static-analysis pass entirely; plain
+  // Node's require.resolve behaves identically either way.
+  return require.resolve(["redoc", "bundles", "redoc.standalone.js"].join("/"));
 }
 
 /**

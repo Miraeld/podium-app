@@ -5,14 +5,14 @@
 /node_modules/
 package-lock.json
 
-# Sidecar binary — copied here from ../.build/release/podium-server by
-# scripts/prepare-sidecar.sh (or manually, see README.md). Not source, and
-# it's a ~27MB platform-specific artifact — never commit it.
+# Sidecar binary — bun-compiled from ../server/ by prepare-sidecar.sh
+# (ROADMAP N5 TASK A; was a Swift build pre-pivot). Not source, and it's a
+# ~61MB platform-specific artifact — never commit it.
 /src-tauri/bin/
 
-# Staged WebClient/dist copy (bundled as a Tauri resource so podium-server
-# can find it via --web-dist inside the .app — see prepare-sidecar.sh).
-# Derived from the vendored WebClient/dist; never commit a second copy.
+# Staged client/dist copy (bundled as a Tauri resource so podium-server can
+# find it via --web-dist inside the .app — see prepare-sidecar.sh). Derived
+# from client/dist (was WebClient/dist pre-N1); never commit a second copy.
 /src-tauri/web-dist/
 
 # Generated icon set (from `cargo tauri icon icon-source.png`) — regenerate

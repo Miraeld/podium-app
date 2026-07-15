@@ -27,3 +27,6 @@ client/tsconfig.tsbuildinfo
 
 # Node server (N2 vendor import) — source + lockfile tracked, deps aren't.
 server/node_modules/
+# bun's incremental build cache (dropped alongside server/ by `bun build
+# --compile`, ROADMAP N5 TASK A) — not a build artifact anyone consumes.
+server/*.bun-build

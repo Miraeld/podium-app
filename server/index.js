@@ -28,6 +28,35 @@ if (!process.env.NODE_ENV) process.env.NODE_ENV = "production";
   }
 })();
 
+// Sidecar CLI flags (ROADMAP N5 TASK A) — the Tauri shell
+// (tauri/src-tauri/src/main.rs) spawns this process with
+// `--port <n> --data-dir <dir> [--web-dist <dir>]`, the same flags the old
+// Swift `podium-server` accepted. Mapped onto the server's existing env-var
+// config here, BEFORE `db.js`/the routers below are required — `db.js`
+// resolves its DB path from `DASHBOARD_DATA_DIR` eagerly at require-time, so
+// parsing this any later (e.g. down in the `require.main === module` block)
+// would be too late for `--data-dir` to take effect. CLI flags win over both
+// the `.env` file above and any pre-set env var (see server/UPSTREAM.md
+// "CLI flags for the Tauri sidecar" for the full mapping table).
+(function applySidecarArgv() {
+  const argv = process.argv;
+  const flagMap = {
+    "--port": "DASHBOARD_PORT",
+    "--data-dir": "DASHBOARD_DATA_DIR",
+    "--web-dist": "DASHBOARD_WEB_DIST",
+  };
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    for (const [flag, envVar] of Object.entries(flagMap)) {
+      if (arg === flag && argv[i + 1] !== undefined) {
+        process.env[envVar] = argv[i + 1];
+      } else if (arg.startsWith(`${flag}=`)) {
+        process.env[envVar] = arg.slice(flag.length + 1);
+      }
+    }
+  }
+})();
+
 const express = require("express");
 const cors = require("cors");
 const path = require("path");
@@ -156,7 +185,11 @@ function startServer(app, port, hostFlag) {
 
   const isProduction = process.env.NODE_ENV === "production";
   if (isProduction) {
-    const clientDist = path.join(__dirname, "..", "client", "dist");
+    // DASHBOARD_WEB_DIST (from --web-dist, ROADMAP N5 TASK A) overrides the
+    // default repo-relative client/dist — the Tauri .app bundle stages a
+    // copy of the client build elsewhere and passes its path explicitly,
+    // the same way the old Swift server accepted --web-dist.
+    const clientDist = process.env.DASHBOARD_WEB_DIST || path.join(__dirname, "..", "client", "dist");
     // Cache policy designed to survive client rebuilds without forcing a hard
     // refresh:
     //   - Hashed bundles under /assets/ never change for a given URL, so cache

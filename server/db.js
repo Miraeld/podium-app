@@ -3,28 +3,43 @@
  * @author Son Nguyen <hoangson091104@gmail.com>
  */
 
+// SQLite backend selection (ROADMAP N5 TASK A — see server/UPSTREAM.md
+// "SQLite backend decision" for the full rationale): try better-sqlite3
+// first (native addon, fastest, what plain `node server/index.js` uses when
+// it builds), then bun:sqlite (via compat-bunsqlite.js — the ONLY backend
+// that works inside a `bun build --compile` binary; bun 1.3.x has no
+// node:sqlite at all), then node:sqlite (via compat-sqlite.js — Node >=22,
+// non-bun runtime only). All three expose the same better-sqlite3-shaped
+// API to the rest of this file, so no SQL/schema code below needs to know
+// which backend is actually loaded.
 let Database;
 try {
   Database = require("better-sqlite3");
 } catch {
   try {
-    Database = require("./compat-sqlite");
+    Database = require("./compat-bunsqlite");
   } catch {
-    console.error(
-      "\n" +
-        "╔══════════════════════════════════════════════════════════════╗\n" +
-        "║  SQLite backend not available                                ║\n" +
-        "║                                                              ║\n" +
-        "║  better-sqlite3 could not be loaded (native module) and      ║\n" +
-        "║  node:sqlite is not available (requires Node.js >= 22).      ║\n" +
-        "║                                                              ║\n" +
-        "║  Fix options (pick one):                                     ║\n" +
-        "║    1. Upgrade to Node.js 22+ (recommended)                   ║\n" +
-        "║    2. Install Python 3 + C++ build tools, then               ║\n" +
-        "║       run: npm rebuild better-sqlite3                        ║\n" +
-        "╚══════════════════════════════════════════════════════════════╝\n"
-    );
-    process.exit(1);
+    try {
+      Database = require("./compat-sqlite");
+    } catch {
+      console.error(
+        "\n" +
+          "╔══════════════════════════════════════════════════════════════╗\n" +
+          "║  SQLite backend not available                                ║\n" +
+          "║                                                              ║\n" +
+          "║  better-sqlite3 could not be loaded (native module), this    ║\n" +
+          "║  is not running under bun (bun:sqlite unavailable), and      ║\n" +
+          "║  node:sqlite is not available (requires Node.js >= 22).      ║\n" +
+          "║                                                              ║\n" +
+          "║  Fix options (pick one):                                     ║\n" +
+          "║    1. Upgrade to Node.js 22+ (recommended)                   ║\n" +
+          "║    2. Run under bun (bun run index.js)                       ║\n" +
+          "║    3. Install Python 3 + C++ build tools, then               ║\n" +
+          "║       run: npm rebuild better-sqlite3                        ║\n" +
+          "╚══════════════════════════════════════════════════════════════╝\n"
+      );
+      process.exit(1);
+    }
   }
 }
 const path = require("path");
