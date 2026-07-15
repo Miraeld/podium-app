@@ -131,12 +131,21 @@ podium-app/                       # this repo (rename from PodiumSwiftApp = N7)
   N5-A/N4: `server/index.js` auto-installs hooks on EVERY boot keyed off
   $HOME — scratch boots must override HOME or they rewrite the real
   `~/.claude/settings.json` + `.agent-dashboard.json`.
-- **N5-A 🔄 IN FLIGHT** (2026-07-15, Sonnet from the orchestrator session).
-  Scope: spike patches (docs/N5A-SPIKE.md) onto server/db.js +
-  compat-bunsqlite.js + lib/redoc.js, server argv (--port/--data-dir/
-  --web-dist), server-info reconciliation, tauri/prepare-sidecar.sh, run.sh.
-  Fence: must NOT touch server/tests/ or server/package.json (N4 owns those,
-  running in a parallel session).
+- **PROCESS RULE (added 2026-07-15 after the N4 double-build):** CLAIM a task
+  in this STATUS section and COMMIT the claim BEFORE dispatching an agent.
+  N4 was implemented twice in parallel (a Vitest port + a node:test port) by
+  two sessions because neither saw a claim; the node:test version won and
+  the duplicate ~200k-token Vitest effort was discarded. Claim → commit →
+  dispatch, always.
+- **HOOK-WIRING FIX 🔄 CLAIMED** (2026-07-15, orchestrator session): wire
+  `server/scripts/install-hooks.js` to the real `hook/dist/podium-hook`
+  binary (build it if absent) instead of the never-vendored
+  `hook-handler.js` (see N5-A caveat below). Scope: server/scripts/
+  install-hooks.js + its tests + hook/ build wiring; nothing else.
+- **N6 (CI + packaging) 🔄 CLAIMED** (2026-07-15, orchestrator session).
+  Scope: .github/workflows/, scripts/ (repo root), RELEASING.md. Fence: no
+  server/ (except reading), no client/, no tauri/ beyond what N6's prompt
+  says about prepare-sidecar.sh usage in CI.
 - **N3 verification (orchestrator, 2026-07-15):** confirmed — 60/60 node:test
   green on the touched suites; live curl: search/export/updates shapes match
   types.ts, P2 (dev → no prompt), P5 (envelope incl. 404), P7 (Miraeld only).
