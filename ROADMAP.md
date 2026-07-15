@@ -149,10 +149,36 @@ podium-app/                       # this repo (rename from PodiumSwiftApp = N7)
   arm64 at all, so bun:sqlite is effectively PRIMARY, not fallback;
   (2) `lib/redoc.js` require.resolve made dynamic (redoc UMD breaks bun's
   bundler). Full diffs + evidence: `docs/N5A-SPIKE.md`.
-- **N4 🔄 IN FLIGHT** (2026-07-15, Sonnet from the Fable session): contract
-  gate port. Owns `server/tests/` + `server/package.json` (N5-A fenced out).
-- N6–N8: not started. N6 requires N4 + N5-A both landed; Fable session picks
-  it up after verifying both. N7 waits for daylight + owner presence.
+- **N4 ✅ DONE** (2026-07-15): 30 Swift ContractTests ported 1:1 to
+  `server/tests/contract/contract.test.js` — **31 tests** (node:test, not
+  Vitest: every existing suite under `server/__tests__/` already standardizes
+  on node:test, so this stays consistent rather than adding a second runner).
+  Same architecture as Swift: boots the REAL `server/index.js` as a child
+  process on a scratch port + temp `CLAUDE_HOME`/`DASHBOARD_DB_PATH`, seeds
+  ONLY via `POST /api/hooks/event` (identical recorded-style hook sequence),
+  asserts raw JSON against `client/src/lib/types.ts` — snake_case keys +
+  wrong-casing-twin-absent on every endpoint, the deliberate camelCase
+  exception families (Workflows, cc-config, Run "live" family) asserted the
+  other way. Adapted 2 endpoints to Node's actual (not Swift's) behavior:
+  `GET /api/agents/:id` + `POST /api/agents` (upstream kept them per P6 —
+  client never calls them, asserted as-is, 201 on create) and the export/
+  import round trip (Node's actual round-trip path is `POST
+  /api/import/session`, not `POST /api/export/session` like the Swift
+  server). True-404 cases (`GET /api/events/:id/full`, `GET /api/diagnostics`)
+  assert the standard envelope. `npm test` = **558/558 green** (527
+  pre-existing + 31 new; `ccam-cli`/`hook-handler`/`plugins-marketplace` —
+  30 tests across 3 files — properly `{ skip }`'d with a documented reason,
+  never deleted: dormant upstream CLI/marketplace scaffolding never ported
+  into the monorepo, ROADMAP EXTRAS policy). Fixed one real regression along
+  the way: `__tests__/api.test.js` required `../../package.json` (a stale
+  path from when `server/` WAS the repo root) — now reads `../package.json`
+  (server's own), which needed `license`/`repository`/`bugs` fields added
+  (pointing at the upstream repo, matching the existing attribution
+  assertion). Red-run proof: renamed `total_sessions`→`total_sessionz` in
+  `db.js`'s stats query, confirmed `GET /api/stats` contract test failed,
+  reverted, confirmed green again.
+- N6–N8: not started. N6 requires N4 + N5-A both landed. N7 waits for
+  daylight + owner presence.
 
 ## N1 — Import the front-end source (monorepo begins)
 

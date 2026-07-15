@@ -9,7 +9,11 @@ const path = require("path");
 const fs = require("fs");
 const os = require("os");
 const http = require("http");
-const pkg = require("../../package.json");
+// N4 monorepo-layout fix: this used to be "../../package.json" back when
+// server/ WAS the repo root (pre-Node-pivot). openapi.js (the module actually
+// under test here) reads "./package.json" i.e. THIS package — server/package.json
+// — so the comparison must read the same file or it silently drifts.
+const pkg = require("../package.json");
 
 // Set up test database BEFORE requiring any server modules
 const TEST_DB = path.join(os.tmpdir(), `dashboard-test-${Date.now()}-${process.pid}.db`);

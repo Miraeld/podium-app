@@ -35,6 +35,15 @@ const { db } = require("../db");
 
 const CLI = path.resolve(__dirname, "..", "..", "bin", "ccam.js");
 
+// N4 environment debt (ROADMAP N4/N3 report): the upstream `ccam` umbrella
+// CLI (repo-root bin/ccam.js) was never ported into the Node-pivot monorepo
+// — it's an EXTRAS-policy dormant feature (ROADMAP §0 EXTRAS: keep-behind-
+// flags), not part of the wire contract the dashboard client depends on.
+// Skip (never delete) until/unless bin/ccam.js is ported.
+const CLI_SKIP_REASON = fs.existsSync(CLI)
+  ? false
+  : "bin/ccam.js not ported to the Node-pivot monorepo (dormant upstream CLI companion — ROADMAP EXTRAS policy)";
+
 let server;
 let PORT;
 
@@ -86,6 +95,7 @@ function post(urlPath, body) {
 }
 
 before(async () => {
+  if (CLI_SKIP_REASON) return; // nothing to seed — every describe below is skipped
   const app = createApp();
   server = await startServer(app, 0);
   PORT = server.address().port;
@@ -98,6 +108,7 @@ before(async () => {
 });
 
 after(() => {
+  if (CLI_SKIP_REASON) return;
   if (server) server.close();
   if (db) db.close();
   try {
@@ -107,7 +118,7 @@ after(() => {
   }
 });
 
-describe("ccam CLI — monitoring", () => {
+describe("ccam CLI — monitoring", { skip: CLI_SKIP_REASON }, () => {
   it("health reports the dashboard as up", async () => {
     const { code, out } = await ccam("health");
     assert.equal(code, 0);
@@ -134,7 +145,7 @@ describe("ccam CLI — monitoring", () => {
   });
 });
 
-describe("ccam CLI — data browsing", () => {
+describe("ccam CLI — data browsing", { skip: CLI_SKIP_REASON }, () => {
   it("sessions lists the seeded session", async () => {
     const { code, out } = await ccam("sessions", "--limit", "5");
     assert.equal(code, 0);
@@ -175,7 +186,7 @@ describe("ccam CLI — data browsing", () => {
   });
 });
 
-describe("ccam CLI — insights", () => {
+describe("ccam CLI — insights", { skip: CLI_SKIP_REASON }, () => {
   it("analytics prints token totals and averages", async () => {
     const { code, out } = await ccam("analytics");
     assert.equal(code, 0);
@@ -204,7 +215,7 @@ describe("ccam CLI — insights", () => {
   });
 });
 
-describe("ccam CLI — alerts, rules, webhooks", () => {
+describe("ccam CLI — alerts, rules, webhooks", { skip: CLI_SKIP_REASON }, () => {
   it("alerts lists the (empty) fired-alert feed", async () => {
     const { code, out } = await ccam("alerts");
     assert.equal(code, 0);
@@ -230,7 +241,7 @@ describe("ccam CLI — alerts, rules, webhooks", () => {
   });
 });
 
-describe("ccam CLI — pricing", () => {
+describe("ccam CLI — pricing", { skip: CLI_SKIP_REASON }, () => {
   it("pricing lists the default rules", async () => {
     const { code, out } = await ccam("pricing");
     assert.equal(code, 0);
@@ -262,7 +273,7 @@ describe("ccam CLI — pricing", () => {
   });
 });
 
-describe("ccam CLI — import & administration", () => {
+describe("ccam CLI — import & administration", { skip: CLI_SKIP_REASON }, () => {
   it("import rescan runs against the (empty) default projects dir", async () => {
     const { code, out } = await ccam("import", "rescan");
     assert.equal(code, 0);
@@ -331,7 +342,7 @@ describe("ccam CLI — import & administration", () => {
   });
 });
 
-describe("ccam CLI — offline mode (server down, DB read directly)", () => {
+describe("ccam CLI — offline mode (server down, DB read directly)", { skip: CLI_SKIP_REASON }, () => {
   // The online admin suite ends with clear-data, so re-seed one session here
   // (through the live server) for the offline reads to find.
   before(async () => {
@@ -494,7 +505,7 @@ describe("ccam CLI — offline mode (server down, DB read directly)", () => {
   });
 });
 
-describe("ccam CLI — help & errors", () => {
+describe("ccam CLI — help & errors", { skip: CLI_SKIP_REASON }, () => {
   it("help lists every command group", async () => {
     const { code, out } = await ccam("help");
     assert.equal(code, 0);

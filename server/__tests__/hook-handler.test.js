@@ -12,10 +12,20 @@
 const { describe, it } = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("path");
+const fs = require("fs");
 const http = require("http");
 const { spawn } = require("child_process");
 
 const HANDLER = path.resolve(__dirname, "../../scripts/hook-handler.js");
+
+// N4 environment debt (ROADMAP N4/N3 report): the upstream standalone
+// hook-handler CLI (repo-root scripts/hook-handler.js) was never ported into
+// the Node-pivot monorepo — hook delivery here goes through podium-hook /
+// hook/ (see ROADMAP N5), not this dormant upstream script. Skip (never
+// delete) until/unless scripts/hook-handler.js is ported.
+const HANDLER_SKIP_REASON = fs.existsSync(HANDLER)
+  ? false
+  : "scripts/hook-handler.js not ported to the Node-pivot monorepo (dormant upstream CLI — ROADMAP EXTRAS policy; hook delivery now goes through hook/)";
 
 // A mock dashboard that fully RECEIVES the request (records the body) but can be
 // told to delay its HTTP response — emulating a busy/slow/wedged server.
@@ -62,7 +72,7 @@ function runHandler({ port, hookType = "Stop", payload }) {
   });
 }
 
-describe("hook-handler non-blocking delivery", () => {
+describe("hook-handler non-blocking delivery", { skip: HANDLER_SKIP_REASON }, () => {
   it("exits without waiting for a slow dashboard response, yet still delivers the event", async () => {
     // Server takes 5s to respond — far longer than the handler's own safety net.
     const { server, port, received } = await startMockServer({ responseDelayMs: 5000 });

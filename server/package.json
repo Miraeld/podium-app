@@ -2,11 +2,19 @@
   "name": "podium-server",
   "version": "0.0.0-vendor",
   "private": true,
+  "license": "MIT",
   "description": "Podium Node server, vendored from hoangsonww/Claude-Code-Agent-Monitor (MIT). See UPSTREAM.md.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hoangsonww/Claude-Code-Agent-Monitor.git"
+  },
+  "bugs": {
+    "url": "https://github.com/hoangsonww/Claude-Code-Agent-Monitor/issues"
+  },
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "test": "node --test __tests__/*.test.js"
+    "test": "node --test __tests__/*.test.js tests/contract/*.test.js"
   },
   "dependencies": {
     "adm-zip": "^0.5.17",
