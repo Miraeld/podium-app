@@ -272,7 +272,9 @@ export interface WSMessage {
     | "run_stream"
     | "run_status"
     | "run_input_ack"
-    | "cc_config_changed";
+    | "cc_config_changed"
+    | "alert_triggered"
+    | "alert_updated";
   data:
     | Session
     | Agent
@@ -282,8 +284,159 @@ export interface WSMessage {
     | RunStreamPayload
     | RunStatusPayload
     | RunInputAckPayload
-    | CcConfigChangedPayload;
+    | CcConfigChangedPayload
+    | AlertEvent;
   timestamp: string;
+}
+
+// ── Alerts ──
+// Rules-based alerting. Mirrors server/routes/alerts.js + server/lib/alerts.js.
+// AlertRule.config is deserialized server-side; AlertEvent.details stays an
+// opaque JSON string (parse before use).
+
+/** Kind of condition an alert rule evaluates. event_pattern + token_threshold
+ * run on every hook ingest; inactivity + status_duration run on a periodic
+ * server sweep. */
+export type AlertRuleType = "event_pattern" | "inactivity" | "status_duration" | "token_threshold";
+
+/** Rule-type-specific settings. Which fields apply depends on `rule_type`
+ * (validated by `validateRuleConfig` in server/lib/alerts.js). */
+export interface AlertRuleConfig {
+  event_type?: string;
+  tool_name?: string;
+  summary_contains?: string;
+  count?: number;
+  window_minutes?: number;
+  minutes?: number;
+  status?: "working" | "waiting";
+  total_tokens?: number;
+}
+
+/** A user-defined alert rule (GET/POST/PATCH /api/alerts/rules). */
+export interface AlertRule {
+  id: string;
+  name: string;
+  rule_type: AlertRuleType;
+  config: AlertRuleConfig;
+  enabled: boolean;
+  cooldown_seconds: number;
+  created_at: string;
+  updated_at: string;
+}
+
+/** One firing of a rule (GET /api/alerts); pushed live via alert_triggered
+ * (new) / alert_updated (acknowledged) WS messages. */
+export interface AlertEvent {
+  id: number;
+  rule_id: string;
+  rule_name: string;
+  rule_type: AlertRuleType;
+  session_id: string | null;
+  agent_id: string | null;
+  message: string;
+  /** Opaque JSON string with extra context; may be null. */
+  details: string | null;
+  triggered_at: string;
+  acknowledged_at: string | null;
+}
+
+// ── Webhooks ──
+// Outbound delivery of alerts to chat/incident/automation providers. Mirrors
+// server/routes/webhooks.js + server/lib/webhook-providers.js. Secrets are
+// always masked on the wire (url_preview, headers, secret config fields).
+
+export type WebhookType =
+  | "slack"
+  | "discord"
+  | "teams"
+  | "google_chat"
+  | "mattermost"
+  | "rocketchat"
+  | "telegram"
+  | "pagerduty"
+  | "opsgenie"
+  | "splunk_oncall"
+  | "zapier"
+  | "make"
+  | "n8n"
+  | "pipedream"
+  | "generic";
+
+/** One provider-specific config field the "Add webhook" form renders. */
+export interface WebhookProviderField {
+  key: string;
+  label: string;
+  secret: boolean;
+  required: boolean;
+  type: "string" | "enum";
+  options: string[] | null;
+  default: string | null;
+}
+
+/** Redacted provider metadata (GET /api/webhooks/providers) driving the form. */
+export interface WebhookProvider {
+  type: WebhookType;
+  label: string;
+  family: "chat" | "api" | "generic";
+  url_required: boolean;
+  has_default_url: boolean;
+  derives_url: boolean;
+  allow_http: boolean;
+  url_hint: string | null;
+  supports_secret: boolean;
+  supports_headers: boolean;
+  fields: WebhookProviderField[];
+}
+
+/** Compact summary of a target's most recent delivery attempt. */
+export interface WebhookDeliverySummary {
+  status: "success" | "failed";
+  status_code: number | null;
+  attempts: number;
+  error: string | null;
+  created_at: string;
+}
+
+/** A configured outbound webhook destination (GET/POST/PATCH /api/webhooks). */
+export interface WebhookTarget {
+  id: string;
+  name: string;
+  type: WebhookType;
+  enabled: boolean;
+  /** Masked host + last 4 chars; the full URL is never returned. */
+  url_preview: string;
+  has_secret: boolean;
+  /** Generic targets only; values masked ("••••"). */
+  headers: Record<string, string> | null;
+  /** Provider config; secret values masked. */
+  config: Record<string, string> | null;
+  /** Rule ids this target is scoped to; null = all rules. */
+  rule_ids: string[] | null;
+  created_at: string;
+  updated_at: string;
+  last_delivery: WebhookDeliverySummary | null;
+}
+
+/** One row of a target's delivery log (GET /api/webhooks/:id/deliveries). */
+export interface WebhookDelivery {
+  id: number;
+  target_id: string;
+  target_name: string;
+  target_type: WebhookType;
+  alert_id: number | null;
+  status: "success" | "failed";
+  status_code: number | null;
+  attempts: number;
+  error: string | null;
+  created_at: string;
+}
+
+/** Result of POST /api/webhooks/:id/test — a synchronous one-shot probe. */
+export interface WebhookTestResult {
+  ok: boolean;
+  status: number | null;
+  attempts: number;
+  error: string | null;
 }
 
 // ── Session stats ──

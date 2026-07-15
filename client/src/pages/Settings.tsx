@@ -57,6 +57,7 @@ import { loadAdvancedMetrics, saveAdvancedMetrics } from "../lib/displaySettings
 import { Tip } from "../components/Tip";
 import { ImportHistory } from "../components/ImportHistory";
 import { UpdatesPanel } from "../components/UpdatesPanel";
+import { AlertsNotifications } from "../components/AlertsNotifications";
 import { Skeleton } from "../components/Skeleton";
 import { KANBAN_VISIBLE_KEY, loadKanbanVisible } from "../components/Sidebar";
 import { requestTourStart } from "../lib/tour";
@@ -363,13 +364,6 @@ export function Settings() {
   } | null>(null);
   const [confirmAction, setConfirmAction] = useState<string | null>(null);
   const [notifPrefs, setNotifPrefs] = useState<NotifPrefs>(loadNotifPrefs);
-  const [abandonHours, setAbandonHours] = useState("24");
-  const [purgeDays, setPurgeDays] = useState("90");
-  const [claudeHome, setClaudeHomeState] = useState("");
-  const [claudeHomeInput, setClaudeHomeInput] = useState("");
-  const [claudeHomeSaving, setClaudeHomeSaving] = useState(false);
-  const [claudeHomeError, setClaudeHomeError] = useState<string | null>(null);
-
   const wsConnected = useSyncExternalStore(eventBus.onConnection, () => eventBus.connected);
   const animatedTotalCost = useCountUp(totalCost);
 
@@ -1256,6 +1250,17 @@ export function Settings() {
             </div>
           )}
         </div>
+      </section>
+
+      {/* ─── ALERTS ─── */}
+      <section>
+        <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2 mb-1 border-l-2 border-amber-400/60 dark:border-accent/60 pl-2.5">
+          <BellRing className="w-4 h-4 text-gray-700 dark:text-gray-500" />
+          {t("alertsHub.title")}
+        </h3>
+        <p className="text-sm text-gray-600 dark:text-gray-500 mb-4">{t("alertsHub.description")}</p>
+
+        <AlertsNotifications />
       </section>
 
       {/* ─── DATA MANAGEMENT ─── */}

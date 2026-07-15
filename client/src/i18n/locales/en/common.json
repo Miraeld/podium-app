@@ -168,5 +168,7 @@
       "filterTip3": "Text search matches summary, tool_name, and the raw payload (data column).",
       "filterTip4": "Date range applies to each event's created_at."
     }
-  }
+  },
+  "help": "Help",
+  "examples": "Examples"
 }

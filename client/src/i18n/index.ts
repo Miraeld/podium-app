@@ -50,6 +50,7 @@ import run_vi from "./locales/vi/run.json";
 import tour_en from "./locales/en/tour.json";
 import tour_zh from "./locales/zh/tour.json";
 import tour_vi from "./locales/vi/tour.json";
+import alerts_en from "./locales/en/alerts.json";
 
 i18n
   .use(LanguageDetector)
@@ -71,6 +72,7 @@ i18n
         ccConfig: ccConfig_en,
         run: run_en,
         tour: tour_en,
+        alerts: alerts_en,
       },
       zh: {
         common: common_zh,
@@ -123,6 +125,7 @@ i18n
       "ccConfig",
       "run",
       "tour",
+      "alerts",
     ],
     defaultNS: "common",
     interpolation: { escapeValue: false },

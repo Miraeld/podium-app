@@ -1,0 +1,80 @@
+{
+  "title": "Alerts",
+  "subtitle": "Rules-based alerting for sessions, agents, events, and token usage",
+  "refresh": "Refresh",
+  "ackAll": "Acknowledge all ({{count}})",
+  "ruleTypes": {
+    "event_pattern": "Event pattern",
+    "inactivity": "Inactivity",
+    "status_duration": "Stuck agent",
+    "token_threshold": "Token threshold"
+  },
+  "ruleTypeHints": {
+    "event_pattern": "Fires when an ingested event matches the pattern. Set a count above 1 to require N matching events within a time window (e.g. more than 5 errors in 2 minutes).",
+    "inactivity": "Fires when an active session has received no events for the configured number of minutes.",
+    "status_duration": "Fires when an agent has remained in the selected status with no activity for the configured number of minutes.",
+    "token_threshold": "Fires when a session's total token usage (input + output + cache) exceeds the threshold."
+  },
+  "ruleDesc": {
+    "eventPattern": "Matches {{pattern}}",
+    "eventPatternCount": "≥{{count}} × {{pattern}} within {{window}} min",
+    "inactivity": "No session activity for {{minutes}} min",
+    "statusDuration": "Agent stuck in {{status}} for {{minutes}} min",
+    "tokenThreshold": "Session tokens exceed {{tokens}}"
+  },
+  "rules": {
+    "title": "Alert rules",
+    "add": "Add rule",
+    "cancel": "Cancel",
+    "create": "Create rule",
+    "saving": "Saving…",
+    "empty": "No alert rules yet. Add one to start monitoring for stuck agents, error bursts, idle sessions, or token spikes.",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "enable": "Enable rule",
+    "disable": "Disable rule",
+    "delete": "Delete rule",
+    "confirmDelete": "Delete rule \"{{name}}\" and its alert history?",
+    "cooldown": "{{seconds}}s cooldown",
+    "form": {
+      "name": "Rule name",
+      "namePlaceholder": "e.g. Error burst",
+      "type": "Rule type",
+      "eventType": "Event type (exact)",
+      "toolName": "Tool name (exact)",
+      "summaryContains": "Summary contains",
+      "count": "Trigger count",
+      "windowMinutes": "Window (minutes)",
+      "agentStatus": "Agent status",
+      "minutes": "Minutes",
+      "totalTokens": "Total tokens",
+      "cooldown": "Cooldown (seconds)"
+    },
+    "deleteTitle": "Delete alert rule?",
+    "help": {
+      "name": "A label for this rule. Shows in the alert feed and is included in webhook payloads (rule_name). e.g. 'Repeated Bash errors'.",
+      "type": "What this rule watches. event_pattern matches the live event stream; inactivity = an active session goes quiet; status_duration = an agent is stuck in a state; token_threshold = a session's token usage crosses a limit.",
+      "eventType": "The Claude Code hook event to match. Leave blank to match any event type. Matched exactly (case-sensitive).",
+      "toolName": "The tool the agent invoked (on PreToolUse / PostToolUse events). Leave blank to match any tool. Matched exactly.",
+      "summaryContains": "Case-insensitive substring match against the event's summary text. Useful for catching errors or specific phrases. Leave blank to skip.",
+      "count": "How many matching events must occur before the alert fires. 1 = fire on the first match. Set above 1 to detect bursts (e.g. repeated errors).",
+      "window": "The rolling look-back window for the count. e.g. count 5 + window 2 means '5 matching events within any 2-minute span'.",
+      "status": "Which agent state to watch. 'working' catches agents stuck mid-task; 'waiting' catches agents blocked on input/permission.",
+      "minutesInactivity": "Fire when an active session has had no events for this many minutes (a stalled or forgotten session).",
+      "minutesStatus": "Fire when an agent stays in the selected status with no activity for this many minutes (a stuck agent).",
+      "totalTokens": "Fire when a session's cumulative tokens (input + output + cache read + cache write) cross this number. e.g. 1000000 = 1M tokens.",
+      "cooldown": "Minimum seconds between repeat alerts for the same rule + session + agent. Prevents noisy duplicates. Default 300 (5 min); 0 = no cooldown."
+    }
+  },
+  "feed": {
+    "title": "Alert feed",
+    "unackedCount": "{{count}} unacknowledged",
+    "unackedOnly": "Unacknowledged only",
+    "ack": "Acknowledge",
+    "viewSession": "View session",
+    "loadMore": "Load more ({{shown}} of {{total}})",
+    "emptyTitle": "No alerts",
+    "emptyDescription": "Alerts fired by your rules will appear here in real time.",
+    "emptyUnacked": "Everything is acknowledged. New alerts will appear here as they fire."
+  }
+}

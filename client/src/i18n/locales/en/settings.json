@@ -175,5 +175,175 @@
     "failedDelete": "Failed to delete",
     "unknownError": "Unknown",
     "actionFailed": "Error: {{message}}"
+  },
+  "webhooks": {
+    "title": "Webhook Notifications",
+    "description": "Forward fired alerts to Slack, Discord, Microsoft Teams, or any HTTP endpoint. Delivery is automatic, retried on failure, and never blocks monitoring.",
+    "count_one": "{{count}} target",
+    "count_other": "{{count}} targets",
+    "add": "Add Webhook",
+    "loading": "Loading webhooks…",
+    "empty": "No webhooks configured. Add one to forward alerts to Slack, Discord, Teams, or a custom endpoint.",
+    "scopedTo_one": "{{count}} rule",
+    "scopedTo_other": "{{count}} rules",
+    "enabled": "Enabled",
+    "test": "Test",
+    "edit": "Edit",
+    "delete": "Delete",
+    "confirmDelete": "Confirm",
+    "testOk": "Delivered (HTTP {{status}})",
+    "testFail": "Failed: {{error}}",
+    "addTitle": "New Webhook",
+    "editTitle": "Edit Webhook",
+    "fieldName": "Name",
+    "fieldNamePlaceholder": "e.g. Team Slack #alerts",
+    "fieldType": "Type",
+    "fieldUrl": "Webhook URL",
+    "urlKeepHint": "leave blank to keep current",
+    "urlKeepPlaceholder": "•••••••• (unchanged)",
+    "fieldSecret": "Signing secret (optional)",
+    "secretPlaceholder": "HMAC-SHA256 secret",
+    "secretKeepPlaceholder": "•••••••• (leave blank to keep)",
+    "secretHint": "When set, requests are signed with an X-Webhook-Signature header.",
+    "fieldHeaders": "Custom headers (optional)",
+    "replaceHeaders": "Replace headers",
+    "headerKey": "Header",
+    "headerValue": "Value",
+    "addHeader": "Add header",
+    "scopeAll": "Receive alerts from all rules",
+    "enabledOnSave": "Enabled",
+    "save": "Save",
+    "create": "Create",
+    "cancel": "Cancel",
+    "urlOptional": "optional override",
+    "urlAuto": "URL is set automatically from the credentials below.",
+    "deleteTitle": "Delete webhook?",
+    "deleteMessage": "Delete \"{{name}}\"? Fired alerts will stop being delivered to this target. This cannot be undone.",
+    "guideToggle": "How to set up {{provider}}",
+    "guideDocs": "Official {{provider}} docs",
+    "guideStaleNote": "Provider setup screens change often, so these steps may be out of date - always confirm against the official docs."
+  },
+  "alertsHub": {
+    "title": "Alerts",
+    "description": "Define alert rules, route them to webhook channels, and review what has fired - all in one place.",
+    "tabRules": "Rules",
+    "tabChannels": "Channels",
+    "tabActivity": "Activity",
+    "rulesHint": "Conditions that trigger an alert. Evaluated server-side against the live event stream.",
+    "rulesEmptyHint": "Add a rule to start alerting on errors, inactivity, stuck agents, or token thresholds."
+  },
+  "webhookGuides": {
+    "slack": {
+      "steps": [
+        "Create or open a Slack app at api.slack.com/apps.",
+        "Turn on 'Incoming Webhooks', then click 'Add New Webhook to Workspace'.",
+        "Choose the channel to post to and authorize.",
+        "Copy the generated URL (https://hooks.slack.com/services/…) and paste it above."
+      ]
+    },
+    "discord": {
+      "steps": [
+        "Open your server → Server Settings → Integrations → Webhooks.",
+        "Click 'New Webhook', pick a channel, optionally rename it.",
+        "Click 'Copy Webhook URL' and paste it above."
+      ]
+    },
+    "teams": {
+      "steps": [
+        "In the target Teams channel, click ⋯ → 'Workflows'.",
+        "Pick the template 'Post to a channel when a webhook request is received'.",
+        "Finish the flow and copy the generated HTTP POST URL.",
+        "Paste it above. (Classic Office 365 connectors were retired in 2025 - use Workflows.)"
+      ]
+    },
+    "google_chat": {
+      "steps": [
+        "Open the Google Chat space → space title → 'Apps & integrations'.",
+        "Click 'Webhooks' → 'Add webhook' and give it a name.",
+        "Copy the webhook URL and paste it above."
+      ]
+    },
+    "mattermost": {
+      "steps": [
+        "Main Menu → Integrations → Incoming Webhooks (an admin must enable webhooks first).",
+        "Click 'Add Incoming Webhook' and choose a channel.",
+        "Save, then copy the webhook URL and paste it above."
+      ]
+    },
+    "rocketchat": {
+      "steps": [
+        "Administration → Integrations → New → Incoming.",
+        "Enable it, pick a channel, and save.",
+        "Copy the 'Webhook URL' and paste it above."
+      ]
+    },
+    "telegram": {
+      "steps": [
+        "Message @BotFather, run /newbot, and copy the bot token.",
+        "Add the bot to your group/channel (or just DM it).",
+        "Find the chat ID: send a message, open https://api.telegram.org/bot<token>/getUpdates, read result[].message.chat.id.",
+        "Enter the Bot token and Chat ID above - no URL needed."
+      ]
+    },
+    "pagerduty": {
+      "steps": [
+        "Open the target Service → Integrations → 'Add integration'.",
+        "Choose 'Events API v2'.",
+        "Copy the Integration Key (the routing key).",
+        "Enter it as the Routing key above - the Events API URL is prefilled."
+      ]
+    },
+    "opsgenie": {
+      "steps": [
+        "Settings → Integrations → add an 'API' integration.",
+        "Copy the generated API key.",
+        "Note your account region (US or EU).",
+        "Enter the API key and region above - the alerts URL is derived from the region."
+      ]
+    },
+    "splunk_oncall": {
+      "steps": [
+        "Integrations → REST Endpoint, and enable it.",
+        "Copy the REST URL - it already contains your API key.",
+        "Replace the trailing '$routing_key' with one of your routing keys.",
+        "Paste the full URL above."
+      ]
+    },
+    "zapier": {
+      "steps": [
+        "Create a Zap with the trigger 'Webhooks by Zapier' → 'Catch Hook'.",
+        "Copy the custom webhook URL it gives you.",
+        "Paste it above. The alert arrives as JSON: { event, alert }."
+      ]
+    },
+    "make": {
+      "steps": [
+        "Add a 'Webhooks' → 'Custom webhook' module as the first step of a scenario.",
+        "Click 'Add', create the hook, and copy its URL.",
+        "Paste it above, then run once so Make learns the payload shape."
+      ]
+    },
+    "n8n": {
+      "steps": [
+        "Add a 'Webhook' node to your workflow; set the method to POST.",
+        "Copy the Production URL.",
+        "Activate the workflow and paste the URL above (http is allowed for self-hosted)."
+      ]
+    },
+    "pipedream": {
+      "steps": [
+        "Create a workflow with an 'HTTP / Webhook' trigger.",
+        "Copy the unique endpoint URL.",
+        "Paste it above; inspect deliveries in the Pipedream event inspector."
+      ]
+    },
+    "generic": {
+      "steps": [
+        "Point this at any endpoint that accepts a JSON POST (https, or http for local testing).",
+        "Body shape: { event: 'alert.triggered', source, sent_at, alert: { … } }.",
+        "Optional: set a signing secret (HMAC-SHA256 over the body → X-Webhook-Signature header) and custom headers.",
+        "Tip: use a free inspector like webhook.site to see the exact payload."
+      ]
+    }
   }
 }

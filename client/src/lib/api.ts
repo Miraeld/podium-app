@@ -6,6 +6,10 @@
 
 import type {
   Agent,
+  AlertEvent,
+  AlertRule,
+  AlertRuleConfig,
+  AlertRuleType,
   Analytics,
   CostResult,
   DashboardEvent,
@@ -17,6 +21,11 @@ import type {
   Stats,
   TranscriptListResult,
   TranscriptResult,
+  WebhookDelivery,
+  WebhookProvider,
+  WebhookTarget,
+  WebhookTestResult,
+  WebhookType,
   WorkflowData,
 } from "./types";
 
@@ -353,7 +362,108 @@ export const api = {
     kill: (id: string) =>
       request<{ ok: true }>(`/run/${encodeURIComponent(id)}`, { method: "DELETE" }),
   },
+
+  alerts: {
+    rules: {
+      list: () => request<{ rules: AlertRule[] }>("/alerts/rules"),
+      create: (data: AlertRuleCreateArgs) =>
+        request<{ rule: AlertRule }>("/alerts/rules", {
+          method: "POST",
+          body: JSON.stringify(data),
+        }),
+      update: (id: string, data: AlertRuleUpdateArgs) =>
+        request<{ rule: AlertRule }>(`/alerts/rules/${encodeURIComponent(id)}`, {
+          method: "PATCH",
+          body: JSON.stringify(data),
+        }),
+      remove: (id: string) =>
+        request<{ ok: true }>(`/alerts/rules/${encodeURIComponent(id)}`, { method: "DELETE" }),
+    },
+    list: (params?: { unacked?: boolean; limit?: number; offset?: number }) => {
+      const qs = new URLSearchParams();
+      if (params?.unacked) qs.set("unacked", "true");
+      if (params?.limit != null) qs.set("limit", String(params.limit));
+      if (params?.offset != null) qs.set("offset", String(params.offset));
+      const q = qs.toString();
+      return request<{
+        alerts: AlertEvent[];
+        total: number;
+        unacked: number;
+        limit: number;
+        offset: number;
+      }>(`/alerts${q ? `?${q}` : ""}`);
+    },
+    ack: (id: number) => request<{ alert: AlertEvent }>(`/alerts/${id}/ack`, { method: "POST" }),
+    ackAll: () =>
+      request<{ ok: true; acknowledged: number }>("/alerts/ack-all", { method: "POST" }),
+  },
+
+  webhooks: {
+    providers: () => request<{ providers: WebhookProvider[] }>("/webhooks/providers"),
+    list: () => request<{ targets: WebhookTarget[] }>("/webhooks"),
+    create: (data: WebhookCreateArgs) =>
+      request<{ target: WebhookTarget }>("/webhooks", {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+    update: (id: string, data: WebhookUpdateArgs) =>
+      request<{ target: WebhookTarget }>(`/webhooks/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      }),
+    remove: (id: string) =>
+      request<{ ok: true }>(`/webhooks/${encodeURIComponent(id)}`, { method: "DELETE" }),
+    test: (id: string) =>
+      request<WebhookTestResult>(`/webhooks/${encodeURIComponent(id)}/test`, { method: "POST" }),
+    deliveries: (id: string, params?: { limit?: number; offset?: number }) => {
+      const qs = new URLSearchParams();
+      if (params?.limit != null) qs.set("limit", String(params.limit));
+      if (params?.offset != null) qs.set("offset", String(params.offset));
+      const q = qs.toString();
+      return request<{ deliveries: WebhookDelivery[]; limit: number; offset: number }>(
+        `/webhooks/${encodeURIComponent(id)}/deliveries${q ? `?${q}` : ""}`
+      );
+    },
+  },
 };
+
+// ── Alerts / Webhooks request argument shapes ──
+
+export interface AlertRuleCreateArgs {
+  name: string;
+  rule_type: AlertRuleType;
+  config: AlertRuleConfig;
+  enabled?: boolean;
+  cooldown_seconds?: number;
+}
+
+export interface AlertRuleUpdateArgs {
+  name?: string;
+  config?: AlertRuleConfig;
+  enabled?: boolean;
+  cooldown_seconds?: number;
+}
+
+export interface WebhookCreateArgs {
+  name: string;
+  type: WebhookType;
+  url?: string;
+  enabled?: boolean;
+  secret?: string;
+  headers?: Record<string, string>;
+  config?: Record<string, string>;
+  rule_ids?: string[];
+}
+
+export interface WebhookUpdateArgs {
+  name?: string;
+  url?: string;
+  enabled?: boolean;
+  secret?: string;
+  headers?: Record<string, string>;
+  config?: Record<string, string>;
+  rule_ids?: string[];
+}
 
 function requestBackupsHelper(params?: { scope?: "user" | "project"; type?: CcArtifactType }) {
   const qs = new URLSearchParams();
