@@ -16,6 +16,21 @@ process.env.DASHBOARD_DB_PATH = TEST_DB;
 const { createApp, startServer } = require("../index");
 const { db } = require("../db");
 
+// Stub the GitHub releases call (lib/update-check.js) so these HTTP-level
+// tests stay offline/deterministic — no real network dependency, no
+// flakiness from GitHub rate limits or connectivity. The semver/repo-slug
+// logic itself is covered exhaustively in update-check.test.js.
+const realFetch = global.fetch;
+global.fetch = async () => ({
+  ok: true,
+  json: async () => ({
+    tag_name: "v0.0.1",
+    html_url: "https://github.com/Miraeld/podium-app/releases/tag/v0.0.1",
+    published_at: "2026-01-01T00:00:00Z",
+    body: null,
+  }),
+});
+
 let server;
 let BASE;
 
@@ -60,6 +75,7 @@ before(async () => {
 after(() => {
   if (server) server.close();
   if (db) db.close();
+  global.fetch = realFetch;
   try {
     fs.unlinkSync(TEST_DB);
     fs.unlinkSync(`${TEST_DB}-wal`);
@@ -70,14 +86,16 @@ after(() => {
 });
 
 describe("GET /api/updates/status", () => {
-  it("returns update check payload", async () => {
+  it("returns the RepoUpdatesStatusResponse shape (client/src/lib/types.ts)", async () => {
     const res = await httpFetch("/api/updates/status");
     assert.equal(res.status, 200);
     assert.equal(typeof res.body.git_repo, "boolean");
     assert.equal(typeof res.body.update_available, "boolean");
-    if (res.body.git_repo) {
-      assert.ok(typeof res.body.repo_root === "string");
-    }
+    assert.equal(typeof res.body.current_sha, "string");
+    assert.equal(typeof res.body.latest_sha, "string");
+    assert.equal(typeof res.body.checked_at, "string");
+    assert.equal(typeof res.body.app, "object");
+    assert.equal(res.body.app.repo, "Miraeld/podium-app");
   });
 });
 

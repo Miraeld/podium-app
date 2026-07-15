@@ -1,254 +1,209 @@
 /**
- * @file Detects whether the dashboard git checkout is behind the canonical
- * remote default branch (e.g. upstream/master on a fork, origin/master on a
- * direct clone) after a non-destructive fetch. Branch- and fork-aware:
- * picks the right remote, recognises feature-branch checkouts, and shapes
- * manual_command so it actually closes the gap for the user's situation.
- * @author Son Nguyen <hoangson091104@gmail.com>
+ * @file Detects whether a newer release of THIS app (Podium) is available on
+ * GitHub. ROADMAP N3 — ADAPT per docs/N2-GAP.md: the upstream Node original
+ * this file replaces (`hoangsonww/Claude-Code-Agent-Monitor`) implemented an
+ * entirely different git-remote-diff mechanism (comparing the local checkout
+ * against `upstream/master`) that has no meaning for a Tauri-packaged
+ * standalone desktop app with no "canonical git remote" to diff against, and
+ * whose response shape doesn't match what the client actually reads
+ * (`client/src/lib/types.ts`'s `RepoUpdatesStatusResponse`).
+ *
+ * Ported from `Sources/PodiumCore/Discovery/UpdateCheck.swift` +
+ * `Sources/PodiumServer/Routes/UpdatesRouter.swift`: check the latest GitHub
+ * release of this app's own repo, and prompt only when it is strictly newer
+ * (numeric semver compare) than the running version.
+ *
+ *   P2 (ROADMAP §2): `update_available` is only ever true when the latest
+ *   release is STRICTLY newer than the current version by numeric semver
+ *   comparison. A `current` of `"dev"`/unset, or a version string that can't
+ *   be parsed as dot-separated integers, always yields `false` — never a
+ *   false-positive prompt from string inequality.
+ *   P7 (ROADMAP §2): checks ONLY this app's own repo — default
+ *   `Miraeld/podium-app` — override via `PODIUM_APP_GITHUB_REPO=owner/repo`
+ *   (e.g. pointing a dev build at a fork). Never the frozen plugin-era
+ *   `wp-media/podium` reference repo.
+ *
+ * @author Gael Robin <robin.gael@gmail.com>
  */
 
 const fs = require("fs");
 const path = require("path");
-const { execFile } = require("child_process");
 
-const DEFAULT_ROOT = path.join(__dirname, "..", "..");
+const DEFAULT_APP_REPO = "Miraeld/podium-app";
+const GITHUB_API_TIMEOUT_MS = 5_000;
 
-// Standard convention for fork workflows: "upstream" points at the canonical
-// repo, "origin" points at the user's fork. Prefer upstream when both exist.
-const REMOTE_PRIORITY = ["upstream", "origin"];
-
-function execGit(cwd, args, opts = {}) {
-  const timeout = opts.timeout ?? 120_000;
-  return new Promise((resolve, reject) => {
-    execFile(
-      "git",
-      args,
-      { cwd, timeout, maxBuffer: 2_000_000, encoding: "utf8" },
-      (err, stdout) => {
-        if (err) reject(err);
-        else resolve(String(stdout).trim());
-      }
-    );
-  });
-}
-
-async function listRemotes(gitRoot) {
-  try {
-    const out = await execGit(gitRoot, ["remote"], { timeout: 10_000 });
-    return out
-      .split(/\r?\n/)
-      .map((l) => l.trim())
-      .filter(Boolean);
-  } catch {
-    return [];
-  }
-}
-
-async function pickCanonicalRemote(gitRoot) {
-  const remotes = await listRemotes(gitRoot);
-  for (const candidate of REMOTE_PRIORITY) {
-    if (remotes.includes(candidate)) return candidate;
-  }
-  return remotes[0] || null;
-}
-
-async function resolveCompareRefForRemote(gitRoot, remote) {
-  const tryRefs = [`${remote}/master`, `${remote}/main`];
-  for (const ref of tryRefs) {
-    try {
-      await execGit(gitRoot, ["rev-parse", "--verify", ref], { timeout: 10_000 });
-      return ref;
-    } catch {
-      // continue
-    }
-  }
-  try {
-    const sym = await execGit(gitRoot, ["symbolic-ref", `refs/remotes/${remote}/HEAD`], {
-      timeout: 10_000,
-    });
-    const m = sym.match(/^refs\/remotes\/(.+)$/);
-    if (m) return m[1];
-  } catch {
-    // ignore
-  }
-  return null;
-}
-
-async function getCurrentBranch(gitRoot) {
-  try {
-    const branch = await execGit(gitRoot, ["symbolic-ref", "--short", "HEAD"], {
-      timeout: 10_000,
-    });
-    return branch || null;
-  } catch {
-    return null; // detached HEAD
-  }
-}
-
-async function getBranchUpstream(gitRoot) {
-  try {
-    return await execGit(gitRoot, ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], {
-      timeout: 10_000,
-    });
-  } catch {
-    return null; // no tracking branch configured
-  }
-}
-
-function stripRemotePrefix(ref) {
-  // "upstream/master" -> "master"; "origin/feature/foo" -> "feature/foo"
-  const idx = ref.indexOf("/");
-  return idx === -1 ? ref : ref.slice(idx + 1);
+/** P7: this app's own repo slug — env override, else the hardcoded default. */
+function appRepoSlug() {
+  const env = (process.env.PODIUM_APP_GITHUB_REPO || "").trim();
+  if (env && env.includes("/")) return env;
+  return DEFAULT_APP_REPO;
 }
 
 /**
- * @param {string} [gitRoot]
- * @param {{ skipFetch?: boolean }} [options]
- * @returns {Promise<object>}
+ * Current running version string. `PODIUM_APP_VERSION` is stamped in at
+ * build/release time (P8); falls back to `"dev"` for local/dev runs — which
+ * `isNewer` always treats as "never prompt" (P2).
  */
-async function getUpdatesStatus(gitRoot = DEFAULT_ROOT, options = {}) {
-  const root = path.resolve(gitRoot);
-  const gitDir = path.join(root, ".git");
-  if (!fs.existsSync(gitDir)) {
-    return {
-      git_repo: false,
-      update_available: false,
-      repo_root: root,
-      manual_command: null,
-      message: "Install directory is not a git clone; check for updates manually.",
-    };
+function currentAppVersion() {
+  const env = (process.env.PODIUM_APP_VERSION || "").trim();
+  return env || "dev";
+}
+
+/**
+ * Walks up from `startDir` looking for a `.git` entry — true when running
+ * from a dev checkout, false for packaged installs (DMG bundle, Linux
+ * tarball, bun-compiled sidecar).
+ */
+function runningFromGitCheckout(startDir = path.join(__dirname, "..", "..")) {
+  let dir = path.resolve(startDir);
+  for (let i = 0; i < 64; i++) {
+    if (fs.existsSync(path.join(dir, ".git"))) return true;
+    const parent = path.dirname(dir);
+    if (parent === dir) return false;
+    dir = parent;
   }
+  return false;
+}
 
-  const canonicalRemote = await pickCanonicalRemote(root);
-  if (!canonicalRemote) {
-    return {
-      git_repo: true,
-      update_available: false,
-      repo_root: root,
-      remote_ref: null,
-      local_sha: null,
-      remote_sha: null,
-      commits_behind: 0,
-      message: "No git remotes configured; automatic update check skipped.",
-    };
+function normalizeVersion(version) {
+  return version.startsWith("v") ? version.slice(1) : version;
+}
+
+/**
+ * Semantic-version comparison: `true` only when `lhs` (latest) is strictly
+ * newer than `rhs` (current). Splits each on ".", compares numeric
+ * components left-to-right (missing trailing components treated as `0`). If
+ * either version contains a non-numeric component, the versions can't be
+ * reliably compared — return `false` (no update prompt) rather than guessing
+ * from string inequality (P2's exact false-positive class this fixes: a
+ * running dev build "0.5.3" vs. a still-draft "0.5.2" release must never
+ * look "newer" from naive string comparison).
+ */
+function isNewer(lhs, rhs) {
+  const lhsParts = lhs.split(".");
+  const rhsParts = rhs.split(".");
+  const count = Math.max(lhsParts.length, rhsParts.length);
+  for (let i = 0; i < count; i++) {
+    const lhsComponent = i < lhsParts.length ? lhsParts[i] : "0";
+    const rhsComponent = i < rhsParts.length ? rhsParts[i] : "0";
+    if (!/^\d+$/.test(lhsComponent) || !/^\d+$/.test(rhsComponent)) return false;
+    const lhsNumber = parseInt(lhsComponent, 10);
+    const rhsNumber = parseInt(rhsComponent, 10);
+    if (lhsNumber !== rhsNumber) return lhsNumber > rhsNumber;
   }
+  return false;
+}
 
-  if (!options.skipFetch) {
-    try {
-      await execGit(root, ["fetch", canonicalRemote, "--prune"], { timeout: 120_000 });
-    } catch (err) {
-      return {
-        git_repo: true,
-        update_available: false,
-        repo_root: root,
-        canonical_remote: canonicalRemote,
-        fetch_error: err.message || String(err),
-        message: `Could not reach ${canonicalRemote}; try again when online.`,
-      };
-    }
-  }
-
-  const remoteRef = await resolveCompareRefForRemote(root, canonicalRemote);
-  if (!remoteRef) {
-    return {
-      git_repo: true,
-      update_available: false,
-      repo_root: root,
-      canonical_remote: canonicalRemote,
-      message: `Could not resolve ${canonicalRemote}/master, ${canonicalRemote}/main, or ${canonicalRemote}/HEAD.`,
-    };
-  }
-
-  const currentBranch = await getCurrentBranch(root);
-  const branchUpstream = await getBranchUpstream(root);
-  const tracksCanonical = branchUpstream === remoteRef;
-
-  let localSha;
-  let remoteSha;
-  let commitsBehind = 0;
+/**
+ * Fetch the latest (non-prerelease, non-draft — GitHub's `/releases/latest`
+ * already excludes both) release for `owner/repo`. Returns `null` on any
+ * failure (network error, 404/no releases, timeout, malformed body) — update
+ * checks never throw, matching the "never blocks the caller" philosophy of
+ * the upstream file this replaces.
+ */
+async function fetchLatestRelease(owner, repo) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), GITHUB_API_TIMEOUT_MS);
   try {
-    localSha = await execGit(root, ["rev-parse", "HEAD"], { timeout: 10_000 });
-    remoteSha = await execGit(root, ["rev-parse", remoteRef], { timeout: 10_000 });
-    const countStr = await execGit(root, ["rev-list", "--count", `HEAD..${remoteRef}`], {
-      timeout: 30_000,
+    const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/releases/latest`, {
+      headers: {
+        Accept: "application/vnd.github+json",
+        "User-Agent": "podium-server",
+      },
+      signal: controller.signal,
     });
-    commitsBehind = Number.parseInt(countStr, 10);
-    if (Number.isNaN(commitsBehind)) commitsBehind = 0;
-  } catch (err) {
+    if (!res.ok) return null;
+    const json = await res.json();
+    if (!json || typeof json.tag_name !== "string") return null;
     return {
-      git_repo: true,
+      tagName: json.tag_name,
+      htmlUrl: typeof json.html_url === "string" ? json.html_url : null,
+      publishedAt: typeof json.published_at === "string" ? json.published_at : null,
+      body: typeof json.body === "string" ? json.body : null,
+    };
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+/**
+ * Checks one repo and builds its `RepoUpdateStatus` (client/src/lib/types.ts).
+ */
+async function checkRepo(owner, repo, currentVersion) {
+  const release = await fetchLatestRelease(owner, repo);
+  if (!release) {
+    return {
+      repo: `${owner}/${repo}`,
+      checked: false,
+      current_version: currentVersion,
+      latest_version: null,
       update_available: false,
-      repo_root: root,
-      canonical_remote: canonicalRemote,
-      remote_ref: remoteRef,
-      message: err.message || String(err),
+      release_url: null,
+      published_at: null,
+      error: "Could not reach GitHub releases API (or repo has no releases)",
     };
   }
-
-  const updateAvailable = commitsBehind > 0;
-  const isProd = process.env.NODE_ENV === "production";
-  const installSteps = ["npm run setup"];
-  if (isProd) installSteps.push("npm run build");
-
-  // Branch-aware manual_command. Three situations:
-  //   1. tracksCanonical: HEAD's tracked upstream IS the canonical ref. A
-  //      plain `git pull --ff-only` does the right thing — typical clone on
-  //      the default branch.
-  //   2. Same branch *name* as canonical but different upstream (the fork
-  //      case: local master tracking origin/master, canonical is
-  //      upstream/master). Need to fetch the canonical remote and merge it
-  //      into the local branch.
-  //   3. Anything else (feature branch, detached HEAD): pulling the current
-  //      branch wouldn't bring in canonical commits, so don't suggest it.
-  //      Offer a fetch and let the user decide how to integrate.
-  const canonicalBranchName = stripRemotePrefix(remoteRef);
-  let manualParts;
-  let situationNote;
-  let situation;
-  if (tracksCanonical) {
-    situation = "tracking_canonical";
-    manualParts = [`cd "${root}"`, "git pull --ff-only", ...installSteps];
-    situationNote = null;
-  } else if (currentBranch && currentBranch === canonicalBranchName) {
-    situation = "fork_or_diverged_tracking";
-    manualParts = [
-      `cd "${root}"`,
-      `git fetch ${canonicalRemote}`,
-      `git merge --ff-only ${remoteRef}`,
-      ...installSteps,
-    ];
-    situationNote = `You're on '${currentBranch}' tracking '${
-      branchUpstream || "no upstream"
-    }'. This command fast-forwards your branch from ${remoteRef} (the canonical default).`;
-  } else {
-    situation = currentBranch ? "feature_branch" : "detached_head";
-    manualParts = [`cd "${root}"`, `git fetch ${canonicalRemote}`];
-    situationNote = currentBranch
-      ? `You're on '${currentBranch}', not the canonical default branch (${remoteRef}). Fetched commits won't be pulled into your branch — rebase or merge ${remoteRef} when you're ready.`
-      : `HEAD is detached. Fetched commits stay under ${remoteRef}; check out the canonical default branch when ready.`;
-  }
-
-  const manualCommand = manualParts.join(" && ");
-
+  const updateAvailable =
+    currentVersion && currentVersion !== "dev"
+      ? isNewer(normalizeVersion(release.tagName), normalizeVersion(currentVersion))
+      : false;
   return {
-    git_repo: true,
+    repo: `${owner}/${repo}`,
+    checked: true,
+    current_version: currentVersion,
+    latest_version: release.tagName,
     update_available: updateAvailable,
-    repo_root: root,
-    remote_ref: remoteRef,
-    canonical_remote: canonicalRemote,
-    current_branch: currentBranch,
-    tracking_upstream: branchUpstream,
-    tracks_canonical: tracksCanonical,
-    situation,
-    local_sha: localSha,
-    remote_sha: remoteSha,
-    commits_behind: commitsBehind,
-    manual_command: manualCommand,
-    situation_note: situationNote,
-    message: updateAvailable
-      ? `${commitsBehind} commit(s) on ${remoteRef} not in your checkout.`
-      : "Your checkout includes the tip of the canonical default branch.",
+    release_url: release.htmlUrl,
+    published_at: release.publishedAt,
+    error: null,
+    release_notes: release.body,
   };
 }
 
-module.exports = { getUpdatesStatus, DEFAULT_ROOT };
+/**
+ * Runs the GitHub-release check and assembles the `RepoUpdatesStatusResponse`
+ * (client/src/lib/types.ts) — the shape `GET /api/updates/status` and
+ * `POST /api/updates/check` both return. Never throws.
+ */
+async function getUpdatesStatus() {
+  const currentVersion = currentAppVersion();
+  const slug = appRepoSlug();
+  const sepIdx = slug.indexOf("/");
+  let appStatus;
+  if (sepIdx === -1) {
+    appStatus = {
+      repo: "unconfigured",
+      checked: false,
+      current_version: currentVersion,
+      latest_version: null,
+      update_available: false,
+      release_url: null,
+      published_at: null,
+      error: "Set PODIUM_APP_GITHUB_REPO=owner/repo to enable update checks for this app",
+    };
+  } else {
+    const owner = slug.slice(0, sepIdx);
+    const repo = slug.slice(sepIdx + 1);
+    appStatus = await checkRepo(owner, repo, currentVersion);
+  }
+
+  return {
+    git_repo: runningFromGitCheckout(),
+    update_available: appStatus.update_available,
+    current_sha: appStatus.current_version || "dev",
+    latest_sha: appStatus.latest_version || "unknown",
+    app: appStatus,
+    checked_at: new Date().toISOString(),
+  };
+}
+
+module.exports = {
+  getUpdatesStatus,
+  appRepoSlug,
+  currentAppVersion,
+  isNewer,
+  normalizeVersion,
+  DEFAULT_APP_REPO,
+};
