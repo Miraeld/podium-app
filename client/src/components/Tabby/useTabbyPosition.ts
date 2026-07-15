@@ -1,11 +1,16 @@
 /**
  * @file useTabbyPosition.ts
- * @description AssistiveTouch-style draggable docking for the Tabby avatar. The
- *   avatar follows the pointer 1:1 while dragging (via Pointer Capture, so it
- *   keeps tracking even if the cursor outruns it), and on release snaps to the
- *   nearest left/right edge, remembering its vertical offset (persisted as a
- *   viewport fraction so it survives resizes). A small movement threshold tells
- *   a drag apart from a tap so dragging never opens the panel.
+ * @description Free-positioning drag for the Tabby avatar. The avatar follows
+ *   the pointer 1:1 while dragging (via Pointer Capture, so it keeps tracking
+ *   even if the cursor outruns it) and, on release, simply stays wherever it
+ *   was dropped — no edge snapping. The resting spot is persisted as x/y
+ *   viewport fractions (of the draggable area, i.e. the viewport minus the
+ *   avatar footprint and margin) so it survives window resizes, clamped back
+ *   on-screen if the window shrinks. `side` (left/right half) and `openUp`
+ *   are derived from the current position purely so flyouts (panel/speech
+ *   bubble) know which direction to open — they carry no docking meaning of
+ *   their own anymore. A small movement threshold tells a drag apart from a
+ *   tap so dragging never opens the panel.
  * @author Gael Robin <robin.gael@gmail.com>
  */
 
@@ -22,14 +27,15 @@ const vw = () => (typeof window !== "undefined" ? window.innerWidth : 1024);
 const vh = () => (typeof window !== "undefined" ? window.innerHeight : 768);
 
 function defaultPos(): TabbyPos {
-  return { side: "right", y: 0.5 }; // right edge, vertically centered
+  return { x: 1, y: 0.5 }; // near the right edge, vertically centered
 }
 
-/** Resting top-left screen coords for a docked position. */
+/** Resting top-left screen coords for a free position (x/y fractions of the draggable area). */
 function restingScreen(pos: TabbyPos) {
-  const avail = Math.max(0, vh() - TABBY_SIZE - 2 * TABBY_MARGIN);
-  const left = pos.side === "left" ? TABBY_MARGIN : vw() - TABBY_SIZE - TABBY_MARGIN;
-  const top = TABBY_MARGIN + pos.y * avail;
+  const availX = Math.max(0, vw() - TABBY_SIZE - 2 * TABBY_MARGIN);
+  const availY = Math.max(0, vh() - TABBY_SIZE - 2 * TABBY_MARGIN);
+  const left = TABBY_MARGIN + pos.x * availX;
+  const top = TABBY_MARGIN + pos.y * availY;
   return { left, top };
 }
 
@@ -112,13 +118,14 @@ export function useTabbyPosition(): TabbyPlacement {
     const live = liveRef.current;
     if (live) {
       draggedRef.current = true;
-      const side: "left" | "right" = live.left + TABBY_SIZE / 2 < vw() / 2 ? "left" : "right";
-      const avail = Math.max(1, vh() - TABBY_SIZE - 2 * TABBY_MARGIN);
-      const y = Math.min(1, Math.max(0, (live.top - TABBY_MARGIN) / avail));
-      const next: TabbyPos = { side, y };
+      const availX = Math.max(1, vw() - TABBY_SIZE - 2 * TABBY_MARGIN);
+      const availY = Math.max(1, vh() - TABBY_SIZE - 2 * TABBY_MARGIN);
+      const x = Math.min(1, Math.max(0, (live.left - TABBY_MARGIN) / availX));
+      const y = Math.min(1, Math.max(0, (live.top - TABBY_MARGIN) / availY));
+      const next: TabbyPos = { x, y };
       tabbyPrefs.setPos(next);
       setPos(next);
-      setDrag(null); // leave drag mode; resting coords (with transition) take over
+      setDrag(null); // leave drag mode; the avatar just stays where it was dropped
     }
     liveRef.current = null;
     startRef.current = null;
@@ -131,12 +138,17 @@ export function useTabbyPosition(): TabbyPlacement {
     return was;
   }, []);
 
+  // Derived purely for flyout direction — which half of the screen the avatar
+  // currently sits in, not a docking state.
+  const side: "left" | "right" = screen.left + TABBY_SIZE / 2 < vw() / 2 ? "left" : "right";
+  const openUp = screen.top + TABBY_SIZE / 2 > vh() / 2;
+
   return {
     left: screen.left,
     top: screen.top,
     size: TABBY_SIZE,
-    side: pos.side,
-    openUp: screen.top + TABBY_SIZE / 2 > vh() / 2,
+    side,
+    openUp,
     dragging: drag !== null,
     onPointerDown,
     onPointerMove,

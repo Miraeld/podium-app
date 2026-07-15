@@ -319,7 +319,8 @@
 /* ════════ shell (avatar button, bubble, panel) ════════ */
 
 /* The draggable avatar. Fixed-positioned; left/top are set inline by the drag
-   hook. It docks to an edge (AssistiveTouch-style) and remembers where. */
+   hook. It can be left anywhere in the window (no edge docking) and remembers
+   where. */
 .tabby-avatar-btn {
   position: fixed;
   z-index: 41; /* above the flyout */
@@ -330,7 +331,8 @@
   border-radius: 9999px;
   cursor: grab;
   touch-action: none; /* pointer drives the drag instead of scrolling on touch */
-  /* Glide to the snapped edge after a drag; killed mid-drag for 1:1 tracking. */
+  /* Smooths any programmatic move (e.g. clamping back on-screen after a
+     resize); killed mid-drag for 1:1 pointer tracking. */
   transition:
     left 0.28s cubic-bezier(0.22, 1, 0.36, 1),
     top 0.28s cubic-bezier(0.22, 1, 0.36, 1),

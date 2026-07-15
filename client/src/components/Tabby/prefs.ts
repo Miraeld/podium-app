@@ -12,11 +12,18 @@ const POS_KEY = "agent-dashboard-tabby-pos";
 const EVENT = "tabby:prefs";
 
 /**
- * Persisted resting position, AssistiveTouch-style: the widget always docks to
- * the left or right edge, remembering its vertical offset. `y` is stored as a
- * fraction of the viewport height (0–1) so it survives window resizes.
+ * Persisted resting position: Tabby can be left anywhere inside the window,
+ * no edge docking. `x`/`y` are fractions (0–1) of the draggable area (the
+ * viewport minus the avatar footprint and margin on each side), so the exact
+ * spot survives window resizes.
  */
 export interface TabbyPos {
+  x: number;
+  y: number;
+}
+
+/** Old AssistiveTouch-style docked shape, kept only for migrating existing prefs. */
+interface LegacyTabbyPos {
   side: "left" | "right";
   y: number;
 }
@@ -43,13 +50,21 @@ function writeBool(key: string, value: boolean): void {
   }
 }
 
+function clamp01(n: number): number {
+  return Math.min(1, Math.max(0, n));
+}
+
 function readPos(): TabbyPos | null {
   try {
     const raw = localStorage.getItem(POS_KEY);
     if (!raw) return null;
-    const p = JSON.parse(raw) as Partial<TabbyPos>;
+    const p = JSON.parse(raw) as Partial<TabbyPos> & Partial<LegacyTabbyPos>;
+    if (typeof p.x === "number" && typeof p.y === "number") {
+      return { x: clamp01(p.x), y: clamp01(p.y) };
+    }
+    // Migrate the old docked shape: left edge → x near 0, right edge → x near 1.
     if ((p.side === "left" || p.side === "right") && typeof p.y === "number") {
-      return { side: p.side, y: Math.min(1, Math.max(0, p.y)) };
+      return { x: p.side === "left" ? 0 : 1, y: clamp01(p.y) };
     }
     return null;
   } catch {

@@ -4,9 +4,10 @@
  *   in Layout) so it persists across routes and shares the single WebSocket.
  *   Owns the open/closed panel state, the ⌘B / Esc shortcuts, reduced-motion
  *   detection, and route navigation. Reactive personality + status/Ask come
- *   from useTabbyBrain; the avatar is draggable (AssistiveTouch-style) via
- *   useTabbyPosition, and the bubble/panel render in a self-clamping flyout so
- *   they never spill off any screen edge regardless of where the cat is docked.
+ *   from useTabbyBrain; the avatar is freely draggable anywhere in the window
+ *   (no edge snapping) via useTabbyPosition, and the bubble/panel render in a
+ *   self-clamping flyout so they never spill off any screen edge regardless of
+ *   where the cat was left.
  *
  *   The "do the job" path reuses the existing Run page: unmatched Ask queries
  *   deep-link to /run?prompt=…&autostart=1 — no new LLM backend.
@@ -77,7 +78,7 @@ function TabbyFlyout({ anchor, children }: { anchor: Anchor; children: ReactNode
     const vw = window.innerWidth;
     const vh = window.innerHeight;
 
-    // Horizontal: hug the avatar's docked edge, then clamp on-screen.
+    // Horizontal: hug the avatar's current side (left/right half), then clamp on-screen.
     let left = anchor.side === "left" ? anchor.left : anchor.left + anchor.size - w;
     left = Math.min(vw - w - VIEWPORT_MARGIN, Math.max(VIEWPORT_MARGIN, left));
 
