@@ -177,8 +177,59 @@ podium-app/                       # this repo (rename from PodiumSwiftApp = N7)
   assertion). Red-run proof: renamed `total_sessions`→`total_sessionz` in
   `db.js`'s stats query, confirmed `GET /api/stats` contract test failed,
   reverted, confirmed green again.
-- N6–N8: not started. N6 requires N4 + N5-A both landed. N7 waits for
-  daylight + owner presence.
+- **N5-A TASK A+C ✅ DONE** (`5823261`, 2026-07-15, verified end-to-end):
+  bun-compiled `podium-server` sidecar. Sqlite: `bun:sqlite` (new
+  `server/compat-bunsqlite.js`) is effectively PRIMARY — bun 1.3.14 has no
+  `node:sqlite`, and `better-sqlite3` has no working prebuilt/source build
+  on this Node 26/arm64 toolchain either; `db.js`'s chain is now
+  better-sqlite3 → bun:sqlite → node:sqlite. `lib/redoc.js` require.resolve
+  made dynamic (unrelated bun-bundler fix, required for `--compile` to
+  succeed at all). NEW finding beyond the spike: `bun build --compile`
+  resolves `optionalDependencies` against bun's OWN global module cache
+  regardless of local `node_modules` state — a stale cached
+  `better-sqlite3` silently got bundled and crashed at runtime
+  (`bindings`/`getRoot` "no module root" error inside the compiled binary);
+  fixed with `--external better-sqlite3` on the compile command (now baked
+  into `prepare-sidecar.sh`). Also found: bun statically inlines
+  `process.env.NODE_ENV` reads at BUILD time, so `NODE_ENV=production` must
+  be set in the shell that runs `bun build --compile`, not just at runtime,
+  or the static client never gets served (API still works, `/` 404s).
+  `server/index.js` now parses `--port`/`--data-dir`/`--web-dist` (mapped
+  onto `DASHBOARD_PORT`/`DASHBOARD_DATA_DIR`/new `DASHBOARD_WEB_DIST`)
+  before `db.js`/routers are required, matching what `main.rs` already
+  spawns with — zero Rust changes needed. `server/lib/server-info.js`'s
+  discovery-file shape already matched `main.rs`'s `port_for_pid()` reader —
+  no reconciliation needed there. `tauri/prepare-sidecar.sh` rewritten:
+  `bun install --production` + `bun build --compile --external
+  better-sqlite3` (with `NODE_ENV=production`), staged as
+  `podium-server-<rust-triple>` (same naming convention as the old Swift
+  binary), plus `client/dist` → `src-tauri/web-dist/` (was `WebClient/dist`
+  pre-N1). Hook binary NOT built by this script — hooks are installed by
+  the server itself at runtime (`server/scripts/install-hooks.js`, called
+  from `index.js` on every boot); `hook/` has its own separate `bun run
+  build`, matching the old Swift-era script's behavior (it never built a
+  hook binary either). Verified: plain-`node` boot with the new flags;
+  `bun build --compile` → 61.2 MiB Mach-O arm64 (old Swift binary: 25.6
+  MiB, delta +35.6 MiB); headless boot (scratch HOME/port/data-dir) served
+  `/api/health` (200) + static `index.html` (200, `<title>Podium</title>`)
+  + wrote the server-info file; `cargo tauri dev` ran once, sidecar spawned
+  against the REAL data dir, `ws_watcher` connected (health-wait passed),
+  `/api/health` 200 confirmed via curl, then torn down — no orphaned
+  `podium-server`/`podium-tauri` processes or listening port afterward
+  (the graceful SIGTERM path was exercised directly, not the GUI Quit menu,
+  since this ran headlessly — window-driven close-to-tray/Quit still
+  REMAINS for an owner GUI pass, matching P6.2a's existing manual-QA gap).
+  **Caveat found, NOT fixed here (out of TASK A/C's fence)**:
+  `server/scripts/install-hooks.js` still writes hook entries pointing at
+  `server/scripts/hook-handler.js`, which was deliberately never vendored
+  (see `server/UPSTREAM.md`) — every boot (including this session's) writes
+  a broken hook command into `~/.claude/settings.json`. This predates this
+  session (confirmed present in the owner's real `~/.claude/settings.json`
+  already) and is a loose end from N3/N5-B, not from N5-A; needs a
+  follow-up wiring `install-hooks.js` to the real `hook/dist/podium-hook`
+  binary path.
+- N6–N8: not started. N6 requires N4 + N5-A both landed (both now ✅ — next
+  session should pick up N6). N7 waits for daylight + owner presence.
 
 ## N1 — Import the front-end source (monorepo begins)
 
