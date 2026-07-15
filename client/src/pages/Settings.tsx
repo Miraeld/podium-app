@@ -62,6 +62,7 @@ import { Skeleton } from "../components/Skeleton";
 import { KANBAN_VISIBLE_KEY, loadKanbanVisible } from "../components/Sidebar";
 import { requestTourStart } from "../lib/tour";
 import { browserNotificationsUnavailable } from "../lib/platform";
+import { tabbyPrefs } from "../components/Tabby/prefs";
 import type { ModelPricing, WSMessage } from "../lib/types";
 
 // ─── Notification preferences ───
@@ -364,6 +365,18 @@ export function Settings() {
   } | null>(null);
   const [confirmAction, setConfirmAction] = useState<string | null>(null);
   const [notifPrefs, setNotifPrefs] = useState<NotifPrefs>(loadNotifPrefs);
+  const [tabbyEnabled, setTabbyEnabled] = useState(() => tabbyPrefs.getEnabled());
+  const setTabby = useCallback((v: boolean) => {
+    tabbyPrefs.setEnabled(v);
+    setTabbyEnabled(v);
+  }, []);
+  const [abandonHours, setAbandonHours] = useState("24");
+  const [purgeDays, setPurgeDays] = useState("90");
+  const [claudeHome, setClaudeHomeState] = useState("");
+  const [claudeHomeInput, setClaudeHomeInput] = useState("");
+  const [claudeHomeSaving, setClaudeHomeSaving] = useState(false);
+  const [claudeHomeError, setClaudeHomeError] = useState<string | null>(null);
+
   const wsConnected = useSyncExternalStore(eventBus.onConnection, () => eventBus.connected);
   const animatedTotalCost = useCountUp(totalCost);
 
@@ -1099,6 +1112,39 @@ export function Settings() {
 
       {/* ─── IMPORT HISTORY ─── */}
       <ImportHistory />
+
+      {/* ─── TABBY COMPANION ─── */}
+      <section>
+        <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2 mb-1 border-l-2 border-amber-400/60 dark:border-accent/60 pl-2.5">
+          <span className="text-base leading-none" aria-hidden>
+            🐾
+          </span>
+          {t("tabby.title")}
+        </h3>
+        <p className="text-sm text-gray-600 dark:text-gray-500 mb-4">{t("tabby.description")}</p>
+
+        <div className="card p-5">
+          <div className="flex items-center gap-3">
+            <div
+              className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${
+                tabbyEnabled
+                  ? "bg-accent/20 dark:bg-accent/10 border border-accent/30 dark:border-accent/20"
+                  : "bg-surface-2 border border-border"
+              }`}
+            >
+              <span className="text-lg leading-none" aria-hidden>
+                🐾
+              </span>
+            </div>
+            <Toggle
+              checked={tabbyEnabled}
+              onChange={setTabby}
+              label={t("tabby.enable")}
+              description={t("tabby.enableDesc")}
+            />
+          </div>
+        </div>
+      </section>
 
       {/* ─── NOTIFICATIONS ─── */}
       <section>

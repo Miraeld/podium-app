@@ -9,6 +9,7 @@ import { Outlet } from "react-router-dom";
 import { Sidebar, SIDEBAR_STORAGE_KEY, loadCollapsed } from "./Sidebar";
 import { UpdateNotifier } from "./UpdateNotifier";
 import { OnboardingTour } from "./OnboardingTour";
+import { Tabby } from "./Tabby/Tabby";
 
 interface LayoutProps {
   wsConnected: boolean;
@@ -81,6 +82,7 @@ export function Layout({ wsConnected }: LayoutProps) {
       />
       <UpdateNotifier />
       <OnboardingTour />
+      <Tabby />
       <Sidebar wsConnected={wsConnected} collapsed={collapsed} onToggle={toggle} />
       <main
         className="relative min-h-screen min-w-0 transition-[margin-left,width] duration-200"
