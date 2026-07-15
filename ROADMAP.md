@@ -283,14 +283,14 @@ podium-app/                       # this repo (rename from PodiumSwiftApp = N7)
   Server job (tests need hook/dist/podium-hook, absent in CI checkout) +
   Tauri job (cargo check: build.rs resolves externalBin + web-dist, all
   gitignored). An UNCOMMITTED ci.yml fix addressing exactly both failures
-  sat in the working tree — authored by the parallel orchestrator session,
-  which hit its usage limit mid-fix (before local validation). Owner
-  confirmed that session dead → session C ADOPTED the fix: YAML validated,
-  triple snippet verified locally, committed + pushed. Runner is the true
-  verification — CHECK THE RUN RESULT next session; if still red, the
-  remaining suspects are (a) zero-byte placeholders not satisfying tauri
-  build.rs (it may exec/inspect the binary), (b) the hook build step's
-  path resolution on the runner.
+  sat in the working tree — authored by the parallel orchestrator session
+  (died at usage limit mid-fix); session C adopted, validated, landed it
+  (`66e4dba` → Server+Client green). Second red exposed a REAL bug: main.rs
+  used macOS-only `title_bar_style`/`hidden_title` unguarded (added
+  post-v0.5.3 — Linux never compiled it; would have broken the next Linux
+  release). Fixed in `476014b`: cfg-gate + ci.yml generates the gitignored
+  icons/ via npx tauri icon. **CI GREEN on `476014b` — all 3 jobs. N6 runner
+  proof complete.**
 - N7–N8: not started. N7 waits for daylight + owner presence.
 
 ## N1 — Import the front-end source (monorepo begins)

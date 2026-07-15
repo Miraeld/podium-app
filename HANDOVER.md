@@ -6,16 +6,18 @@
 > ROADMAP.md is the task board — its STATUS block is law; this file is the
 > session-context layer on top. **Claim-before-dispatch rule applies.**
 
-## State (verified at seal time, 2026-07-15 ~09:15 CEST)
+## State (verified at seal time, 2026-07-15 ~09:30 CEST)
 
-- `develop` @ `fc5b51f`, pushed, clean tree. No agents running.
+- `develop` @ `476014b`, pushed, clean tree. No agents running.
 - `cd server && npm test` = **568/568 green** (run at seal, includes the
-  31-test wire-contract gate).
-- **CI run 29396507923 was IN PROGRESS at seal** — the first Node-era CI
-  proof. The previous run (29395525806) failed on 2 known causes; fix
-  pushed as `66e4dba`. **First action next session: check this run.**
-  If red, suspects: (a) zero-byte externalBin placeholders not satisfying
-  tauri build.rs, (b) hook build path resolution on the runner.
+  31-test wire-contract gate). Local `cargo check` green on macOS.
+- **CI GREEN on `476014b`** — first full Node-era CI proof (client + server
+  incl. contract gate + tauri cargo check, all jobs). N6 fully proven.
+  CI history today: run 1 red (Server: missing hook binary; Tauri: missing
+  externalBin placeholders) → fixed in `66e4dba`; run 2 red (Tauri only:
+  gitignored icons/ + `title_bar_style` is macOS-only API, code post-dates
+  v0.5.3 so Linux never compiled it — a REAL release-breaking bug CI
+  caught) → fixed in `476014b` (cfg-gate + npx tauri icon step).
 
 ## Done this session (all on develop, all orchestrator-verified)
 
@@ -36,17 +38,21 @@
   server tests; placeholder sidecars + web-dist for cargo check. Authored
   by the parallel orchestrator session which died at its usage limit
   mid-validation; session C validated (YAML + triple snippet) and landed it.
+  Result: Server + Client jobs went green on the next run.
+- **Linux compile fix** (`476014b`): cfg-gated the macOS-only
+  `title_bar_style`/`hidden_title` builder calls in main.rs (would have
+  broken the next Linux release build — added post-v0.5.3, never compiled
+  on Linux); ci.yml tauri job now generates icons via
+  `npx @tauri-apps/cli icon` (icons/ is gitignored; the context proc macro
+  opens real PNGs, placeholders won't do).
 
 ## In flight
 
-- **CI green proof** — run 29396507923, in progress at seal. Check → if
-  green, mark N6 fully proven in ROADMAP STATUS; if red, read the job logs
-  and fix (suspects above), it's unclaimed.
+- Nothing. All lanes closed; CI green.
 
 ## Next up (priority order)
 
-1. Check the CI run (above).
-2. **Ask Gaël to rerun** `node server/scripts/install-hooks.js` in a plain
+1. **Ask Gaël to rerun** `node server/scripts/install-hooks.js` in a plain
    terminal (post-dedup-fix) — strips the last 6 dead entries from his
    settings.json. Permission classifier blocks Claude from doing it (own
    hook config); he must run it himself.
