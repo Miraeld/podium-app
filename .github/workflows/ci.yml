@@ -13,43 +13,91 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  macos:
-    name: macOS (build + test, all products)
-    runs-on: macos-latest
-    # A healthy full run is ~15 min. Anything past this is a hang (see
-    # RunSpawner.swift's cooperative-pool note), not a slow run — fail fast
-    # instead of occupying a runner for the 6-hour default.
-    timeout-minutes: 25
-    steps:
-      - uses: actions/checkout@v4
-      - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode.app
-      - name: Swift version
-        run: swift --version
-      - name: Build
-        run: swift build
-      - name: Test
-        run: swift test
-
-  linux:
-    name: Linux (podium-server + podium-hook)
+  client:
+    name: Client (build + typecheck)
     runs-on: ubuntu-latest
-    container: swift:6.1
-    timeout-minutes: 25
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: client
     steps:
       - uses: actions/checkout@v4
-      - name: Install system dependencies
-        run: |
-          apt-get update
-          apt-get install -y libsqlite3-dev
-      - name: Swift version
-        run: swift --version
-      # One invocation per product: `swift build --product A --product B`
-      # silently builds ONLY the last product (documented footgun — bit the
-      # P6.1 packaging script too).
-      - name: Build podium-server
-        run: swift build --product podium-server
-      - name: Build podium-hook
-        run: swift build --product podium-hook
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      # P8: client builds MUST fail without PODIUM_APP_VERSION set (never
+      # weaken this guard). "build" is `tsc -b && vite build` — the
+      # type-check is already part of the build step, there's no separate
+      # "typecheck" script in client/package.json.
+      - name: Build (typecheck + bundle)
+        env:
+          PODIUM_APP_VERSION: ci
+        run: npm run build
+
+  server:
+    name: Server (node:test incl. contract gate)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      # `npm test` = node --test __tests__/*.test.js tests/contract/*.test.js
+      # (N4) — 558 tests total, including the wire-format contract gate that
+      # boots a real server and asserts every response shape against
+      # client/src/lib/types.ts. Some upstream suites (ccam-cli,
+      # hook-handler, plugins-marketplace — dormant, never-ported scaffolding
+      # per ROADMAP §F EXTRAS policy) are `{ skip }`'d with a documented
+      # reason in the test files themselves — that's the CI truth policy in
+      # practice: a node:test skip must name what's being skipped and why,
+      # never a silent deletion, and never used to paper over a runner-only
+      # flake without the reason being visible in the diff.
+      #
+      # CI truth policy (see CLAUDE.md): if a test ever fails ONLY on GitHub-
+      # hosted runners (not locally, not in local Linux docker) because of
+      # runner-environment behavior, gate it with `{ skip: 'reason' }` and a
+      # comment naming the observed runner behavior — never delete it, never
+      # skip unconditionally, never gate a test that also fails locally.
       - name: Test
-        run: swift test
+        run: npm test
+
+  tauri:
+    name: Tauri shell (cargo check)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: tauri/src-tauri
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Tauri Linux build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            librsvg2-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: tauri/src-tauri
+      # `cargo check` only — this job verifies the Rust shell compiles, it
+      # does not build/stage the sidecar (that needs bun + a compiled
+      # server, which is release.yml's job, not every-PR CI's).
+      - name: cargo check
+        run: cargo check

@@ -4,17 +4,26 @@ After=network.target
 
 [Service]
 Type=simple
-# No --no-hooks: podium-server auto-installs the Claude Code hooks into
-# ~/.claude/settings.json on every startup (idempotent, non-fatal on
-# failure — see PodiumServerCLI.installHooksNonFatal), matching the P6.1
-# acceptance bar of "download -> open -> your agents appear live" with no
-# separate install step for this unit to run.
+# podium-server (bun-compiled single-file binary, N6 Node-era pivot) auto-
+# installs the Claude Code hooks into ~/.claude/settings.json on every
+# startup (idempotent, non-fatal on failure — server/scripts/install-hooks.js,
+# invoked from server/index.js on every boot), matching the P6.1 acceptance
+# bar of "download -> open -> your agents appear live" with no separate
+# install step for this unit to run.
 #
-# No --web-dist / $PODIUM_WEB_DIST needed either: install-linux.sh copies
-# the vendored dashboard to /usr/local/share/podium/web, which
-# WebDistResolver.resolve() (Sources/PodiumServer/Static/StaticFileHandler.swift)
-# checks by default as the "installed Linux layout" fallback.
-# podium-server now defaults to binding 127.0.0.1 only (loopback), matching
+# DASHBOARD_WEB_DIST (== --web-dist, server/index.js) MUST be set here: with
+# no override, the bun-compiled binary falls back to
+# path.join(__dirname, "..", "client", "dist") — a path relative to the
+# *source tree* server/index.js was compiled from, which does not exist on
+# an install-linux.sh target machine (only bin/podium-server + the copied
+# share/podium/web are present). Without this override the dashboard 404s
+# on "/" while the API still works — same class of bug tauri/prepare-
+# sidecar.sh's --web-dist wiring exists to avoid for the Tauri bundle.
+# install-linux.sh copies the vendored dashboard to
+# /usr/local/share/podium/web, so that's what's pointed at here.
+Environment=DASHBOARD_WEB_DIST=/usr/local/share/podium/web
+#
+# podium-server defaults to binding 127.0.0.1 only (loopback, P1), matching
 # the desktop app's Tauri shell which only ever talks to localhost. This
 # headless unit exists to serve the dashboard to a browser on another
 # machine (the "what runs headless on a Linux server" use case from

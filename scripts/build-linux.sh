@@ -1,27 +1,46 @@
 #!/bin/bash
-# Builds podium-server + podium-hook for Linux and packages them into a
-# tarball with the vendored web client + scripts/install-linux.sh.
+# Builds a headless podium-server for Linux and packages it into a tarball
+# with the vendored web client + scripts/install-linux.sh.
 #
-# Portability note: this repo pins `swift-tools-version: 5.10` in
-# Package.swift, but CI (.github/workflows/ci.yml) builds/tests the Linux
-# products inside a `swift:6.1` container, and that is the combination
-# verified working during P0.1 — the plan's older "swift:6.0" suggestion
-# does NOT work (P0.1 run-log note). Use swift:6.1 for a reproducible build
-# regardless of the host machine's own Swift toolchain.
+# Node-era approach (N6): the headless Linux path uses the SAME bun-compiled
+# single-file binary as the Tauri sidecar (tauri/prepare-sidecar.sh), not
+# `node` + `npm ci` on the target host. Rationale: the bun-compiled binary
+# needs no Node/npm/node_modules on the target machine at all (just glibc),
+# matches the sidecar build path exactly (one build recipe, not two), and
+# sidesteps the native-module footguns documented in
+# tauri/prepare-sidecar.sh's header (bun's bundler resolving
+# optionalDependencies from ITS OWN global cache, NODE_ENV=production having
+# to be set at BUILD time). See tauri/prepare-sidecar.sh and
+# server/UPSTREAM.md "SQLite backend decision" for the full rationale — the
+# runtime sqlite backend is bun:sqlite (server/compat-bunsqlite.js), not
+# better-sqlite3 or node:sqlite.
+#
+# Portability note: this repo's docker path builds inside `oven/bun:1` so the
+# compiled binary's glibc/libc baseline matches a container, not whatever
+# glibc happens to be on the dev machine — the same "build inside a
+# container for a reproducible target" rationale the old Swift-era
+# `swift:6.1` container path used.
 #
 # Usage:
-#   scripts/build-linux.sh            # build inside docker (swift:6.1) if
+#   scripts/build-linux.sh            # build inside docker (oven/bun:1) if
 #                                      # docker is available, else build with
-#                                      # the host's own `swift` (must be Linux)
+#                                      # the host's own `bun` (must be Linux)
 #   scripts/build-linux.sh --docker   # force the docker path
 #   scripts/build-linux.sh --host     # force building with the host toolchain
 #                                      # (fails fast if not running on Linux)
 #
+# Also bun-compiles hook/ (a standalone artifact, per hook/package.json's own
+# `build` script — NOT staged by tauri/prepare-sidecar.sh, since Tauri-shell
+# installs are handled by the server calling install-hooks.js at runtime; a
+# headless install has no app bundle to ship it alongside, so this script
+# stages it into the tarball instead, matching the old Swift-era tarball's
+# `bin/podium-hook` layout).
+#
 # Output:
 #   dist-linux/podium-linux-<version>-<arch>.tar.gz
-#     bin/podium-server
-#     bin/podium-hook
-#     share/podium/web/            (WebClient/dist)
+#     bin/podium-server            (bun-compiled single-file binary)
+#     bin/podium-hook              (bun-compiled single-file binary)
+#     share/podium/web/            (client/dist)
 #     install-linux.sh
 #     podium-server.service        (systemd user unit, for reference/lint)
 
@@ -29,7 +48,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 DIST_DIR="$SCRIPT_DIR/dist-linux"
-DOCKER_IMAGE="swift:6.1"
+DOCKER_IMAGE="oven/bun:1"
 
 MODE="auto"
 for arg in "$@"; do
@@ -55,33 +74,44 @@ cd "$SCRIPT_DIR"
 # local/dev runs, preserving the previous default behavior exactly.
 VERSION="${VERSION:-$(git rev-parse --short HEAD 2>/dev/null || echo dev)}"
 
+BUILD_CMD='
+set -euo pipefail
+cd /src/server && bun install --production && NODE_ENV=production bun build --compile --external better-sqlite3 index.js --outfile /src/.build-linux-out/podium-server
+cd /src/hook && bun install --production && bun build --compile --outfile /src/.build-linux-out/podium-hook src/index.ts
+'
+
 if [ "$MODE" = "docker" ]; then
   command -v docker >/dev/null 2>&1 || { echo "✗ docker not found (use --host to build with the local toolchain instead)"; exit 1; }
   echo "▶ Building inside docker ($DOCKER_IMAGE)…"
+  rm -rf "$SCRIPT_DIR/.build-linux-out"
+  mkdir -p "$SCRIPT_DIR/.build-linux-out"
   docker run --rm \
     -v "$SCRIPT_DIR:/src" \
     -w /src \
     "$DOCKER_IMAGE" \
-    bash -c "apt-get update -qq && apt-get install -y -qq libsqlite3-dev >/dev/null && swift build -c release --product podium-server && swift build -c release --product podium-hook"
-    # NOTE: one `swift build` per product — passing --product twice silently
-    # honors only the last flag and builds a single product.
+    bash -c "$BUILD_CMD"
 else
-  echo "▶ Building with the host Swift toolchain…"
+  echo "▶ Building with the host bun toolchain…"
   if [ "$(uname -s)" != "Linux" ]; then
     echo "✗ --host build must run on Linux (this machine is $(uname -s)). Use --docker (default when docker is available) instead."
     exit 1
   fi
-  command -v swift >/dev/null 2>&1 || { echo "✗ swift not found on PATH"; exit 1; }
-  swift build -c release --product podium-server
-  swift build -c release --product podium-hook
+  command -v bun >/dev/null 2>&1 || { echo "✗ bun not found on PATH — install it: https://bun.sh"; exit 1; }
+  rm -rf "$SCRIPT_DIR/.build-linux-out"
+  mkdir -p "$SCRIPT_DIR/.build-linux-out"
+  (cd server && bun install --production)
+  (cd server && NODE_ENV=production bun build --compile --external better-sqlite3 index.js --outfile "$SCRIPT_DIR/.build-linux-out/podium-server")
+  (cd hook && bun install --production)
+  (cd hook && bun build --compile --outfile "$SCRIPT_DIR/.build-linux-out/podium-hook" src/index.ts)
 fi
 
-BUILD_DIR="$SCRIPT_DIR/.build/release"
-[ -f "$BUILD_DIR/podium-server" ] || { echo "✗ podium-server binary not found at $BUILD_DIR/podium-server"; exit 1; }
-[ -f "$BUILD_DIR/podium-hook" ] || { echo "✗ podium-hook binary not found at $BUILD_DIR/podium-hook"; exit 1; }
+BUILD_OUT="$SCRIPT_DIR/.build-linux-out"
+[ -f "$BUILD_OUT/podium-server" ] || { echo "✗ podium-server binary not found at $BUILD_OUT/podium-server"; exit 1; }
+[ -f "$BUILD_OUT/podium-hook" ] || { echo "✗ podium-hook binary not found at $BUILD_OUT/podium-hook"; exit 1; }
 
-if [ ! -d "$SCRIPT_DIR/WebClient/dist" ]; then
-  echo "✗ WebClient/dist not found — vendor the built web client first (see WebClient/SYNC.md)."
+if [ ! -d "$SCRIPT_DIR/client/dist" ]; then
+  echo "✗ client/dist not found — build the web client first:"
+  echo "  cd client && PODIUM_APP_VERSION=$VERSION npm run build"
   exit 1
 fi
 
@@ -92,10 +122,11 @@ PKG_DIR="$DIST_DIR/$PKG_NAME"
 rm -rf "$PKG_DIR"
 mkdir -p "$PKG_DIR/bin" "$PKG_DIR/share/podium"
 
-cp "$BUILD_DIR/podium-server" "$PKG_DIR/bin/podium-server"
-cp "$BUILD_DIR/podium-hook" "$PKG_DIR/bin/podium-hook"
+cp "$BUILD_OUT/podium-server" "$PKG_DIR/bin/podium-server"
+cp "$BUILD_OUT/podium-hook" "$PKG_DIR/bin/podium-hook"
 chmod +x "$PKG_DIR/bin/podium-server" "$PKG_DIR/bin/podium-hook"
-cp -R "$SCRIPT_DIR/WebClient/dist" "$PKG_DIR/share/podium/web"
+rm -rf "$BUILD_OUT"
+cp -R "$SCRIPT_DIR/client/dist" "$PKG_DIR/share/podium/web"
 cp "$SCRIPT_DIR/scripts/install-linux.sh" "$PKG_DIR/install-linux.sh"
 chmod +x "$PKG_DIR/install-linux.sh"
 cp "$SCRIPT_DIR/scripts/podium-server.service" "$PKG_DIR/podium-server.service"

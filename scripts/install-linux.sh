@@ -1,6 +1,8 @@
 #!/bin/bash
-# Installs the Podium standalone server on Linux: copies the binaries + web
-# dashboard to /usr/local, installs a systemd user unit, and starts it.
+# Installs the Podium standalone server on Linux: copies the binaries (bun-
+# compiled podium-server + podium-hook, N6 Node-era pivot — no Node/npm/
+# node_modules needed on this machine, just glibc) + web dashboard to
+# /usr/local, installs a systemd user unit, and starts it.
 #
 # Run this from inside the extracted tarball directory:
 #   tar xzf podium-linux-<version>.tar.gz && cd podium-linux-<version> && ./install-linux.sh

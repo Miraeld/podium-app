@@ -20,14 +20,17 @@ jobs:
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
-      - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode.app
-      - name: Swift version
-        run: swift --version
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
       - name: Install Tauri CLI
         run: cargo install tauri-cli --version "^2.0.0" --locked
+      # N5-A: podium-server is now a bun-compiled sidecar (not a Swift
+      # binary) — tauri/prepare-sidecar.sh needs bun on PATH to run
+      # `bun install --production` + `bun build --compile`.
+      - name: Install bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
       - name: Strip leading "v" from tag
         id: version
         run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
@@ -41,7 +44,20 @@ jobs:
           cd tauri/src-tauri
           jq --arg v "$VERSION" '.version = $v' tauri.conf.json > tauri.conf.json.tmp
           mv tauri.conf.json.tmp tauri.conf.json
-      - name: Build + stage podium-server sidecar (+ WebClient/dist)
+      # P8: the client build embedded in the app MUST be stamped with the
+      # real release version too — client/dist is what prepare-sidecar.sh
+      # stages into the Tauri bundle as a resource (see tauri/README.md's
+      # "--web-dist wire-up" section). Build it explicitly here with the
+      # release version before staging, rather than relying on whatever
+      # (if anything) happens to already be in client/dist.
+      - name: Build client (PODIUM_APP_VERSION stamped)
+        env:
+          PODIUM_APP_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          cd client
+          npm ci
+          npm run build
+      - name: Build + stage podium-server sidecar (+ client/dist)
         run: tauri/prepare-sidecar.sh
       # icons/ is git-ignored (build artifact); cargo tauri build panics
       # without it (verified locally — "failed to open icon .../32x32.png").
@@ -71,34 +87,19 @@ jobs:
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
-      # No Docker-in-Docker here: tauri/linux-build/Dockerfile exists so the
-      # LOCAL dev flow (build on a Mac via OrbStack) can reproduce the exact
-      # swift:6.1-based toolchain without polluting the host. On an Ubuntu
-      # CI runner we already ARE Ubuntu 24.04 with apt + a real (if
-      # ephemeral) userland, so installing the same dependencies straight
-      # onto the runner is simpler and faster than spinning up a container
-      # image just to throw it away — no bind-mount/volume dance needed
-      # either. This mirrors linux-build/Dockerfile's package list, not
-      # scripts/build-linux.sh's `container: swift:6.1` job (that job only
-      # needs the Swift toolchain; this one also needs the full Tauri/
-      # WebKitGTK GUI build chain, which is far easier to apt-install
-      # directly on the runner than to layer into that container image).
-      #
-      # Bonus: GitHub's ubuntu-latest runners are x86_64, while the dev
-      # Mac's OrbStack containers default to aarch64 — so this job produces
-      # x86_64 Linux artifacts for free, which is what most Linux desktop
-      # users actually want (the T1.3 container path only verified aarch64).
-      - name: Install Swift toolchain
-        uses: swift-actions/setup-swift@v2
-        with:
-          swift-version: "6.1"
-      - name: Swift version
-        run: swift --version
-      - name: Install Tauri + podium-server Linux build dependencies
+      # GitHub's ubuntu-latest runners are x86_64. `bun build --compile`
+      # defaults to compiling for the machine it runs on, so a plain
+      # (non-cross) compile here already produces an x86_64 Linux binary —
+      # exactly what most Linux desktop users want. No --target flag is
+      # needed unless this job is ever changed to cross-compile from a
+      # different host arch (e.g. an aarch64 runner); if that happens, pass
+      # `--target=bun-linux-x64` explicitly to tauri/prepare-sidecar.sh's
+      # `bun build --compile` invocation rather than relying on the host
+      # default.
+      - name: Install Tauri Linux build dependencies
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq \
-            libsqlite3-dev \
             libwebkit2gtk-4.1-dev \
             libgtk-3-dev \
             librsvg2-dev \
@@ -112,6 +113,10 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
       - name: Install Tauri CLI
         run: cargo install tauri-cli --version "^2.0.0" --locked
+      - name: Install bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
       - name: Strip leading "v" from tag
         id: version
         run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
@@ -122,7 +127,14 @@ jobs:
           cd tauri/src-tauri
           jq --arg v "$VERSION" '.version = $v' tauri.conf.json > tauri.conf.json.tmp
           mv tauri.conf.json.tmp tauri.conf.json
-      - name: Build + stage podium-server sidecar (+ WebClient/dist)
+      - name: Build client (PODIUM_APP_VERSION stamped)
+        env:
+          PODIUM_APP_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          cd client
+          npm ci
+          npm run build
+      - name: Build + stage podium-server sidecar (+ client/dist)
         run: tauri/prepare-sidecar.sh
       # icons/ is git-ignored (build artifact); a fresh CI checkout never has
       # it, so always regenerate (see the macOS job's identical step).
