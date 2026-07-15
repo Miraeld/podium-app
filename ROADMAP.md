@@ -321,7 +321,14 @@ podium-app/                       # this repo (rename from PodiumSwiftApp = N7)
   per §F (never weaken/delete a test); flagged as a follow-up task, not
   fixed in this session. Repo rename (`PodiumSwiftApp` → `podium-app`)
   still pending — owner does that per the note below. N8 queued next.
-- N8: queued — starts after N7 is orchestrator-verified.
+- **N7 pushed + CI-verified (orchestrator):** run 29424925408 all green on
+  the Swift-free tree (89e7f3f). Orphaned codesign + hook-status fixes
+  adopted (b8df296, tests 122/122). Dead local Swift artifacts removed.
+- **N8 🔄 CLAIMED + DISPATCHED** (2026-07-15, orchestrator session): browser
+  QA pass per the N8 prompt (Node server, all pages, both themes). Pre-tag
+  hygiene queued behind it: git rm HANDOVER.md PRE-1.0-AUDIT.md docs/N2-GAP.md
+  docs/N5A-SPIKE.md ROADMAP.md (owner decision: simple rm, no history scrub,
+  no @author sweep) → version ritual → tag v1.0.0 → owner publishes.
 
 ## N1 — Import the front-end source (monorepo begins)
 
