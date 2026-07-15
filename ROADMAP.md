@@ -105,8 +105,21 @@ podium-app/                       # this repo (rename from PodiumSwiftApp = N7)
   /api/export/session/:id (port from plugin-era routes/search.js+export.js or
   Swift routers). EXTRAS: keep-dormant/flagged; only Docker/K8s deploy
   scaffolding recommended for removal. See docs/N2-GAP.md.
-- **N3 🔄 IN FLIGHT** (single agent — gap is small): 6 endpoint fixes +
-  P1–P7 invariant port.
+- **N3 ✅ DONE** (2026-07-15): all 52 N2-GAP rows now OK. Endpoints: updates
+  status/check rewritten (GitHub-releases check, P2 semver + P7
+  Miraeld/podium-app only — `server/lib/update-check.js`); `/api/search`,
+  `POST /api/import/session`, `GET /api/export/session/:id` ported from the
+  plugin-era server (`routes/search.js`, `routes/export.js`,
+  `lib/session-transfer.js`). Invariants P1–P7 ported with tests (evidence
+  table in docs/N2-GAP.md): P1 `--host` > PODIUM_HOST > DASHBOARD_HOST >
+  loopback + RCE warning (fixed an upstream bug where a 0.0.0.0 bind never
+  warned), P3 atomic settings write + .bak (install-hooks), P4 VAPID key
+  0600 create+tighten, P5 envelope middleware (`lib/error-envelope.js`),
+  P6 documented (upstream's GET agents/:id + POST /agents kept per §F —
+  client never calls them). New/extended node:test suites green (92 tests
+  across the touched files); full contract gate is N4. Pre-existing failures
+  in ccam-cli / hook-handler / plugins-marketplace tests are environment
+  debt from upstream (fail identically on the untouched tree) — for N4.
 - **N5-B (hook client) + P10 (LICENSE/attribution) 🔄 IN FLIGHT** (2026-07-12,
   Sonnet subagent from the orchestrator session). Scope fence: ONLY `hook/`
   (new dir), root `LICENSE`, `README.md` attribution section. Must NOT touch

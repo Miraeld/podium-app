@@ -69,8 +69,8 @@ need rework. **MISSING** = client calls it, upstream has no route for it.
 | `POST /api/import/rescan` | code | OK | `{ok, source:"default", ...counters}` — superset of `ImportResult` |
 | `POST /api/import/scan-path` | code | OK | `{ok, source:"path", path, ...counters}` |
 | `POST /api/import/upload` | code | OK | `{ok, source:"upload", files_received, entries_extracted, entries_skipped, ...counters}` |
-| `POST /api/import/session` | code | **MISSING** | upstream has no session-bundle import route at all (no `export.js` router). Reference implementations: plugin-era `dashboard/server/routes/export.js` (`POST /api/import/session`, also aliased `POST /api/export/session`) and Swift `Sources/PodiumServer/Routes/ExportRouter.swift`. Used by `client/src/pages/ImportSession.tsx`. |
-| `GET /api/export/session/:id` | code | **MISSING** | same story — used by `client/src/pages/SessionDetail.tsx` (export-current-session button). Same two reference implementations as above. |
+| `POST /api/import/session` | curl + tests (`export-import-search.test.js`) | **OK — N3 done** | Ported from plugin-era `dashboard/server/routes/export.js` into `server/lib/session-transfer.js` (shared `importBundle`) + a new route in `server/routes/import.js`. Column lists are read dynamically via `PRAGMA table_info` (schema has grown columns beyond the plugin-era reference — `workflow_run_id`/`workflow_phase` on agents, several pricing/baseline columns on `token_usage` — so a hand-written column list would drop them). `index.js` mounts a per-path 50mb JSON body-size override ahead of the app-wide 1mb limit (large bundles). Verified: reject wrong `podium_export_version`, reject missing `session.id`, full export→mutate-id→import round-trip, re-import idempotency. |
+| `GET /api/export/session/:id` | curl + tests | **OK — N3 done** | `server/routes/export.js` (new) + `server/lib/session-transfer.js`'s `buildBundle`. 404 with the standard error envelope for an unknown session; verified shape matches `podium_export_version`/`session`/`agents`/`events`/`token_usage`. |
 
 ## cc-config
 
@@ -116,14 +116,14 @@ need rework. **MISSING** = client calls it, upstream has no route for it.
 
 | Endpoint | Method | Verdict | Notes |
 |---|---|---|---|
-| `GET /api/updates/status` | curl | **ADAPT (major)** | Client types this `RepoUpdatesStatusResponse` (`git_repo, update_available, current_sha, latest_sha, app: RepoUpdateStatus, checked_at`) — a GitHub-**release**-based check against a fixed repo slug (`Miraeld/podium-app`, ROADMAP P2/P7). Upstream's `getUpdatesStatus()` (`server/lib/update-check.js`) implements an entirely different, git-**remote**-based mechanism (`local_sha`/`remote_sha`, `situation`, `manual_command`, `tracks_canonical` — this is actually the *other*, unused client type `UpdateStatusPayload`, kept in `types.ts` only as a comment-documented historical shape). None of the fields the client actually reads (`current_sha`, `latest_sha`, `app.*`, `checked_at`) exist in upstream's response. **Full rewrite required**: port `Sources/PodiumCore/Discovery/UpdateCheck.swift`'s GitHub-release logic into `server/lib/update-check.js`, preserving P2 (only prompt on strictly-newer semver, never on `dev`) and P7 (hits only `Miraeld/podium-app`, never `wp-media/podium`). |
-| `POST /api/updates/check` | curl (implied, same handler) | **ADAPT (major)** | same underlying function; same rewrite fixes both. |
+| `GET /api/updates/status` | curl (live GitHub call + stubbed-fetch unit tests) | **OK — N3 done** | `server/lib/update-check.js` rewritten from scratch, ported from `Sources/PodiumCore/Discovery/UpdateCheck.swift` + `Sources/PodiumServer/Routes/UpdatesRouter.swift`. Returns the exact `RepoUpdatesStatusResponse` shape (`git_repo, update_available, current_sha, latest_sha, app: RepoUpdateStatus, checked_at`), all snake_case. Verified live: `PODIUM_APP_GITHUB_REPO` unset → hits `Miraeld/podium-app`, found `v0.5.2`, `current_sha:"dev"` → `update_available:false` (P2 — `dev` never prompts). P2's numeric-semver `isNewer()` and P7's repo-slug default/override are unit-tested offline in `server/__tests__/update-check.test.js` (stubbed `global.fetch`, no live network dependency in the test suite itself). |
+| `POST /api/updates/check` | curl + tests | **OK — N3 done** | Same `getUpdatesStatus()`; `routes/updates.js` already broadcast `update_status` over the WS on this path (no change needed there) — verified via `server/__tests__/updates.test.js`. |
 
 ## Search
 
 | Endpoint | Method | Verdict | Notes |
 |---|---|---|---|
-| `GET /api/search` | code | **MISSING** | Upstream has no `search` router at all (grepped `index.js` + `routes/`: absent). Used by `client/src/pages/Search.tsx` (global search across sessions/tools/events). Reference implementation: plugin-era `dashboard/server/routes/search.js` (present, full-featured) and Swift `Sources/PodiumServer/Routes/SearchRouter.swift`. Port one of these. |
+| `GET /api/search` | curl + tests | **OK — N3 done** | Ported from plugin-era `dashboard/server/routes/search.js` into `server/routes/search.js`, mounted at `/api/search`. Matches `client/src/pages/Search.tsx`'s `SearchResponse`/`SearchResult` shapes exactly; `buildHighlight()` wraps the match in `<mark>` (the client's `Highlight` component splits on `<mark>…</mark>` without `dangerouslySetInnerHTML`). Verified: empty query → `{results:[],total:0}`; session-by-cwd match with highlight; event-by-tool_name match. |
 
 ## Hooks (seeding endpoint, not client-called but load-bearing for N4)
 
@@ -137,12 +137,25 @@ need rework. **MISSING** = client calls it, upstream has no route for it.
 
 | Verdict | Count |
 |---|---|
-| OK | 46 |
-| ADAPT | 2 (`/api/updates/status`, `/api/updates/check` — same root cause, one fix) |
-| MISSING | 4 (`/api/search`, `/api/import/session`, `/api/export/session/:id`, — 3 distinct missing capabilities across those 2 routes counted at the endpoint level = 4 rows) |
+| OK | **52 (all)** — N3 closed the 2 ADAPT + 4 MISSING rows (updates status/check rewrite; search + import/session + export/session/:id ports) |
+| ADAPT | 0 (was 2) |
+| MISSING | 0 (was 4) |
 | **Total client-called endpoints assessed** | **52** |
 
-(ADAPT+MISSING) / Total = 6/52 ≈ **11.5%** — well under the 50% threshold.
+At N2 time: (ADAPT+MISSING) / Total = 6/52 ≈ **11.5%** — well under the 50%
+threshold. As of N3, every row is OK.
+
+## N3 — audit-invariant port (ROADMAP §2 P1–P7) evidence
+
+| # | Invariant | Status | Evidence |
+|---|---|---|---|
+| P1 | Loopback default bind; `--host` flag > `PODIUM_HOST` > `DASHBOARD_HOST` (upstream back-compat) > `127.0.0.1`; stderr warning on non-loopback bind naming the run-spawning RCE exposure | **DONE** | `server/lib/security.js` `resolveHost()` + new `isLoopbackBindAddress()` (wildcard `0.0.0.0`/`::` binds now correctly trigger the warning — upstream's original check reused the Host-header helper, which treats `0.0.0.0` as loopback-equivalent, silently swallowing the warning in the one case it must fire); `server/index.js` `startServer()` warning text + `--host` argv parsing in the `require.main` block. Tests: `server/__tests__/security.test.js` (`resolveHost` precedence + `isLoopbackBindAddress` suites). |
+| P2 | `update_available` only on strictly-newer numeric semver; `dev`/unset current → never; unparseable version → never | **DONE** | `server/lib/update-check.js` `isNewer()` + `checkRepo()`. Tests: `server/__tests__/update-check.test.js`. |
+| P3 | `~/.claude/settings.json` written atomically + `.bak` backup | **DONE** (for upstream's one write path) | `server/scripts/install-hooks.js` `writeSettingsAtomic()` (temp file in same dir + `renameSync`; `.bak` copy of the prior state) — the only place upstream's `server/` writes `settings.json`. The full HookInstaller port (legacy-marker upgrade etc.) is N5-B in `hook/`, owned by the parallel session. Tests: `server/__tests__/install-hooks.test.js` (P3 suite). |
+| P4 | VAPID private key file `0600` on create; pre-existing looser file tightened on load | **DONE** | `server/lib/push.js` `loadOrCreateVapidKeys()` (`mode: 0o600` on create + explicit `chmodSync`; stat-and-tighten on load). Tests: `server/__tests__/vapid-key-perms.test.js`. |
+| P5 | Uniform `{"error":{"code","message"}}` envelope on ALL `/api/*` errors | **DONE** | `server/lib/error-envelope.js` (`apiNotFoundHandler` + `apiErrorHandler`, mounted after all routes in `server/index.js` `createApp()` — covers unmatched `/api/*` 404s and uncaught handler throws, the two gaps route handlers don't cover themselves); bare `{error:{message}}` bodies upgraded to carry `code` in `routes/push.js` + `routes/workflows.js`; all N3-added routes emit the envelope natively. |
+| P6 | B6 API trim stays trimmed — no dead endpoints reintroduced by our code | **Documented** | The B6-trimmed Swift endpoints were `GET /api/agents/:id`, `POST /api/agents`, `GET /api/events/:id/full`, `GET /api/diagnostics` (PRE-1.0-AUDIT.md B6). Upstream still serves **`GET /api/agents/:id` and `POST /api/agents`** (`server/routes/agents.js:34` and `:42`); it has no `events/:id/full` or `diagnostics` routes. Decision: NOT deleted — per ROADMAP §F, keep upstream's surface for future merges; the client never calls these (B6's actual complaint was "dead in OUR client", not "harmful"). N4's contract gate asserts the client-called surface only. |
+| P7 | Update check hits ONLY `Miraeld/podium-app` (env-overridable), never `wp-media/podium` | **DONE** | `server/lib/update-check.js` `appRepoSlug()` (`PODIUM_APP_GITHUB_REPO` override, default `Miraeld/podium-app`; `wp-media` appears nowhere in `server/`). Tests: `server/__tests__/update-check.test.js` (P7 suite). Verified live once against the real GitHub API: latest `v0.5.2`, current `dev` → no prompt. |
 
 ## Upstream EXTRAS (features our client doesn't call)
 
@@ -185,3 +198,7 @@ self-contained), (2) porting `search.js` from the plugin-era server, (3)
 porting the session export/import pair from the plugin-era server's
 `export.js` (simpler single-file port than assembling from Swift's two
 separate routers).
+
+> **N3 outcome (2026-07-15):** exactly that plan executed — all 6 rows now
+> OK, P1–P7 ported with tests (see the invariant table above). B-as-base
+> held; no upstream route was deleted.
