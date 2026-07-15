@@ -23,3 +23,6 @@ server/*.bun-build
 # (HOOK-BUNDLE STAGING).
 hook/*.bun-build
 hook/.*.bun-build
+
+# Claude Code harness team file (local)
+.podium-team
