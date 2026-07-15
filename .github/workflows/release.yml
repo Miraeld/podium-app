@@ -143,6 +143,15 @@ jobs:
           cd tauri
           cargo tauri icon src-tauri/icon-source.png
       - name: Build Tauri app (.AppImage + .deb)
+        # NO_STRIP: linuxdeploy runs `strip` on every bundled binary by
+        # default; the bun-compiled sidecars (podium-server / podium-hook,
+        # ~63MB ELFs with embedded bytecode+assets) make strip fail, which
+        # surfaces only as linuxdeploy's generic "failed to run linuxdeploy"
+        # (v1.0.0-rc-1 run 29428948113 — identical yml bundled fine at
+        # v0.5.3, before the bun sidecars existed). Stripping them is
+        # pointless anyway (the bulk is the embedded blob, not symbols).
+        env:
+          NO_STRIP: "true"
         run: |
           cd tauri
           cargo tauri build --bundles appimage,deb
