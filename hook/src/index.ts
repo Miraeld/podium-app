@@ -30,10 +30,14 @@ const FALLBACK_PORTS = [4820];
 const REQUEST_TIMEOUT_MS = 1000;
 const PROCESS_DEADLINE_MS = 1500;
 
-// Superset of the hook types install-hooks.js registers (HOOK_TYPES):
+// Matches the hook types install-hooks.js registers (HOOK_TYPES) exactly.
 // routes/hooks.js depends on Stop (waiting badge) and Notification
 // (blocked-waiting detection + watchdog) — dropping them here silently
-// breaks those features even though the hooks fire.
+// breaks those features even though the hooks fire. PostToolUseFailure and
+// SubagentStart are ported from the Swift-era hookEvents/install.mjs for
+// parity; routes/hooks.js has no dedicated case for either yet (generic
+// default-case event logging), but install-hooks.js now wires them so they
+// at least reach the server instead of never firing at all.
 const HANDLED_EVENTS = new Set([
   "SessionStart",
   "UserPromptSubmit",

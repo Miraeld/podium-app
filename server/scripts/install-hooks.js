@@ -129,7 +129,29 @@ function containerRefusalMessage() {
 }
 
 // Hook types to install. Some support matchers, some don't.
-const HOOKS_WITH_MATCHER = ["PreToolUse", "PostToolUse", "Stop", "SubagentStop", "Notification"];
+//
+// PostToolUseFailure/SubagentStart (ported from the Swift-era HookInstaller's
+// `hookEvents` / the frozen plugin repo's install.mjs HOOK_EVENTS — see
+// ROADMAP.md STATUS "INSTALL-HOOKS DEDUP FIX") were previously forwarded by
+// the hook binary (hook/src/index.ts HANDLED_EVENTS) but never installed
+// here, so freshly-installed users never got them wired at all — only
+// upgraded users still carried a working Swift-era `podium-hook` entry for
+// them. routes/hooks.js's processEvent() has no dedicated case for either
+// (falls to the generic `default` branch: records a timeline event and
+// participates in the reactivation logic same as any other non-terminal
+// event), which is real, if generic, consumption — so per the decision rule
+// they belong in HOOK_TYPES, not removed. Grouped with the matcher-taking
+// events since both fire per-tool-call/per-subagent like their siblings
+// (PostToolUse, SubagentStop).
+const HOOKS_WITH_MATCHER = [
+  "PreToolUse",
+  "PostToolUse",
+  "PostToolUseFailure",
+  "Stop",
+  "SubagentStart",
+  "SubagentStop",
+  "Notification",
+];
 // UserPromptSubmit fires the instant the user hits enter — the only reliable
 // signal that the user has resumed for *text-only* turns (no PreToolUse will
 // fire until Claude calls a tool, which never happens for plain-text replies).
@@ -251,19 +273,37 @@ function installHooks(silent = false) {
 
   let installed = 0;
   let updated = 0;
+  let duplicatesRemoved = 0;
 
   for (const hookType of HOOK_TYPES) {
     if (!settings.hooks[hookType]) settings.hooks[hookType] = [];
 
-    const existing = settings.hooks[hookType].findIndex(isOurEntry);
+    const entries = settings.hooks[hookType];
+    const matchIndices = [];
+    entries.forEach((e, i) => {
+      if (isOurEntry(e)) matchIndices.push(i);
+    });
     const entry = makeHookEntry(hookType, resolved.path);
 
-    if (existing >= 0) {
-      settings.hooks[hookType][existing] = entry;
-      updated++;
-    } else {
-      settings.hooks[hookType].push(entry);
+    if (matchIndices.length === 0) {
+      entries.push(entry);
       installed++;
+      continue;
+    }
+
+    // Real-world settings.json accumulated MULTIPLE stale entries per event
+    // (a plugin-era one + a boot-written hook-handler.js one) because the
+    // old logic only ever replaced the FIRST match — every entry after it
+    // sat there forever, still pointing at a dead binary. Replace the first
+    // match in place (preserves its position) and drop every other match;
+    // everything that isn't ours is left untouched, in order.
+    const [firstMatch, ...duplicateMatches] = matchIndices;
+    entries[firstMatch] = entry;
+    updated++;
+    if (duplicateMatches.length > 0) {
+      const dropIndices = new Set(duplicateMatches);
+      settings.hooks[hookType] = entries.filter((_, i) => !dropIndices.has(i));
+      duplicatesRemoved += duplicateMatches.length;
     }
   }
 
@@ -273,6 +313,9 @@ function installHooks(silent = false) {
     console.log(`Hook binary: ${resolved.path} (via ${resolved.source})`);
     console.log(`Settings file: ${SETTINGS_PATH}`);
     console.log(`Installed: ${installed} new, updated: ${updated} existing`);
+    if (duplicatesRemoved > 0) {
+      console.log(`Removed ${duplicatesRemoved} duplicate/stale entries.`);
+    }
     console.log("Claude Code hooks configured. Start a new Claude Code session to begin tracking.");
   }
 

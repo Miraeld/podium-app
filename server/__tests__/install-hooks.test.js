@@ -45,7 +45,9 @@ function makeFakeBinary(dir, name = "podium-hook") {
 const HOOK_TYPES = [
   "PreToolUse",
   "PostToolUse",
+  "PostToolUseFailure",
   "Stop",
+  "SubagentStart",
   "SubagentStop",
   "Notification",
   "SessionStart",
@@ -159,6 +161,86 @@ describe("install-hooks host-only guard (#193)", () => {
       "legacy hook-handler.js entry must be upgraded to the real podium-hook binary"
     );
     assert.doesNotMatch(JSON.stringify(settings.hooks.PreToolUse[0]), /hook-handler\.js/);
+  });
+
+  it("dedupes TWO stale marker entries on one event down to exactly one, pointing at the resolved binary", () => {
+    process.env.CCAM_FORCE_HOST = "1";
+    // Real-world bug: a plugin-era legacy entry AND a boot-written
+    // hook-handler.js entry both accumulated on the same event because the
+    // old `findIndex` logic only ever replaced the first match.
+    const legacySettings = {
+      hooks: {
+        PreToolUse: [
+          {
+            matcher: "*",
+            hooks: [{ type: "command", command: "node \"/old/plugins/cache/wp-media/podium/hook.mjs\" PreToolUse" }],
+          },
+          {
+            matcher: "*",
+            hooks: [{ type: "command", command: 'node "/some/repo/server/scripts/hook-handler.js" PreToolUse' }],
+          },
+        ],
+      },
+    };
+    fs.writeFileSync(SETTINGS, JSON.stringify(legacySettings, null, 2) + "\n", "utf8");
+
+    const ok = installHooks(true);
+    assert.equal(ok, true);
+    const settings = JSON.parse(fs.readFileSync(SETTINGS, "utf8"));
+    assert.equal(settings.hooks.PreToolUse.length, 1, "both stale entries must collapse into exactly one");
+    assert.match(JSON.stringify(settings.hooks.PreToolUse[0]), /podium-hook/);
+  });
+
+  it("wires the newly-managed PostToolUseFailure/SubagentStart events and upgrades their Swift-era legacy entries", () => {
+    process.env.CCAM_FORCE_HOST = "1";
+    // The owner's real settings had these two events still pointing at the
+    // old Swift binary (~/.claude/podium/podium-hook), which matches
+    // OUR_MARKER ("podium-hook") — so it must be upgraded in place, not left
+    // stale and not duplicated.
+    const legacySettings = {
+      hooks: {
+        PostToolUseFailure: [
+          { matcher: "*", hooks: [{ type: "command", command: '"/Users/x/.claude/podium/podium-hook"' }] },
+        ],
+        SubagentStart: [
+          { matcher: "*", hooks: [{ type: "command", command: '"/Users/x/.claude/podium/podium-hook"' }] },
+        ],
+      },
+    };
+    fs.writeFileSync(SETTINGS, JSON.stringify(legacySettings, null, 2) + "\n", "utf8");
+
+    const ok = installHooks(true);
+    assert.equal(ok, true);
+    const settings = JSON.parse(fs.readFileSync(SETTINGS, "utf8"));
+    for (const type of ["PostToolUseFailure", "SubagentStart"]) {
+      assert.equal(settings.hooks[type].length, 1, `${type} must have exactly one entry after upgrade`);
+      assert.match(JSON.stringify(settings.hooks[type][0]), /podium-hook/, `${type} must be wired`);
+    }
+  });
+
+  it("leaves non-Podium hook entries on an event with duplicates completely untouched, in order", () => {
+    process.env.CCAM_FORCE_HOST = "1";
+    const legacySettings = {
+      hooks: {
+        PreToolUse: [
+          { matcher: "Bash", hooks: [{ type: "command", command: "echo user-entry-1" }] },
+          { matcher: "*", hooks: [{ type: "command", command: 'node "/some/repo/server/scripts/hook-handler.js" PreToolUse' }] },
+          { matcher: "*", hooks: [{ type: "command", command: "node \"/old/plugins/cache/wp-media/podium/hook.mjs\" PreToolUse" }] },
+          { matcher: "Write", hooks: [{ type: "command", command: "echo user-entry-2" }] },
+        ],
+      },
+    };
+    fs.writeFileSync(SETTINGS, JSON.stringify(legacySettings, null, 2) + "\n", "utf8");
+
+    const ok = installHooks(true);
+    assert.equal(ok, true);
+    const settings = JSON.parse(fs.readFileSync(SETTINGS, "utf8"));
+    const commands = settings.hooks.PreToolUse.map((e) => e.hooks[0].command);
+    assert.ok(commands.includes("echo user-entry-1"), "unrelated entry 1 must survive");
+    assert.ok(commands.includes("echo user-entry-2"), "unrelated entry 2 must survive");
+    const ours = settings.hooks.PreToolUse.filter((e) => JSON.stringify(e).includes("podium-hook"));
+    assert.equal(ours.length, 1, "the two stale Podium entries must collapse to exactly one");
+    assert.equal(settings.hooks.PreToolUse.length, 3, "2 unrelated + 1 collapsed Podium entry");
   });
 
   it("end-to-end: PODIUM_HOOK_BIN override is what actually lands in settings.json", () => {
