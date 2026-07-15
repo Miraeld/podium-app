@@ -291,7 +291,11 @@ podium-app/                       # this repo (rename from PodiumSwiftApp = N7)
   release). Fixed in `476014b`: cfg-gate + ci.yml generates the gitignored
   icons/ via npx tauri icon. **CI GREEN on `476014b` — all 3 jobs. N6 runner
   proof complete.**
-- N7–N8: not started. N7 waits for daylight + owner presence.
+- **N7 🔄 CLAIMED + DISPATCHED** (2026-07-15, orchestrator session, owner
+  present and gave the go). Preconditions verified: N4 gate green, N5
+  end-to-end done, N6 CI green on run 29422887113 (91e4f0d). Scope: per the
+  N7 prompt below. N8 queued behind it (same session).
+- N8: queued — starts after N7 is orchestrator-verified.
 
 ## N1 — Import the front-end source (monorepo begins)
 
