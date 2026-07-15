@@ -37,6 +37,8 @@ jobs:
         env:
           PODIUM_APP_VERSION: ci
         run: npm run build
+      - name: Test (vitest)
+        run: npx vitest run
 
   server:
     name: Server (node:test incl. contract gate)
