@@ -46,7 +46,7 @@ router.post("/send", async (req, res) => {
     const result = await sendPushToAll(db, title, body);
     res.json({ ok: true, ...result });
   } catch (err) {
-    res.status(500).json({ error: { message: err.message } });
+    res.status(500).json({ error: { code: "PUSH_FAILED", message: err.message } });
   }
 });
 

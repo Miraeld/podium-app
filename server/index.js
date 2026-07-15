@@ -39,7 +39,7 @@ const { redocBundlePath, renderRedocHtml } = require("./lib/redoc");
 const { writeServerInfo, removeServerInfo } = require("./lib/server-info");
 const {
   resolveHost,
-  isLoopbackHostname,
+  isLoopbackBindAddress,
   corsOptions,
   hostGuard,
   tokenGuard,
@@ -62,6 +62,9 @@ const ccConfigRouter = require("./routes/cc-config");
 const runRouter = require("./routes/run");
 const alertsRouter = require("./routes/alerts");
 const webhooksRouter = require("./routes/webhooks");
+const searchRouter = require("./routes/search");
+const exportRouter = require("./routes/export");
+const { apiNotFoundHandler, apiErrorHandler } = require("./lib/error-envelope");
 
 function createApp() {
   const app = express();
@@ -71,6 +74,13 @@ function createApp() {
   // allowlist (anti DNS-rebinding), and an optional bearer-token gate on /api/*.
   app.use(cors(corsOptions()));
   app.use(hostGuard);
+  // Session export bundles (POST /api/import/session) can carry many events
+  // and blow past the default 1mb cap; mount a generous-limit parser scoped
+  // to that exact path BEFORE the app-wide one below — Express's body-parser
+  // sets `req._body` once a request's body is parsed, so the app-wide parser
+  // sees that flag and skips re-reading the (already-consumed) stream for
+  // this path, while every other route keeps the tighter 1mb default.
+  app.use("/api/import/session", express.json({ limit: "50mb" }));
   app.use(express.json({ limit: "1mb" }));
   app.use("/api", tokenGuard);
 
@@ -90,6 +100,8 @@ function createApp() {
   app.use("/api/run", runRouter);
   app.use("/api/alerts", alertsRouter);
   app.use("/api/webhooks", webhooksRouter);
+  app.use("/api/search", searchRouter);
+  app.use("/api/export", exportRouter);
   app.get("/api/openapi.json", (_req, res) => {
     res.json(openApiSpec);
   });
@@ -125,10 +137,20 @@ function createApp() {
     res.json({ status: "ok", timestamp: new Date().toISOString() });
   });
 
+  // P5 (ROADMAP §2): uniform error envelope `{"error":{"code","message"}}` on
+  // every `/api/*` failure path — including routes with no matching handler
+  // (Express's default would otherwise render a plain-text/HTML 404) and any
+  // handler that throws synchronously without its own try/catch (Express's
+  // default error page is HTML, not JSON). Deliberately scoped to `/api/*` —
+  // the SPA static handler / catch-all (registered later, in startServer)
+  // must keep serving HTML for everything else.
+  app.use("/api", apiNotFoundHandler);
+  app.use("/api", apiErrorHandler);
+
   return app;
 }
 
-function startServer(app, port) {
+function startServer(app, port, hostFlag) {
   const server = http.createServer(app);
   initWebSocket(server);
 
@@ -171,10 +193,12 @@ function startServer(app, port) {
   }
 
   // Bind to loopback by default so the dashboard is not network-reachable out
-  // of the box (GHSA-gr74-4xfh-6jw9). Operators opt into a wider bind with
-  // DASHBOARD_HOST=0.0.0.0 — and are warned to set DASHBOARD_TOKEN when they do.
-  const host = resolveHost();
-  const boundLoopback = isLoopbackHostname(host);
+  // of the box (GHSA-gr74-4xfh-6jw9; ROADMAP §2 P1). Operators opt into a
+  // wider bind with an explicit --host flag, PODIUM_HOST, or (upstream
+  // back-compat) DASHBOARD_HOST — and are warned to set DASHBOARD_TOKEN when
+  // they do.
+  const host = resolveHost(hostFlag);
+  const boundLoopback = isLoopbackBindAddress(host);
 
   return new Promise((resolve) => {
     server.listen(port, host, () => {
@@ -187,7 +211,10 @@ function startServer(app, port) {
       console.log(`Agent Dashboard server running on http://${shown}:${port} (${mode})`);
       if (!boundLoopback) {
         console.warn(
-          `⚠️  Dashboard bound to ${host} — reachable from the network. ` +
+          `⚠️  Dashboard bound to ${host} — reachable from the network. This server ` +
+            `exposes an endpoint that spawns local \`claude\` processes (POST /api/run) — ` +
+            `network exposure without auth is a remote-code-execution risk for anyone who ` +
+            `can reach this port. ` +
             (getDashboardToken()
               ? "DASHBOARD_TOKEN is set (API + WebSocket require it)."
               : "Set DASHBOARD_TOKEN to require auth, or it is OPEN to anyone who can reach this port.")
@@ -622,6 +649,22 @@ function probeDashboardHealth(port, timeoutMs = 1500) {
 
 if (require.main === module) {
   const PORT = parseInt(process.env.DASHBOARD_PORT || "4820", 10);
+
+  // --host <value> CLI flag (ROADMAP §2 P1) — highest-precedence override,
+  // above PODIUM_HOST/DASHBOARD_HOST env vars. Also accepts --host=<value>.
+  let HOST_FLAG = null;
+  for (let i = 0; i < process.argv.length; i++) {
+    const arg = process.argv[i];
+    if (arg === "--host") {
+      HOST_FLAG = process.argv[i + 1];
+      break;
+    }
+    if (arg.startsWith("--host=")) {
+      HOST_FLAG = arg.slice("--host=".length);
+      break;
+    }
+  }
+
   let httpServer = null;
 
   // Single-server guard: if a healthy dashboard already owns this port, don't
@@ -645,7 +688,7 @@ if (require.main === module) {
       return;
     }
     const app = createApp();
-    startServer(app, PORT).then((server) => {
+    startServer(app, PORT, HOST_FLAG).then((server) => {
       httpServer = server;
       startBackgroundServices();
     });

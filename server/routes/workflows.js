@@ -35,7 +35,7 @@ router.get("/", (req, res) => {
     };
     res.json(data);
   } catch (err) {
-    res.status(500).json({ error: { message: err.message } });
+    res.status(500).json({ error: { code: "WORKFLOWS_FAILED", message: err.message } });
   }
 });
 
@@ -44,7 +44,8 @@ router.get("/session/:id", (req, res) => {
   try {
     const sessionId = req.params.id;
     const session = stmts.getSession.get(sessionId);
-    if (!session) return res.status(404).json({ error: { message: "Session not found" } });
+    if (!session)
+      return res.status(404).json({ error: { code: "NOT_FOUND", message: "Session not found" } });
 
     const agents = stmts.listAgentsBySession.all(sessionId);
     const events = db
@@ -80,7 +81,7 @@ router.get("/session/:id", (req, res) => {
 
     res.json({ session, tree, toolTimeline, swimLanes, events: events.slice(0, 500) });
   } catch (err) {
-    res.status(500).json({ error: { message: err.message } });
+    res.status(500).json({ error: { code: "WORKFLOW_SESSION_FAILED", message: err.message } });
   }
 });
 

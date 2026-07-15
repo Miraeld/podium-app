@@ -6,8 +6,9 @@
  * local-directory reads, ~/.claude writes, and a claude-spawning endpoint to any
  * host on the network. This module centralizes the defenses:
  *
- *   1. Default bind to loopback (127.0.0.1); opt into a wider bind only via the
- *      explicit DASHBOARD_HOST env (with a startup warning).
+ *   1. Default bind to loopback (127.0.0.1); opt into a wider bind only via an
+ *      explicit `--host` CLI flag or the `PODIUM_HOST` / `DASHBOARD_HOST` env
+ *      vars (with a startup warning — see ROADMAP §2 P1).
  *   2. Host-header allowlist — rejects requests whose Host isn't loopback (or an
  *      operator-allowlisted name), which defeats DNS-rebinding drive-bys.
  *   3. CORS restricted to loopback origins (no more `*`).
@@ -24,14 +25,50 @@ const crypto = require("node:crypto");
 // loopback (HTTP/1.0 / local tooling).
 const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "::1", "[::1]", "0.0.0.0", ""]);
 
-/** The interface to bind. Loopback unless the operator opts into a wider bind. */
-function resolveHost() {
-  const h = (process.env.DASHBOARD_HOST || "").trim();
-  return h || "127.0.0.1";
+/**
+ * The interface to bind. Loopback (127.0.0.1) unless the operator opts into a
+ * wider bind. Precedence (highest first): an explicit `--host` CLI flag
+ * (passed in by the caller — see index.js's `require.main === module` block),
+ * then `PODIUM_HOST` (Podium's own env var, ROADMAP §2 P1), then the
+ * upstream `DASHBOARD_HOST` env var (kept for back-compat with existing
+ * upstream deployments/docs), then the loopback default.
+ *
+ * @param {string} [flagValue] value of an explicit `--host` CLI flag, if any.
+ */
+function resolveHost(flagValue) {
+  const flag = (flagValue || "").trim();
+  if (flag) return flag;
+  const podiumHost = (process.env.PODIUM_HOST || "").trim();
+  if (podiumHost) return podiumHost;
+  const dashboardHost = (process.env.DASHBOARD_HOST || "").trim();
+  return dashboardHost || "127.0.0.1";
 }
 
 function isLoopbackHostname(name) {
   return LOOPBACK_HOSTS.has(String(name || "").toLowerCase());
+}
+
+// "All interfaces" wildcard addresses — deliberately NOT in this set (unlike
+// LOOPBACK_HOSTS above). `isLoopbackHostname` treats "0.0.0.0" as loopback
+// for Host-header/CORS purposes (a browser can legitimately reach a 0.0.0.0
+// bind via "localhost", so its Host header is still "localhost", never
+// literally "0.0.0.0" — that inclusion is harmless there). But `0.0.0.0` /
+// `::` as a BIND address is the opposite of loopback — it means "listen on
+// every interface", exactly the network exposure P1's warning exists to
+// flag. Reusing `isLoopbackHostname` for the bind check (as this file
+// originally did) silently swallowed the warning whenever an operator set
+// PODIUM_HOST=0.0.0.0 — the one case it must fire for.
+const WILDCARD_BIND_HOSTS = new Set(["0.0.0.0", "::", "[::]"]);
+
+/**
+ * True only when `host` — the actual address passed to `server.listen()` —
+ * is not reachable from the network. Use this (not `isLoopbackHostname`) for
+ * the P1 startup-warning decision.
+ */
+function isLoopbackBindAddress(host) {
+  const h = String(host || "").toLowerCase();
+  if (WILDCARD_BIND_HOSTS.has(h)) return false;
+  return isLoopbackHostname(h);
 }
 
 /** Extra Host-header names the operator allows (set when binding to a LAN). */
@@ -163,6 +200,7 @@ module.exports = {
   LOOPBACK_HOSTS,
   resolveHost,
   isLoopbackHostname,
+  isLoopbackBindAddress,
   allowedHostnames,
   hostnameOf,
   isHostAllowed,

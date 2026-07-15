@@ -9,7 +9,7 @@ const { describe, it, afterEach } = require("node:test");
 const assert = require("node:assert/strict");
 const sec = require("../lib/security");
 
-const ENV_KEYS = ["DASHBOARD_HOST", "DASHBOARD_ALLOWED_HOSTS", "DASHBOARD_TOKEN"];
+const ENV_KEYS = ["DASHBOARD_HOST", "PODIUM_HOST", "DASHBOARD_ALLOWED_HOSTS", "DASHBOARD_TOKEN"];
 afterEach(() => {
   for (const k of ENV_KEYS) delete process.env[k];
 });
@@ -33,10 +33,36 @@ describe("resolveHost", () => {
   it("defaults to loopback (127.0.0.1)", () => {
     assert.equal(sec.resolveHost(), "127.0.0.1");
   });
-  it("honors an explicit DASHBOARD_HOST opt-in", () => {
+  it("honors an explicit DASHBOARD_HOST opt-in (upstream back-compat)", () => {
     process.env.DASHBOARD_HOST = "0.0.0.0";
     assert.equal(sec.resolveHost(), "0.0.0.0");
     assert.equal(sec.isLoopbackHostname("0.0.0.0"), true); // treated as loopback-equiv for Host checks
+  });
+  it("PODIUM_HOST (ROADMAP §2 P1) takes precedence over DASHBOARD_HOST", () => {
+    process.env.DASHBOARD_HOST = "10.0.0.5";
+    process.env.PODIUM_HOST = "192.168.1.9";
+    assert.equal(sec.resolveHost(), "192.168.1.9");
+  });
+  it("an explicit --host flag value beats every env var", () => {
+    process.env.DASHBOARD_HOST = "10.0.0.5";
+    process.env.PODIUM_HOST = "192.168.1.9";
+    assert.equal(sec.resolveHost("127.0.0.1"), "127.0.0.1");
+  });
+});
+
+describe("isLoopbackBindAddress (P1 startup-warning gate)", () => {
+  it("treats real loopback bind addresses as loopback", () => {
+    assert.equal(sec.isLoopbackBindAddress("127.0.0.1"), true);
+    assert.equal(sec.isLoopbackBindAddress("localhost"), true);
+    assert.equal(sec.isLoopbackBindAddress("::1"), true);
+    assert.equal(sec.isLoopbackBindAddress(""), true);
+  });
+  it("does NOT treat 0.0.0.0/:: wildcard binds as loopback — this is the P1 warning trigger", () => {
+    // Regression guard: isLoopbackHostname("0.0.0.0") is true (Host-header
+    // semantics), but a server actually bound to 0.0.0.0 is reachable from
+    // the network — the exact case the startup warning must fire for.
+    assert.equal(sec.isLoopbackBindAddress("0.0.0.0"), false);
+    assert.equal(sec.isLoopbackBindAddress("::"), false);
   });
 });
 
