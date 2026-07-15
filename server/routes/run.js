@@ -23,6 +23,7 @@ const { Router } = require("express");
 const fs = require("node:fs");
 const path = require("node:path");
 const runs = require("../lib/run-spawner");
+const { resolveClaudeBin } = require("../lib/claude-bin");
 
 const router = Router();
 
@@ -240,18 +241,15 @@ router.get("/files", (req, res) => {
 });
 
 router.get("/binary", (_req, res) => {
-  // Surface whether `claude` is on PATH so the UI can show a helpful error
-  // before the user clicks Run. We don't actually invoke it — just let the
-  // user know the spawn will work.
-  const which = require("node:child_process").spawnSync(
-    process.platform === "win32" ? "where" : "which",
-    ["claude"],
-    { encoding: "utf8" }
-  );
-  const stdout = (which.stdout || "").trim();
+  // Surface whether `claude` is resolvable so the UI can show a helpful
+  // error before the user clicks Run. We don't actually invoke it — just
+  // let the user know the spawn will work. Re-resolved on every call (see
+  // lib/claude-bin.js) so installing claude mid-session flips this green
+  // without restarting the dashboard.
+  const resolved = resolveClaudeBin();
   res.json({
-    found: which.status === 0 && stdout.length > 0,
-    path: stdout || null,
+    found: resolved != null,
+    path: resolved,
   });
 });
 

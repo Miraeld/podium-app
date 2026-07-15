@@ -34,8 +34,10 @@
 
 const { spawn } = require("node:child_process");
 const { randomUUID } = require("node:crypto");
+const path = require("node:path");
 const { broadcast } = require("../websocket");
 const { createLineParser } = require("./stream-json-parser");
+const { resolveClaudeBin } = require("./claude-bin");
 
 // Persistence is best-effort and optional — load lazily so unit tests that
 // don't bring up the full db can still exercise the spawner.
@@ -152,10 +154,19 @@ function userEnvelope(text, id) {
  * doesn't accidentally pick up our hook-handler context (and to keep the
  * child's auth entirely from the user's existing OAuth in $HOME).
  */
-function cleanSpawnEnv() {
+function cleanSpawnEnv(claudeBinPath) {
   const env = { ...process.env };
   delete env.CLAUDECODE;
   delete env.CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST;
+  // The sidecar process tree (launchd/systemd → Tauri → this server) doesn't
+  // inherit the user's login-shell PATH, which is why resolveClaudeBin() has
+  // to probe well-known install locations in the first place. Prepend the
+  // resolved binary's directory so any nested `claude` invocations inside the
+  // spawned session (subshells, scripts) can find it via bare "claude" too.
+  if (claudeBinPath) {
+    const dir = path.dirname(claudeBinPath);
+    env.PATH = env.PATH ? `${dir}${path.delimiter}${env.PATH}` : dir;
+  }
   return env;
 }
 
@@ -303,8 +314,14 @@ function spawnRun(args) {
 
   const id = randomUUID();
   const argv = buildArgv({ prompt, mode, model, permissionMode, resumeSessionId, effort });
-  const child = spawn("claude", argv, {
-    env: cleanSpawnEnv(),
+  // Spawn the resolved absolute path so the sidecar's bare inherited PATH
+  // (launchd/systemd, no login-shell extensions) doesn't ENOENT even when
+  // the binary is installed at a well-known but non-PATH location. Falls
+  // back to bare "claude" if resolution fails, so the error behavior
+  // (ENOENT surfaced to the caller) is unchanged from before this fix.
+  const claudeBinPath = resolveClaudeBin();
+  const child = spawn(claudeBinPath || "claude", argv, {
+    env: cleanSpawnEnv(claudeBinPath),
     cwd: cwd || process.cwd(),
     stdio: ["pipe", "pipe", "pipe"],
   });
