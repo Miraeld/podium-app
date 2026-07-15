@@ -283,10 +283,14 @@ podium-app/                       # this repo (rename from PodiumSwiftApp = N7)
   Server job (tests need hook/dist/podium-hook, absent in CI checkout) +
   Tauri job (cargo check: build.rs resolves externalBin + web-dist, all
   gitignored). An UNCOMMITTED ci.yml fix addressing exactly both failures
-  sits in the working tree — authored by NEITHER of session C's agents
-  (both confirmed); presumed the parallel orchestrator session's live WIP
-  (it also pushed develop@d8e8a61). CI-fix lane treated as claimed-in-fact
-  by that session — do not double-work; verify green run when it lands.
+  sat in the working tree — authored by the parallel orchestrator session,
+  which hit its usage limit mid-fix (before local validation). Owner
+  confirmed that session dead → session C ADOPTED the fix: YAML validated,
+  triple snippet verified locally, committed + pushed. Runner is the true
+  verification — CHECK THE RUN RESULT next session; if still red, the
+  remaining suspects are (a) zero-byte placeholders not satisfying tauri
+  build.rs (it may exec/inspect the binary), (b) the hook build step's
+  path resolution on the runner.
 - N7–N8: not started. N7 waits for daylight + owner presence.
 
 ## N1 — Import the front-end source (monorepo begins)
