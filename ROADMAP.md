@@ -267,17 +267,26 @@ podium-app/                       # this repo (rename from PodiumSwiftApp = N7)
   prepare-sidecar.sh step in both OS jobs). .gitignore covers bun temp
   artifacts. 565/565 green (orchestrator re-ran). Sizes: server 63.8MB,
   hook 61.2MB in-bundle.
-- **INSTALL-HOOKS DEDUP FIX 🔒 CLAIMED** (2026-07-15, orchestrator session C):
-  real-world bug found in the owner's settings.json — `installHooks` upgrades
-  only the FIRST `isOurEntry` match per event (`findIndex`), so events with
-  TWO legacy entries (plugin-era + boot-written hook-handler.js) keep the
-  duplicate → 6 events still threw MODULE_NOT_FOUND after healing. Fix:
-  upgrade first match, REMOVE all further matches per event. Also decide
-  (investigate, don't guess): Swift-era entries on events HOOK_TYPES doesn't
-  manage (PostToolUseFailure, SubagentStart → ~/.claude/podium/podium-hook,
-  binary still exists) — should HOOK_TYPES cover them (does the server/agent
-  tree consume them?) or should legacy entries on unmanaged events be
-  removed? Dispatch AFTER hook-bundle staging lands (same-file conflict).
+- **INSTALL-HOOKS DEDUP FIX ✅ DONE** (`9d370b9`, 2026-07-15, orchestrator-
+  verified 568/568): `installHooks` now upgrades the first `isOurEntry`
+  match per event and REMOVES every additional match (real-world settings
+  had TWO stale entries per event; the survivor threw MODULE_NOT_FOUND on 6
+  events even after healing). CLI reports removed-duplicate count.
+  Investigation outcome: PostToolUseFailure + SubagentStart were a COVERAGE
+  GAP — hook binary already forwarded them (HANDLED_EVENTS, ported from
+  Swift), but HOOK_TYPES never installed them; routes/hooks.js consumes
+  them via the default branch (timeline + reactivation). Both now in
+  HOOK_TYPES; Swift-era entries upgrade in place (path matches OUR_MARKER).
+  3 new tests. Owner action: rerun install-hooks once to finish cleaning
+  the real settings.json.
+- **CI RED ON FIRST NODE-ERA PUSH (run 29395525806, 2026-07-15 06:52):**
+  Server job (tests need hook/dist/podium-hook, absent in CI checkout) +
+  Tauri job (cargo check: build.rs resolves externalBin + web-dist, all
+  gitignored). An UNCOMMITTED ci.yml fix addressing exactly both failures
+  sits in the working tree — authored by NEITHER of session C's agents
+  (both confirmed); presumed the parallel orchestrator session's live WIP
+  (it also pushed develop@d8e8a61). CI-fix lane treated as claimed-in-fact
+  by that session — do not double-work; verify green run when it lands.
 - N7–N8: not started. N7 waits for daylight + owner presence.
 
 ## N1 — Import the front-end source (monorepo begins)
