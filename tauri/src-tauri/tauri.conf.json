@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Podium",
-  "version": "0.5.3",
+  "version": "1.0.0-rc-1",
   "identifier": "com.gaelrobin.PodiumApp",
   "build": {
     "frontendDist": "../src"
@@ -15,7 +15,12 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["dmg", "app", "appimage", "deb"],
+    "targets": [
+      "dmg",
+      "app",
+      "appimage",
+      "deb"
+    ],
     "category": "Utility",
     "shortDescription": "Real-time observer for Claude Code agent sessions",
     "longDescription": "Podium watches your Claude Code agent sessions in real time, backed by a local SQLite database and a bundled podium-server sidecar. No cloud, no browser tab — a native window on macOS and Linux.",
@@ -26,15 +31,23 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "externalBin": ["bin/podium-server", "bin/podium-hook"],
-    "resources": ["web-dist/"],
+    "externalBin": [
+      "bin/podium-server",
+      "bin/podium-hook"
+    ],
+    "resources": [
+      "web-dist/"
+    ],
     "macOS": {
       "signingIdentity": "-",
       "minimumSystemVersion": "12.0"
     },
     "linux": {
       "deb": {
-        "depends": ["libwebkit2gtk-4.1-0", "libgtk-3-0"]
+        "depends": [
+          "libwebkit2gtk-4.1-0",
+          "libgtk-3-0"
+        ]
       },
       "appimage": {
         "bundleMediaFramework": false
