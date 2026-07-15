@@ -251,14 +251,22 @@ podium-app/                       # this repo (rename from PodiumSwiftApp = N7)
   already) and is a loose end from N3/N5-B, not from N5-A; needs a
   follow-up wiring `install-hooks.js` to the real `hook/dist/podium-hook`
   binary path.
-- **HOOK-BUNDLE STAGING 🔒 CLAIMED** (2026-07-15, orchestrator session C):
-  stage podium-hook into the Tauri bundle so a packaged install (.dmg/
-  .AppImage — no repo checkout) still gets working hooks. Scope:
-  prepare-sidecar.sh builds hook via bun compile + stages as externalBin;
-  tauri.conf.json externalBin += bin/podium-hook; verify install-hooks.js's
-  next-to-execPath fallback matches where Tauri places externalBin at
-  runtime (name + triple-stripping); .gitignore the hook/.*.bun-build temp
-  artifacts. release.yml should need nothing (it calls prepare-sidecar.sh).
+- **HOOK-BUNDLE STAGING ✅ DONE** (`c3c4d9d`, 2026-07-15, orchestrator-
+  verified): prepare-sidecar.sh builds + stages podium-hook as a second
+  externalBin (triple-named, same convention); tauri.conf.json externalBin =
+  [podium-server, podium-hook]. Tauri strips the triple → both land side by
+  side in Contents/MacOS/, matching install-hooks.js's tier-3
+  next-to-execPath lookup EXACTLY (verified via real `cargo tauri build
+  --debug` bundle + scratch-HOME boot of the bundled server with the repo's
+  hook/dist hidden — settings.json got the sim-bundle path, not a warning).
+  HARD BLOCKER found+fixed: bun 1.3.14 Mach-O self-signing is broken for the
+  hook compile ("truncated code signature", oven-sh/bun#29120) —
+  BUN_NO_CODESIGN_MACHO_BINARY=1 now set on BOTH compiles so Tauri's
+  codesign is the only signing pass; without it `cargo tauri build` fails at
+  bundling. release.yml needs nothing (bun setup already precedes the
+  prepare-sidecar.sh step in both OS jobs). .gitignore covers bun temp
+  artifacts. 565/565 green (orchestrator re-ran). Sizes: server 63.8MB,
+  hook 61.2MB in-bundle.
 - **INSTALL-HOOKS DEDUP FIX 🔒 CLAIMED** (2026-07-15, orchestrator session C):
   real-world bug found in the owner's settings.json — `installHooks` upgrades
   only the FIRST `isOurEntry` match per event (`findIndex`), so events with
