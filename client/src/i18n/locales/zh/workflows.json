@@ -72,6 +72,11 @@
       "what": "按会话查看的详细视图：完整 Agent 树、工具调用时间线，以及你所选会话的原始事件序列。",
       "howToRead": "从上方下拉中选择一个会话，或点击散点图中的气泡。标签页可在分层视图（Agent Tree）、时间视图（Tool Timeline）与按时间顺序视图（Event Sequence）之间切换。",
       "why": "当某个聚合图标记出一个可疑会话时，这里就是你按顺序读懂究竟发生了什么的地方。"
+    },
+    "dynamicRuns": {
+      "what": "由 Claude Code Workflow 工具（以及自定节奏的 /loop 运行）派生的 Agent 群组，依据磁盘上的运行日志而非实时钩子重建。每次运行都会列出其内部子 Agent、所属阶段、token、工具调用及结果。",
+      "howToRead": "点击某次运行以展开。彩色标签按阶段筛选内部 Agent；表格显示每个 Agent 的指标；每个结果行可展开为该 Agent 的完整提示词与结果（按需从其转录中获取）。",
+      "why": "Workflow 工具的子 Agent 不发出钩子，因此不会出现在下方的分析中。这里是唯一能端到端查看一次扇出群组运行的地方——用它来了解每个内部 Agent 究竟做了什么。"
     }
   },
   "stats": {
@@ -419,5 +424,43 @@
     "showingOf": "显示 100/{{total}} 条事件",
     "sessionInfo": " 个会话 - 占会话时长的 {{from}}%-{{to}}%",
     "sortedByCompaction": " 个会话（按压缩次数排序）"
+  },
+  "runs": {
+    "title": "动态工作流",
+    "subtitle": "由 Workflow 工具派生的 Agent 群组，依据磁盘上的运行日志重建",
+    "sessionTitle": "动态工作流",
+    "loading": "正在加载动态工作流…",
+    "empty": "暂无动态工作流。Workflow 工具的运行会在其日志写入后（即完成时）显示在此处。",
+    "noAgents": "本次运行未记录内部 Agent。",
+    "openSession": "打开所属会话",
+    "filterPhase": "按阶段筛选",
+    "clearFilter": "清除",
+    "resultsLabel": "结果",
+    "promptLabel": "提示词",
+    "resultLabel": "结果",
+    "loadingFull": "正在加载完整内容…",
+    "tokens": "token",
+    "agents_one": "{{count}} 个 Agent",
+    "agents_other": "{{count}} 个 Agent",
+    "tools_one": "{{count}} 次工具调用",
+    "tools_other": "{{count}} 次工具调用",
+    "status": {
+      "running": "运行中",
+      "working": "运行中",
+      "queued": "排队中",
+      "completed": "已完成",
+      "done": "已完成",
+      "success": "已完成",
+      "error": "错误",
+      "failed": "失败"
+    },
+    "col": {
+      "agent": "Agent",
+      "phase": "阶段",
+      "state": "状态",
+      "tokens": "Token",
+      "tools": "工具",
+      "duration": "时长"
+    }
   }
 }

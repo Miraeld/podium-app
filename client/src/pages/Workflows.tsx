@@ -38,6 +38,7 @@ import {
   ScatterChart,
   AlertTriangle,
   Clock,
+  Layers,
 } from "lucide-react";
 import { api } from "../lib/api";
 import { eventBus } from "../lib/eventBus";
@@ -55,6 +56,7 @@ import { ErrorPropagationMap } from "../components/workflows/ErrorPropagationMap
 import { ConcurrencyTimeline } from "../components/workflows/ConcurrencyTimeline";
 import { SessionComplexityScatter } from "../components/workflows/SessionComplexityScatter";
 import { SessionDrillIn } from "../components/workflows/SessionDrillIn";
+import { WorkflowRunsPanel } from "../components/workflows/WorkflowRunsPanel";
 
 type StatusFilter = "all" | "active" | "completed";
 
@@ -81,7 +83,7 @@ function saveSectionExpanded(sectionId: string, expanded: boolean) {
 }
 
 /** Section ids, in render order. Primary sections come first. */
-const PRIMARY_SECTION_IDS = ["drillIn", "errorPropagation"] as const;
+const PRIMARY_SECTION_IDS = ["dynamicRuns", "drillIn", "errorPropagation"] as const;
 const ADVANCED_SECTION_IDS = [
   "orchestration",
   "concurrency",
@@ -274,6 +276,18 @@ export function Workflows() {
 
       {/* ── Primary (featured) sections ── */}
       <div className="space-y-3">
+        <AccordionSection
+          variant="primary"
+          icon={<Layers className="w-4 h-4" />}
+          title={t("runs.title")}
+          description={t("runs.subtitle")}
+          infoKey="dynamicRuns"
+          isExpanded={expanded.dynamicRuns}
+          onToggle={() => toggleSection("dynamicRuns")}
+        >
+          <WorkflowRunsPanel statusFilter={statusFilter} />
+        </AccordionSection>
+
         <AccordionSection
           variant="primary"
           icon={<Crosshair className="w-4 h-4" />}

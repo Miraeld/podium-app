@@ -72,6 +72,11 @@
       "what": "Khung chi tiết theo phiên: cây Agent đầy đủ, dòng thời gian tool gọi và chuỗi sự kiện thô của phiên bạn chọn.",
       "howToRead": "Chọn phiên từ dropdown phía trên hoặc bấm một bong bóng trong biểu đồ phân tán. Các tab cho phép chuyển giữa góc nhìn phân cấp (Agent Tree), thời gian (Tool Timeline) và theo trình tự (Event Sequence) của cùng một phiên.",
       "why": "Khi biểu đồ tổng hợp đánh dấu một phiên đáng ngờ, đây là nơi bạn đọc chính xác chuyện gì đã xảy ra, theo đúng thứ tự."
+    },
+    "dynamicRuns": {
+      "what": "Các nhóm Agent do công cụ Workflow của Claude Code (và các lần chạy /loop tự nhịp) tạo ra, được dựng lại từ nhật ký chạy trên đĩa thay vì hook trực tiếp. Mỗi lần chạy liệt kê các Agent con bên trong, giai đoạn, token, lệnh gọi công cụ và kết quả.",
+      "howToRead": "Nhấp vào một lần chạy để mở rộng. Các nhãn màu lọc Agent con theo giai đoạn; bảng hiển thị số liệu từng Agent; mỗi hàng kết quả mở rộng thành lời nhắc và kết quả đầy đủ của Agent, được tải từ bản ghi khi cần.",
+      "why": "Agent con của công cụ Workflow không phát hook nên không bao giờ xuất hiện trong phần phân tích bên dưới. Đây là nơi duy nhất một lần chạy nhóm phân tán hiển thị đầy đủ từ đầu đến cuối — dùng nó để xem mỗi Agent con thực sự đã làm gì."
     }
   },
   "stats": {
@@ -419,5 +424,43 @@
     "showingOf": "Đang hiển thị 100 / {{total}} sự kiện",
     "sessionInfo": " phiên - hoạt động {{from}}%-{{to}} thời lượng phiên",
     "sortedByCompaction": " phiên (sắp theo số lần nén ngữ cảnh)"
+  },
+  "runs": {
+    "title": "Quy trình động",
+    "subtitle": "Các nhóm Agent do công cụ Workflow tạo ra, dựng lại từ nhật ký chạy trên đĩa",
+    "sessionTitle": "Quy trình động",
+    "loading": "Đang tải quy trình động…",
+    "empty": "Chưa có quy trình động nào. Các lần chạy của công cụ Workflow hiện ở đây sau khi nhật ký được ghi (khi hoàn tất).",
+    "noAgents": "Không có Agent con nào được ghi cho lần chạy này.",
+    "openSession": "Mở phiên gốc",
+    "filterPhase": "Lọc theo giai đoạn",
+    "clearFilter": "Xóa",
+    "resultsLabel": "Kết quả",
+    "promptLabel": "Lời nhắc",
+    "resultLabel": "Kết quả",
+    "loadingFull": "Đang tải toàn bộ nội dung…",
+    "tokens": "token",
+    "agents_one": "{{count}} Agent",
+    "agents_other": "{{count}} Agent",
+    "tools_one": "{{count}} lệnh gọi công cụ",
+    "tools_other": "{{count}} lệnh gọi công cụ",
+    "status": {
+      "running": "Đang chạy",
+      "working": "Đang chạy",
+      "queued": "Đang chờ",
+      "completed": "Hoàn tất",
+      "done": "Xong",
+      "success": "Xong",
+      "error": "Lỗi",
+      "failed": "Thất bại"
+    },
+    "col": {
+      "agent": "Agent",
+      "phase": "Giai đoạn",
+      "state": "Trạng thái",
+      "tokens": "Token",
+      "tools": "Công cụ",
+      "duration": "Thời lượng"
+    }
   }
 }

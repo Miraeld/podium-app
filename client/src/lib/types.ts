@@ -274,7 +274,8 @@ export interface WSMessage {
     | "run_input_ack"
     | "cc_config_changed"
     | "alert_triggered"
-    | "alert_updated";
+    | "alert_updated"
+    | "workflow_upserted";
   data:
     | Session
     | Agent
@@ -285,7 +286,8 @@ export interface WSMessage {
     | RunStatusPayload
     | RunInputAckPayload
     | CcConfigChangedPayload
-    | AlertEvent;
+    | AlertEvent
+    | WorkflowRun;
   timestamp: string;
 }
 
@@ -592,6 +594,137 @@ export interface WorkflowData {
   complexity: SessionComplexityItem[];
   compaction: CompactionImpactData;
   cooccurrence: Array<{ source: string; target: string; weight: number }>;
+}
+
+// ── Dynamic Workflows (Workflow-tool runs, issue #167) ──
+// Fleets of inner sub-agents spawned by the Claude Code "Workflow" tool,
+// ingested from on-disk run journals — distinct from the events-derived
+// WorkflowData analytics above. Served by GET /api/workflows/runs[/:runId] and
+// pushed live via the `workflow_upserted` WebSocket message.
+
+/** One named phase marker from a run journal's `phases[]` array — free-form,
+ *  since the Workflow-tool launch script defines its own phase structure. */
+export interface WorkflowPhase {
+  /** Phase name, e.g. "Plan", "Implement", "Review". Matched against
+   *  {@link WorkflowProgressEntry.phaseTitle} to group agents under a phase. */
+  title?: string;
+  /** Optional longer description of what the phase covers. */
+  detail?: string;
+  /** Script-defined extra fields pass through untyped. */
+  [key: string]: unknown;
+}
+
+/** One entry in a {@link WorkflowRun.progress} log — a mixed timeline of phase
+ *  markers ("workflow_phase") and inner-agent lifecycle updates
+ *  ("workflow_agent"), in journal order. */
+export interface WorkflowProgressEntry {
+  /** "workflow_agent" (a real inner agent) or "workflow_phase" (a phase marker). */
+  type?: string;
+  /** For workflow_agent entries: the `agent-<agentId>.jsonl` transcript
+   *  basename; the join key back to a real {@link Agent} row. */
+  agentId?: string;
+  /** Freeform inner-agent role/type as reported by the launch script. */
+  agentType?: string | null;
+  /** Model the inner agent ran with; overrides {@link WorkflowRun.default_model}. */
+  model?: string | null;
+  /** Inner-agent lifecycle state, e.g. "running", "done", "error" (freeform). */
+  state?: string | null;
+  /** Short display label for the agent (falls back to prompt preview). */
+  label?: string | null;
+  /** Phase this entry belongs to, matching a {@link WorkflowPhase.title}. */
+  phaseTitle?: string | null;
+  /** When the agent/phase started — ISO string or epoch, script-dependent. */
+  startedAt?: string | number | null;
+  /** Tokens consumed by this inner agent, once known. */
+  tokens?: number;
+  /** Tool calls made by this inner agent, once known. */
+  toolCalls?: number;
+  /** Wall-clock runtime in milliseconds; null while still running. */
+  durationMs?: number | null;
+  /** Most recent tool name the agent invoked, for a live hint. */
+  lastToolName?: string | null;
+  /** Truncated preview of the task/prompt handed to this inner agent. */
+  promptPreview?: string | null;
+  /** Truncated preview of the inner agent's final result, once done. */
+  resultPreview?: string | null;
+  /** Script-defined extra fields pass through untyped. */
+  [key: string]: unknown;
+}
+
+/**
+ * A fleet run of the Claude Code "Workflow" tool (or self-paced `/loop`) —
+ * inner sub-agents that emit no hooks and are instead ingested from an on-disk
+ * run journal (see server/lib/workflow-ingest.js). Returned by
+ * GET /api/workflows/runs and /api/workflows/runs/:runId. Starts life as
+ * `source: "live"` (only the launch script seen) and is promoted to
+ * `source: "journal"` once the completed run journal exists on disk.
+ */
+export interface WorkflowRun {
+  /** Stable run id, matching the `wf_<runId>.json` journal / launch script name. */
+  run_id: string;
+  /** Session that launched this run. FK into {@link Session.id}. */
+  session_id: string;
+  /** Correlates to a TaskCreate/TaskList task, if any; null otherwise. */
+  task_id: string | null;
+  /** Display name for the run; null falls back to `run_id` in the UI. */
+  name: string | null;
+  /** Run lifecycle, e.g. "running", "completed", "error" (freeform). */
+  status: string;
+  /** Default model inner agents used unless overridden per-agent; null if unset. */
+  default_model: string | null;
+  /** ISO timestamp the run started; null if not yet known. */
+  started_at: string | null;
+  /** ISO timestamp the run finished; null while still running. */
+  ended_at: string | null;
+  /** Total wall-clock runtime in milliseconds; null while still running. */
+  duration_ms: number | null;
+  /** Number of inner agents spawned (rolled up from `progress`). */
+  agent_count: number;
+  /** Sum of tokens across all inner agents (rolled up from `progress`). */
+  total_tokens: number;
+  /** Sum of tool calls across all inner agents (rolled up from `progress`). */
+  total_tool_calls: number;
+  /** Phase markers for the run; see {@link WorkflowPhase}. */
+  phases: WorkflowPhase[];
+  /** Interleaved phase + inner-agent timeline; see {@link WorkflowProgressEntry}. */
+  progress: WorkflowProgressEntry[];
+  /** Path to the generated launch script under `workflows/scripts/`; null if unknown. */
+  script_path: string | null;
+  /** Path to the `wf_<runId>.json` journal; null while `source === "live"`. */
+  journal_path: string | null;
+  /** "journal" once a completed run journal exists; "live" while only the
+   *  launch script has been observed. */
+  source: "journal" | "live";
+  /** ISO timestamp this row was first ingested. */
+  created_at: string;
+  /** ISO timestamp this row was last updated (re-ingested/upserted). */
+  updated_at: string;
+}
+
+/** Response shape of GET /api/workflows/runs — a paginated, optionally
+ *  status/session-filtered list of workflow-tool runs. */
+export interface WorkflowRunsResponse {
+  /** The page of runs for the current `limit`/`offset`. */
+  runs: WorkflowRun[];
+  /** Total matching runs (respects the status filter, ignores paging). */
+  total: number;
+  /** Run count keyed by `status`, across all runs (ignores any filter). */
+  counts: Record<string, number>;
+  /** Page size that was applied. */
+  limit: number;
+  /** Zero-based offset of this page into the filtered result set. */
+  offset: number;
+}
+
+/** Response shape of GET /api/workflows/runs/:runId — a single run plus its
+ *  linked inner agents (as regular {@link Agent} rows) and their events. */
+export interface WorkflowRunDetail {
+  /** The run itself; see {@link WorkflowRun}. */
+  workflow: WorkflowRun;
+  /** Inner agents linked to this run via the `${sessionId}-jsonl-<agentId>` scheme. */
+  agents: Agent[];
+  /** Events attributed to this run's inner agents, chronological (up to 5000). */
+  events: DashboardEvent[];
 }
 
 export interface SessionDrillIn {

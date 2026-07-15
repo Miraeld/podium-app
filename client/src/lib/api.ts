@@ -27,6 +27,8 @@ import type {
   WebhookTestResult,
   WebhookType,
   WorkflowData,
+  WorkflowRunsResponse,
+  WorkflowRunDetail,
 } from "./types";
 
 const BASE = "/api";
@@ -98,6 +100,7 @@ export const api = {
       id: string,
       params?: {
         agent_id?: string;
+        run_id?: string;
         limit?: number;
         offset?: number;
         after?: number;
@@ -106,6 +109,7 @@ export const api = {
     ) => {
       const qs = new URLSearchParams();
       if (params?.agent_id) qs.set("agent_id", params.agent_id);
+      if (params?.run_id) qs.set("run_id", params.run_id);
       if (params?.limit) qs.set("limit", String(params.limit));
       if (params?.offset) qs.set("offset", String(params.offset));
       if (params?.after != null) qs.set("after", String(params.after));
@@ -251,6 +255,22 @@ export const api = {
       request<WorkflowData>(`/workflows${status && status !== "all" ? `?status=${status}` : ""}`),
     session: (id: string) =>
       request<SessionDrillIn>(`/workflows/session/${encodeURIComponent(id)}`),
+    // Workflow-tool runs (issue #167) — fleets ingested from on-disk journals,
+    // distinct from the events-derived analytics above (`get`/`session`).
+    /** GET /api/workflows/runs — paginated Workflow-tool run list, optionally
+     *  filtered by status ("running"/"completed"/…) or session_id. */
+    runs: (params?: { status?: string; session_id?: string; limit?: number; offset?: number }) => {
+      const qs = new URLSearchParams();
+      if (params?.status) qs.set("status", params.status);
+      if (params?.session_id) qs.set("session_id", params.session_id);
+      if (params?.limit) qs.set("limit", String(params.limit));
+      if (params?.offset) qs.set("offset", String(params.offset));
+      const q = qs.toString();
+      return request<WorkflowRunsResponse>(`/workflows/runs${q ? `?${q}` : ""}`);
+    },
+    /** GET /api/workflows/runs/:runId — one run with its inner agents + events. */
+    run: (runId: string) =>
+      request<WorkflowRunDetail>(`/workflows/runs/${encodeURIComponent(runId)}`),
   },
 
   pricing: {

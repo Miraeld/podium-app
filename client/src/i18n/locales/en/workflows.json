@@ -72,6 +72,11 @@
       "what": "Per-session detail view: full agent tree, tool-call timeline, and raw event sequence for whichever session you select.",
       "howToRead": "Pick a session from the dropdown above or click a bubble in the scatter plot. The tabs let you switch between hierarchical (Agent Tree), temporal (Tool Timeline), and chronological (Event Sequence) views of the same session.",
       "why": "When an aggregate chart flags a suspicious session, this is where you go to read exactly what happened, in order."
+    },
+    "dynamicRuns": {
+      "what": "Fleets spawned by the Claude Code Workflow tool (and self-paced /loop runs), reconstructed from on-disk run journals rather than live hooks. Each run lists its inner sub-agents, their phase, tokens, tool calls, and results.",
+      "howToRead": "Click a run to expand it. Colored chips filter the inner agents by phase; the table shows per-agent metrics; each result row expands to the agent's full prompt and result, fetched from its transcript on demand.",
+      "why": "Workflow-tool sub-agents emit no hooks, so they never appear in the analytics below. This is the only place a fanned-out fleet run shows up end to end — use it to see what each inner agent actually did."
     }
   },
   "stats": {
@@ -419,5 +424,43 @@
     "showingOf": "Showing 100 of {{total}} events",
     "sessionInfo": " session(s) - active {{from}}%-{{to}}% of session",
     "sortedByCompaction": " session(s) (sorted by compaction count)"
+  },
+  "runs": {
+    "title": "Dynamic Workflows",
+    "subtitle": "Fleets spawned by the Workflow tool, reconstructed from on-disk run journals",
+    "sessionTitle": "Dynamic Workflows",
+    "loading": "Loading dynamic workflows…",
+    "empty": "No dynamic workflows yet. Runs from the Workflow tool appear here once their journal is written (at completion).",
+    "noAgents": "No inner agents recorded for this run.",
+    "openSession": "Open parent session",
+    "filterPhase": "Filter by phase",
+    "clearFilter": "Clear",
+    "resultsLabel": "Results",
+    "promptLabel": "Prompt",
+    "resultLabel": "Result",
+    "loadingFull": "Loading full text…",
+    "tokens": "tokens",
+    "agents_one": "{{count}} agent",
+    "agents_other": "{{count}} agents",
+    "tools_one": "{{count}} tool call",
+    "tools_other": "{{count}} tool calls",
+    "status": {
+      "running": "Running",
+      "working": "Running",
+      "queued": "Queued",
+      "completed": "Completed",
+      "done": "Done",
+      "success": "Done",
+      "error": "Error",
+      "failed": "Failed"
+    },
+    "col": {
+      "agent": "Agent",
+      "phase": "Phase",
+      "state": "State",
+      "tokens": "Tokens",
+      "tools": "Tools",
+      "duration": "Duration"
+    }
   }
 }

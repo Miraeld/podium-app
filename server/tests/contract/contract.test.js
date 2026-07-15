@@ -1035,6 +1035,54 @@ describe("GET /api/workflows family", () => {
 
     assertEventShape(firstObject(json, "events", e), e);
   });
+
+  // Workflow-tool runs (issue #167). These come from on-disk run journals, not
+  // hook events, so the seeded server has none — assert the paginated envelope
+  // shape (empty is still a valid contract) and the per-run field shape when a
+  // row is present. Run fields are snake_case on the wire (DB columns), except
+  // the nested progress[]/phases[] which carry the journal's camelCase keys.
+  it("runs list matches types.ts WorkflowRunsResponse", async () => {
+    const e = "/api/workflows/runs";
+    const json = await get(e);
+
+    assertField(json, "runs", ["array"], e);
+    assertField(json, "total", ["number"], e);
+    assertField(json, "counts", ["object"], e);
+    assertField(json, "limit", ["number"], e);
+    assertField(json, "offset", ["number"], e);
+
+    if (json.runs[0]) {
+      const r = json.runs[0];
+      snake(r, "run_id", ["string"], e);
+      snake(r, "session_id", ["string"], e);
+      snake(r, "task_id", ["string", "null"], e);
+      assertField(r, "name", ["string", "null"], e);
+      assertField(r, "status", ["string"], e);
+      snake(r, "default_model", ["string", "null"], e);
+      snake(r, "started_at", ["string", "null"], e);
+      snake(r, "ended_at", ["string", "null"], e);
+      snake(r, "duration_ms", ["number", "null"], e);
+      snake(r, "agent_count", ["number"], e);
+      snake(r, "total_tokens", ["number"], e);
+      snake(r, "total_tool_calls", ["number"], e);
+      assertField(r, "phases", ["array"], e);
+      assertField(r, "progress", ["array"], e);
+      snake(r, "script_path", ["string", "null"], e);
+      snake(r, "journal_path", ["string", "null"], e);
+      assertField(r, "source", ["string"], e);
+      snake(r, "created_at", ["string"], e);
+      snake(r, "updated_at", ["string"], e);
+    }
+  });
+
+  it("runs/:runId returns the CodedErrorResponse envelope for an unknown run", async () => {
+    const e = "/api/workflows/runs/:runId";
+    const json = await get("/api/workflows/runs/wf_does_not_exist", 404);
+    assert.ok(json.error && typeof json.error === "object", `${e}: missing 'error' object`);
+    assertField(json.error, "code", ["string"], e);
+    assertField(json.error, "message", ["string"], e);
+    assert.equal(json.error.code, "WORKFLOW_NOT_FOUND", `${e}: unexpected error code`);
+  });
 });
 
 // ── /api/run family (deliberate camelCase "live" family) ────────────────
