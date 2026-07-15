@@ -54,6 +54,19 @@ jobs:
           cache-dependency-path: server/package-lock.json
       - name: Install dependencies
         run: npm ci
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.14"
+      # install-hooks.js resolves the podium-hook binary and — after the
+      # hook-wiring fix (04cac9e) — installs NOTHING (with a stderr warning)
+      # when no binary is found. The install-hooks suite therefore needs
+      # hook/dist/podium-hook present, exactly as a developer has it locally
+      # (its absence in CI is what made these tests pass locally but fail on
+      # the first hosted run). Build it before the suite so the tests exercise
+      # the REAL resolution against a REAL binary. Cheap: one bun compile.
+      - name: Build hook binary (install-hooks tests depend on it)
+        working-directory: hook
+        run: bun install && bun run build
       # `npm test` = node --test __tests__/*.test.js tests/contract/*.test.js
       # (N4) — 558 tests total, including the wire-format contract gate that
       # boots a real server and asserts every response shape against
@@ -96,8 +109,19 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: tauri/src-tauri
-      # `cargo check` only — this job verifies the Rust shell compiles, it
-      # does not build/stage the sidecar (that needs bun + a compiled
-      # server, which is release.yml's job, not every-PR CI's).
+      # `cargo check` verifies the Rust shell compiles. tauri's build.rs
+      # resolves the externalBin sidecars (bin/podium-server-<triple>,
+      # bin/podium-hook-<triple>) and the web-dist/ resources dir at build
+      # time and hard-errors if any are absent — and all three are gitignored,
+      # so they don't exist on a fresh CI checkout. Building the real
+      # bun-compiled sidecars + client bundle is release.yml's job (minutes,
+      # ~125MB of binaries); for a pure compile check, zero-byte placeholders
+      # at the expected paths satisfy the existence check without that cost.
+      - name: Stage sidecar + resource placeholders (compile-check only)
+        run: |
+          TRIPLE="$(rustc -vV | awk '/^host:/ { print $2 }')"
+          mkdir -p bin web-dist
+          touch "bin/podium-server-$TRIPLE" "bin/podium-hook-$TRIPLE"
+          touch web-dist/index.html
       - name: cargo check
         run: cargo check
