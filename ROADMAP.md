@@ -259,6 +259,17 @@ podium-app/                       # this repo (rename from PodiumSwiftApp = N7)
   next-to-execPath fallback matches where Tauri places externalBin at
   runtime (name + triple-stripping); .gitignore the hook/.*.bun-build temp
   artifacts. release.yml should need nothing (it calls prepare-sidecar.sh).
+- **INSTALL-HOOKS DEDUP FIX 🔒 CLAIMED** (2026-07-15, orchestrator session C):
+  real-world bug found in the owner's settings.json — `installHooks` upgrades
+  only the FIRST `isOurEntry` match per event (`findIndex`), so events with
+  TWO legacy entries (plugin-era + boot-written hook-handler.js) keep the
+  duplicate → 6 events still threw MODULE_NOT_FOUND after healing. Fix:
+  upgrade first match, REMOVE all further matches per event. Also decide
+  (investigate, don't guess): Swift-era entries on events HOOK_TYPES doesn't
+  manage (PostToolUseFailure, SubagentStart → ~/.claude/podium/podium-hook,
+  binary still exists) — should HOOK_TYPES cover them (does the server/agent
+  tree consume them?) or should legacy entries on unmanaged events be
+  removed? Dispatch AFTER hook-bundle staging lands (same-file conflict).
 - N7–N8: not started. N7 waits for daylight + owner presence.
 
 ## N1 — Import the front-end source (monorepo begins)
