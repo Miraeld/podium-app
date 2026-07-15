@@ -35,6 +35,8 @@ const {
   detectKind,
   ExtractionLimitError,
 } = require("../lib/archive");
+const { importBundle } = require("../lib/session-transfer");
+const { db } = require("../db");
 
 const router = Router();
 
@@ -415,6 +417,30 @@ router.post("/upload", uploadMiddleware, async (req, res) => {
       }
     }
     if (reqUploadDir) rmTempDir(reqUploadDir);
+  }
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// POST /api/import/session — import a previously-exported session bundle
+// (the format GET /api/export/session/:id produces). ROADMAP N3 — MISSING
+// per docs/N2-GAP.md; ported from the plugin-era reference server
+// (dashboard/server/routes/export.js) via lib/session-transfer.js, which the
+// export route (routes/export.js) also shares. Used by
+// client/src/pages/ImportSession.tsx's "Import into Podium" button. Body
+// size gets a generous per-route override (index.js mounts a larger-limit
+// JSON parser ahead of the global 1mb one for this exact path) since a
+// session bundle with many events can exceed the default cap.
+// ────────────────────────────────────────────────────────────────────────────
+router.post("/session", (req, res) => {
+  try {
+    const result = importBundle(req.body);
+    const session = db.prepare("SELECT * FROM sessions WHERE id = ?").get(result.session_id);
+    if (session) broadcast("session_created", session);
+    res.json(result);
+  } catch (err) {
+    const status = Number.isInteger(err && err.status) ? err.status : 500;
+    const code = (err && err.code) || "IMPORT_FAILED";
+    res.status(status).json({ error: { code, message: (err && err.message) || String(err) } });
   }
 });
 
