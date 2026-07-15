@@ -59,12 +59,13 @@ describe("AgentStatusBadge", () => {
     expect(dot).toBeInTheDocument();
   });
 
-  it("should render waiting status with yellow dot and pulse by default", () => {
+  it("should render waiting status with amber dot and pulse by default", () => {
     const { container } = render(<AgentStatusBadge status="waiting" />);
     expect(screen.getByText("Waiting")).toBeInTheDocument();
     const dot = container.querySelector(".animate-pulse-dot");
     expect(dot).toBeInTheDocument();
-    expect(container.querySelector(".bg-yellow-400")).toBeInTheDocument();
+    // Dot is `bg-amber-500 dark:bg-yellow-400` — amber is the light-mode base.
+    expect(container.querySelector(".bg-amber-500")).toBeInTheDocument();
   });
 });
 
@@ -89,11 +90,12 @@ describe("SessionStatusBadge", () => {
     expect(screen.getByText("Abandoned")).toBeInTheDocument();
   });
 
-  it("should render waiting status with pulsing yellow dot", () => {
+  it("should render waiting status with pulsing amber dot", () => {
     const { container } = render(<SessionStatusBadge status="waiting" />);
     expect(screen.getByText("Waiting")).toBeInTheDocument();
     const dot = container.querySelector(".animate-pulse-dot");
     expect(dot).toBeInTheDocument();
-    expect(container.querySelector(".bg-yellow-400")).toBeInTheDocument();
+    // Dot is `bg-amber-500 dark:bg-yellow-400` — amber is the light-mode base.
+    expect(container.querySelector(".bg-amber-500")).toBeInTheDocument();
   });
 });

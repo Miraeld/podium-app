@@ -83,24 +83,27 @@ describe("AgentCard", () => {
     expect(screen.queryByText("Bash")).not.toBeInTheDocument();
   });
 
-  it("should apply active border for working agents", () => {
+  it("should apply the active card treatment for working agents", () => {
+    // The Podium card signals active/waiting state via the `card-active` /
+    // `card-waiting` classes (styled in CSS), not upstream's border-l utilities.
     const { container } = renderCard(<AgentCard agent={makeAgent({ status: "working" })} />);
     const card = container.firstElementChild;
-    expect(card?.className).toContain("border-l-2");
-    expect(card?.className).toContain("border-l-emerald-500");
+    expect(card?.className).toContain("card-active");
+    expect(card?.className).not.toContain("card-waiting");
   });
 
-  it("should apply waiting border for waiting agents even without awaiting_input_since", () => {
+  it("should apply the waiting card treatment for waiting agents even without awaiting_input_since", () => {
     const { container } = renderCard(<AgentCard agent={makeAgent({ status: "waiting" })} />);
     const card = container.firstElementChild;
-    expect(card?.className).toContain("border-l-2");
-    expect(card?.className).toContain("border-l-amber-400");
+    expect(card?.className).toContain("card-waiting");
+    expect(card?.className).not.toContain("card-active");
   });
 
-  it("should not apply active border for completed agents", () => {
+  it("should not apply the active or waiting treatment for completed agents", () => {
     const { container } = renderCard(<AgentCard agent={makeAgent({ status: "completed" })} />);
     const card = container.firstElementChild;
-    expect(card?.className).not.toContain("border-l-2");
+    expect(card?.className).not.toContain("card-active");
+    expect(card?.className).not.toContain("card-waiting");
   });
 
   it("should call onClick when clicked", () => {
@@ -121,7 +124,7 @@ describe("AgentCard", () => {
     );
     expect(screen.getByText("Waiting")).toBeInTheDocument();
     const card = container.firstElementChild;
-    expect(card?.className).toContain("border-l-amber-400");
+    expect(card?.className).toContain("card-waiting");
   });
 
   it("ignores awaiting_input_since once the agent has completed", () => {

@@ -97,6 +97,9 @@ vi.mock("../../lib/api", () => ({
 vi.mock("../../lib/eventBus", () => ({
   eventBus: {
     subscribe: vi.fn(() => () => {}),
+    // ConversationView subscribes to connection changes; the mock must expose
+    // onConnection (returning an unsubscribe fn) or the component throws on mount.
+    onConnection: vi.fn(() => () => {}),
   },
 }));
 
@@ -136,9 +139,12 @@ describe("SessionDetail — Nested Agent Tree Rendering", () => {
     ];
 
     renderPage();
-    expect(await screen.findByText("Main Agent")).toBeInTheDocument();
+    // Scope to the tree: the working main agent also appears in the
+    // active-agent banner, so an unscoped query matches multiple elements.
+    const tree = await findTree();
+    await waitFor(() => expect(within(tree).getByText("Main Agent")).toBeInTheDocument());
     // Subagent should be visible (auto-expanded because it's working)
-    expect(await screen.findByText("Explorer")).toBeInTheDocument();
+    expect(within(tree).getByText("Explorer")).toBeInTheDocument();
   });
 
   it("renders deeply nested agents (depth 3: main → L1 → L2 → L3)", async () => {
@@ -305,7 +311,9 @@ describe("SessionDetail — Nested Agent Tree Rendering", () => {
     mockAgents = [makeAgent({ id: "main-1", name: "Main", type: "main", status: "working" })];
 
     renderPage();
-    expect(await screen.findByText("Main")).toBeInTheDocument();
+    // Scope to the tree: a working main agent also shows in the active-agent banner.
+    const tree = await findTree();
+    await waitFor(() => expect(within(tree).getByText("Main")).toBeInTheDocument());
     // No subagent-count button should exist for a leaf node. Match the
     // "{{count}} subagent(s)" label specifically so we don't collide with
     // the word "subagent" in unrelated explanatory copy elsewhere on the page.
@@ -368,9 +376,11 @@ describe("SessionDetail — Nested Agent Tree Rendering", () => {
     ];
 
     renderPage();
-    expect(await screen.findByText("Main")).toBeInTheDocument();
-    expect(await screen.findByText("Sibling-A")).toBeInTheDocument();
-    expect(await screen.findByText("Sibling-B")).toBeInTheDocument();
-    expect(await screen.findByText("Sibling-C")).toBeInTheDocument();
+    // Scope to the tree: the working main agent also appears in the active-agent banner.
+    const tree = await findTree();
+    await waitFor(() => expect(within(tree).getByText("Main")).toBeInTheDocument());
+    expect(within(tree).getByText("Sibling-A")).toBeInTheDocument();
+    expect(within(tree).getByText("Sibling-B")).toBeInTheDocument();
+    expect(within(tree).getByText("Sibling-C")).toBeInTheDocument();
   });
 });
