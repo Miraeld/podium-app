@@ -4,6 +4,8 @@
 # scripts/package-macos.sh + scripts/build-linux.sh output.
 /dist/
 /dist-linux/
+# Swift-era SwiftPM build dir — tooling still occasionally recreates it.
+/.build/
 # tauri/linux-build/build-in-container.sh's dedicated scratch dir.
 .build-linux-tauri/
 tauri/src-tauri/target*/
