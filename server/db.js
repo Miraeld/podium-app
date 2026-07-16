@@ -748,6 +748,8 @@ db.exec(
         metadata TEXT,
         updated_at TEXT NOT NULL DEFAULT '',
         awaiting_input_since TEXT,
+        workflow_run_id TEXT,
+        workflow_phase TEXT,
         FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE,
         FOREIGN KEY (parent_agent_id) REFERENCES agents(id) ON DELETE SET NULL
       );
@@ -759,7 +761,7 @@ db.exec(
           ELSE status
         END,
         task, current_tool, started_at, ended_at, parent_agent_id, metadata,
-        updated_at, awaiting_input_since
+        updated_at, awaiting_input_since, workflow_run_id, workflow_phase
       FROM agents;
       DROP TABLE agents;
       ALTER TABLE agents_new RENAME TO agents;
@@ -771,6 +773,7 @@ db.exec(
       CREATE INDEX IF NOT EXISTS idx_agents_session ON agents(session_id);
       CREATE INDEX IF NOT EXISTS idx_agents_status ON agents(status);
       CREATE INDEX IF NOT EXISTS idx_agents_parent ON agents(parent_agent_id);
+      CREATE INDEX IF NOT EXISTS idx_agents_workflow ON agents(workflow_run_id);
     `);
   }
 }
