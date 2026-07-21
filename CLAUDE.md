@@ -25,7 +25,7 @@ full lifecycle and prerequisites.
 ## Project structure
 
 ```
-podium-app/ (repo dir currently PodiumSwiftApp — rename pending, see ROADMAP.md N7)
+podium-app/ (repo dir currently PodiumSwiftApp — rename pending)
 ├── client/                # React dashboard source (Vite + TS). Builds to client/dist,
 │                           #   which the server serves as static files (or Tauri stages
 │                           #   into the .app bundle as web-dist).
@@ -47,9 +47,8 @@ podium-app/ (repo dir currently PodiumSwiftApp — rename pending, see ROADMAP.m
 ├── tauri/                 # Tauri v2 shell — native app wrapping podium-server as a sidecar
 │   ├── prepare-sidecar.sh  #   bun-compiles server + hook, stages client/dist as web-dist
 │   └── src-tauri/           #   Rust (main.rs spawns/health-polls the sidecar, tray, notifications)
-├── run.sh, scripts/       # dev launcher (Tauri) + packaging (build-linux.sh,
-│                           #   install-linux.sh, podium-server.service, contract-check.sh)
-└── docs/ (README, RELEASING, PRE-1.0-AUDIT, ROADMAP.md)
+└── run.sh, scripts/       # dev launcher (Tauri) + packaging (build-linux.sh,
+                            #   install-linux.sh, podium-server.service, contract-check.sh)
 ```
 
 ## Key decisions & non-obvious constraints
@@ -123,8 +122,9 @@ inside code that shares a small fixed-size worker pool).
 ## Historical (Swift era, removed N7 — 2026-07-15)
 
 Podium originally shipped as a Swift server (Hummingbird 2) + SwiftUI macOS
-app. It was fully removed in favor of a Node server + Tauri shell — see
-`ROADMAP.md` §0 for the rationale and N1-N7 for the migration history. Swift-
+app. It was fully removed in favor of a Node server + Tauri shell (the N1-N7
+migration, tracked in the now-removed internal roadmap; rationale and history
+live in git log). Swift-
 specific footguns (CodingKeys/snake_case decoding traps, Hummingbird's
 `JSONResponse(fields:)` encoder workaround) no longer apply; they're
 preserved only in git history if ever needed for archaeology.
