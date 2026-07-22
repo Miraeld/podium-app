@@ -82,15 +82,6 @@ bun-compiles `podium-server` + `podium-hook` into a tarball (`dist-linux/`).
 Linux `.AppImage` / `.deb` GUI installers are produced by CI on `v*` tags —
 see [`.github/workflows/release.yml`](.github/workflows/release.yml).
 
-## Attribution
-
-Podium's dashboard and Node server are derived from the MIT-licensed
-[Claude-Code-Agent-Monitor](https://github.com/hoangsonww/Claude-Code-Agent-Monitor)
-by Son Nguyen. Podium is itself MIT-licensed (see [LICENSE](LICENSE)); the
-upstream copyright notice is retained there and in
-[`server/LICENSE-upstream`](server/LICENSE-upstream) /
-[`server/UPSTREAM.md`](server/UPSTREAM.md), per the MIT license terms.
-
 ## Wire-format gate
 
 `server/tests/contract/contract.test.js` (31 tests) locks the wire format of
