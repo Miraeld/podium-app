@@ -302,39 +302,65 @@ function getUiPrefsPath() {
   return path.join(getDataDir(), "ui-prefs.json");
 }
 
-function readUiTheme() {
+// Extracts a plain object of string -> string from `tokens`, dropping
+// anything malformed rather than rejecting the whole request — the tokens
+// payload is a best-effort mirror (see ThemeToggle.tsx), never load-bearing
+// for the toggle itself, so we're defensive rather than strict here.
+function sanitizeTokens(tokens) {
+  if (!tokens || typeof tokens !== "object" || Array.isArray(tokens)) return {};
+  const out = {};
+  for (const [key, value] of Object.entries(tokens)) {
+    if (typeof key === "string" && typeof value === "string") {
+      out[key] = value;
+    }
+  }
+  return out;
+}
+
+function readUiPrefs() {
   try {
     const raw = fs.readFileSync(getUiPrefsPath(), "utf8");
     const parsed = JSON.parse(raw);
-    return parsed.theme === "dark" ? "dark" : "light";
+    return {
+      theme: parsed.theme === "dark" ? "dark" : "light",
+      tokens: sanitizeTokens(parsed.tokens),
+    };
   } catch {
-    return "light";
+    return { theme: "light", tokens: {} };
   }
 }
 
-function writeUiTheme(theme) {
-  const prefsPath = getUiPrefsPath();
-  fs.mkdirSync(path.dirname(prefsPath), { recursive: true });
-  fs.writeFileSync(prefsPath, JSON.stringify({ theme }, null, 2) + "\n");
+function readUiTheme() {
+  return readUiPrefs().theme;
 }
 
-// GET /api/settings/ui-theme — read the persisted light/dark choice.
+function writeUiPrefs(theme, tokens) {
+  const prefsPath = getUiPrefsPath();
+  fs.mkdirSync(path.dirname(prefsPath), { recursive: true });
+  fs.writeFileSync(prefsPath, JSON.stringify({ theme, tokens }, null, 2) + "\n");
+}
+
+// GET /api/settings/ui-theme — read the persisted light/dark choice + the
+// last-reported accent-preset tokens (see ThemeToggle.tsx's REPORTED_TOKEN_NAMES).
 // Unauthenticated even when DASHBOARD_TOKEN is set (see lib/security.js).
 router.get("/ui-theme", (_req, res) => {
-  res.json({ theme: readUiTheme() });
+  const { theme, tokens } = readUiPrefs();
+  res.json({ theme, tokens });
 });
 
 // PUT /api/settings/ui-theme — persist the dashboard's current light/dark
-// choice. Body: { theme: "light" | "dark" }.
+// choice and (optionally) its computed accent-preset tokens.
+// Body: { theme: "light" | "dark", tokens?: Record<string, string> }.
 router.put("/ui-theme", (req, res) => {
-  const { theme } = req.body || {};
+  const { theme, tokens } = req.body || {};
   if (theme !== "light" && theme !== "dark") {
     return res.status(400).json({
       error: { code: "INVALID_THEME", message: 'theme must be "light" or "dark"' },
     });
   }
-  writeUiTheme(theme);
-  res.json({ theme });
+  const cleanTokens = sanitizeTokens(tokens);
+  writeUiPrefs(theme, cleanTokens);
+  res.json({ theme, tokens: cleanTokens });
 });
 
 // POST /api/settings/cleanup — abandon stale sessions, purge old data

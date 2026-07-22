@@ -14,6 +14,25 @@ import { Sun, Moon } from "lucide-react";
 
 const THEME_STORAGE_KEY = "podium-theme";
 
+// Fixed list of computed CSS custom properties that already reflect BOTH the
+// light/dark theme and the active accent preset (data-preset on <html>) —
+// see client/src/index.css. Reported to the server so the Tauri updater
+// window (a separate origin, can't read our localStorage/DOM) can mirror the
+// current look without duplicating every preset's palette itself.
+const REPORTED_TOKEN_NAMES = [
+  "--accent",
+  "--accent-hover",
+  "--surface-0",
+  "--surface-1",
+  "--surface-2",
+  "--surface-3",
+  "--text-primary",
+  "--text-muted",
+  "--border",
+  "--glass-card",
+  "--glass-border",
+] as const;
+
 function readInitialDark(): boolean {
   try {
     return localStorage.getItem(THEME_STORAGE_KEY) === "dark";
@@ -22,16 +41,25 @@ function readInitialDark(): boolean {
   }
 }
 
-// Mirrors the theme to the server so the Tauri shell's custom updater window
-// (a separate `tauri://` origin that can't read this page's localStorage or
-// invoke app commands cross-origin) can match it — see
-// server/routes/settings.js's GET/PUT /api/settings/ui-theme. Best-effort:
+function readComputedTokens(): Record<string, string> {
+  const styles = getComputedStyle(document.documentElement);
+  const tokens: Record<string, string> = {};
+  for (const name of REPORTED_TOKEN_NAMES) {
+    tokens[name] = styles.getPropertyValue(name).trim();
+  }
+  return tokens;
+}
+
+// Mirrors the theme + computed tokens to the server so the Tauri shell's
+// custom updater window (a separate `tauri://` origin that can't read this
+// page's localStorage or invoke app commands cross-origin) can match it —
+// see server/routes/settings.js's GET/PUT /api/settings/ui-theme. Best-effort:
 // a failed write must never break the toggle itself.
 function reportThemeToServer(isDark: boolean) {
   fetch("/api/settings/ui-theme", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ theme: isDark ? "dark" : "light" }),
+    body: JSON.stringify({ theme: isDark ? "dark" : "light", tokens: readComputedTokens() }),
   }).catch(() => {});
 }
 
@@ -53,6 +81,20 @@ export function ThemeToggle({ collapsed }: ThemeToggleProps) {
     else root.classList.remove("dark");
     reportThemeToServer(isDark);
   }, [isDark]);
+
+  // Also re-report whenever <html>'s class or data-preset attribute changes
+  // for any other reason (e.g. an accent-preset picker elsewhere in the app),
+  // so the updater window's computed tokens never go stale. The `isDark`
+  // effect above already covers this component's own toggles; this observer
+  // is the fallback for everything else that touches those attributes.
+  useEffect(() => {
+    const root = document.documentElement;
+    const observer = new MutationObserver(() => {
+      reportThemeToServer(root.classList.contains("dark"));
+    });
+    observer.observe(root, { attributes: true, attributeFilter: ["class", "data-preset"] });
+    return () => observer.disconnect();
+  }, []);
 
   const toggle = useCallback(() => {
     setIsDark((prev) => {

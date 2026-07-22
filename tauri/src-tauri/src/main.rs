@@ -145,29 +145,36 @@ fn create_updater_window(app: &tauri::AppHandle) -> tauri::Result<tauri::Webview
 /// loopback HTTP — no CORS involved since this is a plain Rust HTTP call,
 /// not a browser fetch. Any failure (server not up yet, timeout, bad JSON)
 /// falls back to `"light"`, matching the app's own default.
-fn fetch_ui_theme(port: u16) -> String {
+fn fetch_ui_prefs(port: u16) -> (String, serde_json::Map<String, serde_json::Value>) {
     let url = format!("http://127.0.0.1:{port}/api/settings/ui-theme");
+    let fallback = || (String::from("light"), serde_json::Map::new());
     let Ok(resp) = ureq::get(&url).timeout(Duration::from_millis(500)).call() else {
-        return "light".to_string();
+        return fallback();
     };
     if resp.status() != 200 {
-        return "light".to_string();
+        return fallback();
     }
     let Ok(body) = resp.into_json::<serde_json::Value>() else {
-        return "light".to_string();
+        return fallback();
     };
-    match body.get("theme").and_then(|v| v.as_str()) {
+    let theme = match body.get("theme").and_then(|v| v.as_str()) {
         Some("dark") => "dark".to_string(),
         _ => "light".to_string(),
-    }
+    };
+    let tokens = match body.get("tokens").and_then(|v| v.as_object()) {
+        Some(map) => map.clone(),
+        None => serde_json::Map::new(),
+    };
+    (theme, tokens)
 }
 
-/// `invoke('updater_get_info')` — returns `{version, notes_html, theme}` for
-/// whatever update is currently stashed (real or preview). Empty/`None`
+/// `invoke('updater_get_info')` — returns `{version, notes_html, theme, tokens}`
+/// for whatever update is currently stashed (real or preview). Empty/`None`
 /// stash returns a benign placeholder rather than erroring, since the
-/// window could in principle be reopened after a dismiss race. The theme is
-/// re-fetched from the server on every call (not cached) so a toggle made
-/// while the updater window is open is picked up by its poll (updater.html).
+/// window could in principle be reopened after a dismiss race. Theme +
+/// tokens are re-fetched from the server on every call (not cached) so a
+/// toggle or accent-preset change made while the updater window is open is
+/// picked up by its poll (updater.html).
 #[tauri::command]
 fn updater_get_info(
     state: tauri::State<PendingUpdateState>,
@@ -175,15 +182,16 @@ fn updater_get_info(
 ) -> serde_json::Value {
     // PREVIEW override (see PODIUM_UPDATER_PREVIEW_THEME docs at its
     // declaration): only honored alongside PODIUM_UPDATER_PREVIEW=1, so it
-    // can never affect a production build.
-    let theme = if std::env::var("PODIUM_UPDATER_PREVIEW").as_deref() == Ok("1") {
+    // can never affect a production build. Preview mode leaves tokens empty —
+    // the window falls back to its own built-in light/dark defaults.
+    let (theme, tokens) = if std::env::var("PODIUM_UPDATER_PREVIEW").as_deref() == Ok("1") {
         match std::env::var("PODIUM_UPDATER_PREVIEW_THEME").as_deref() {
-            Ok("dark") => "dark".to_string(),
-            Ok("light") => "light".to_string(),
-            _ => fetch_ui_theme(active_port(&app)),
+            Ok("dark") => ("dark".to_string(), serde_json::Map::new()),
+            Ok("light") => ("light".to_string(), serde_json::Map::new()),
+            _ => fetch_ui_prefs(active_port(&app)),
         }
     } else {
-        fetch_ui_theme(active_port(&app))
+        fetch_ui_prefs(active_port(&app))
     };
     let guard = state.0.lock().unwrap();
     match guard.as_ref() {
@@ -191,11 +199,13 @@ fn updater_get_info(
             "version": pending.version,
             "notes_html": pending.notes_html,
             "theme": theme,
+            "tokens": tokens,
         }),
         None => serde_json::json!({
             "version": "",
             "notes_html": "<p>No update details available.</p>",
             "theme": theme,
+            "tokens": tokens,
         }),
     }
 }

@@ -4,18 +4,27 @@
 <meta charset="utf-8" />
 <title>Podium Update</title>
 <style>
-  /* Tokens mirror client/src/index.css. The app persists its light/dark
-     choice in localStorage (`podium-theme`) on a different origin we can't
-     read here, so the dashboard writes it to the sidecar server and Rust
-     reads it back over loopback HTTP; `updater_get_info` returns `theme`
-     freshly fetched on every call, and we poll it (see the script below) so
-     a toggle made while this window is open is picked up live. We set
-     <html data-theme>; light is the default until told otherwise (matches
-     the app's own default). Accent stays the brand gold in both. */
+  /* Canonical vars are named EXACTLY like client/src/index.css's tokens
+     (--accent, --accent-hover, --surface-0/2, --text-primary, --text-muted,
+     --border, --glass-card, --glass-border) so the dashboard's reported
+     `tokens` map (computed getComputedStyle values, which already reflect
+     BOTH light/dark AND the active accent preset — gold/sage/lavender/…) can
+     be applied directly via style.setProperty with no renaming/mapping.
+     The dashboard writes theme+tokens to the sidecar server (a different
+     origin we can't read directly) and Rust reads them back over loopback
+     HTTP; `updater_get_info` returns them freshly fetched on every call, and
+     we poll it (see the script below) so a toggle or preset switch made
+     while this window is open is picked up live. We set <html data-theme>;
+     these :root blocks are the FALLBACK used when no tokens are reported
+     (preview mode, server down) — light is the default until told
+     otherwise, matching the app's own default. Derived vars (button ink,
+     secondary-button border/hover, progress track, scrollbar, body glow)
+     are computed locally from the canonical ones below; they never come
+     from the server. */
   :root {
     /* Light (default) — mirrors index.css :root */
-    --surface-bg: 242 243 248;      /* surface-0 */
-    --surface-card: 255 255 255;    /* surface-2 */
+    --surface-0: 242 243 248;
+    --surface-2: 255 255 255;
     --text-primary: 14 16 26;
     --text-muted: 90 94 114;
     --border: 220 220 232;
@@ -23,7 +32,7 @@
     --glass-border: rgba(0, 0, 0, 0.065);
     --accent: 254 210 58;
     --accent-hover: 224 187 43;
-    --accent-ink: 20 20 15;         /* text on the gold button */
+    --accent-ink: 20 20 15;         /* text on the accent button */
     --btn-secondary-border: rgba(0, 0, 0, 0.12);
     --btn-secondary-hover: rgba(0, 0, 0, 0.04);
     --track: rgba(0, 0, 0, 0.08);
@@ -32,8 +41,8 @@
   }
   :root[data-theme="dark"] {
     /* Dark — mirrors index.css .dark */
-    --surface-bg: 10 12 20;         /* surface-0 */
-    --surface-card: 17 20 32;       /* surface-2 */
+    --surface-0: 10 12 20;
+    --surface-2: 17 20 32;
     --text-primary: 238 240 250;
     --text-muted: 148 154 178;
     --border: 34 39 58;
@@ -55,7 +64,7 @@
   html, body { margin: 0; height: 100%; }
   body {
     display: flex; flex-direction: column; height: 100vh; overflow: hidden;
-    background: var(--body-glow), rgb(var(--surface-bg));
+    background: var(--body-glow), rgb(var(--surface-0));
     color: rgb(var(--text-primary));
     font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Inter", "Segoe UI", system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
@@ -200,7 +209,15 @@
   var btnLater = document.getElementById('btn-later');
   var btnInstall = document.getElementById('btn-install');
 
+  // Only these are ever applied — anything unexpected in a reported `tokens`
+  // map is ignored, matching the fixed list ThemeToggle.tsx reports.
+  var KNOWN_TOKEN_NAMES = [
+    '--accent', '--accent-hover', '--surface-0', '--surface-2',
+    '--text-primary', '--text-muted', '--border', '--glass-card', '--glass-border'
+  ];
+
   var currentTheme = null;
+  var lastTokensJson = null;
   var themePollTimer = null;
   var closing = false;
 
@@ -211,27 +228,49 @@
     document.documentElement.setAttribute('data-theme', normalized);
   }
 
+  // Applies the reported computed tokens (already theme+preset aware) as
+  // inline overrides on <html>, so a non-gold accent preset (sage, lavender,
+  // …) is followed here too, without duplicating the presets' palettes.
+  // Deduped via a serialized snapshot so the poll only touches the DOM when
+  // something actually changed.
+  function applyTokens(tokens) {
+    if (!tokens || typeof tokens !== 'object') return;
+    var json = JSON.stringify(tokens);
+    if (json === lastTokensJson) return;
+    lastTokensJson = json;
+    var root = document.documentElement;
+    KNOWN_TOKEN_NAMES.forEach(function (name) {
+      var value = tokens[name];
+      if (typeof value === 'string' && value) {
+        root.style.setProperty(name, value);
+      }
+    });
+  }
+
   function loadInfo() {
     invoke('updater_get_info').then(function (info) {
       versionLine.textContent = info.version ? (info.version + ' ') : '';
       content.innerHTML = info.notes_html || '<p>A new version of Podium is available.</p>';
       if (info.theme) applyTheme(info.theme);
+      applyTokens(info.tokens);
     }).catch(function (err) {
       content.textContent = 'Could not load update details.';
       console.error('updater_get_info failed', err);
     });
   }
 
-  // Light poll so a theme toggle made in the dashboard while this window is
-  // open gets picked up (Rust no longer pushes an `updater://theme` event —
-  // it has no way to know the dashboard's theme changed either, since that
-  // now lives server-side). `updater_get_info` is cheap (single loopback
-  // fetch with a short timeout), so a ~1.5s cadence costs nothing
-  // noticeable; stopped once the window starts closing.
+  // Light poll so a theme toggle or accent-preset switch made in the
+  // dashboard while this window is open gets picked up (Rust no longer
+  // pushes an `updater://theme` event — it has no way to know the
+  // dashboard's theme/preset changed either, since that now lives
+  // server-side). `updater_get_info` is cheap (single loopback fetch with a
+  // short timeout), so a ~1.5s cadence costs nothing noticeable; stopped
+  // once the window starts closing.
   function pollTheme() {
     if (closing) return;
     invoke('updater_get_info').then(function (info) {
       if (info.theme) applyTheme(info.theme);
+      applyTokens(info.tokens);
     }).catch(function () {});
   }
   themePollTimer = window.setInterval(pollTheme, 1500);
