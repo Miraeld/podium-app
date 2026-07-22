@@ -102,6 +102,18 @@ DEST="$DEST_DIR/podium-server-$TRIPLE"
 cp "$BUILD_TMP/podium-server" "$DEST"
 chmod +x "$DEST"
 
+# Ad-hoc sign the staged server sidecar (mirrors the hook signing below).
+# Without this, macOS arm64 SIGKILLs the sidecar the instant Tauri spawns it
+# (exit 137) because BUN_NO_CODESIGN_MACHO_BINARY=1 above left it with NO
+# valid Mach-O code signature, and Tauri's own bundle-time codesign pass does
+# NOT reliably re-sign nested externalBin sidecars — it's a signature-VALIDITY
+# kill, not a quarantine issue, so removing quarantine does not help. The
+# Tauri shell then hangs on its synchronous sidecar health-poll and the app
+# bounces in the Dock forever. Signing the exact staged binary here fixes it.
+if [ "$(uname)" = "Darwin" ]; then
+  codesign -s - --force "$DEST"
+fi
+
 echo "Staged sidecar: $DEST ($(du -h "$DEST" | cut -f1))"
 
 echo "Installing hook/ dependencies..."
