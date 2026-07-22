@@ -48,12 +48,19 @@ import {
   Info,
   LayoutDashboard,
   Compass,
+  Palette,
 } from "lucide-react";
 import { api } from "../lib/api";
 import { eventBus } from "../lib/eventBus";
 import { fmt, fmtCost, getCurrentLocale } from "../lib/format";
 import { subscribeToPush, unsubscribeFromPush } from "../lib/push";
-import { loadAdvancedMetrics, saveAdvancedMetrics } from "../lib/displaySettings";
+import {
+  loadAdvancedMetrics,
+  saveAdvancedMetrics,
+  loadPreset,
+  savePreset,
+  type ThemePreset,
+} from "../lib/displaySettings";
 import { Tip } from "../components/Tip";
 import { ImportHistory } from "../components/ImportHistory";
 import { UpdatesPanel } from "../components/UpdatesPanel";
@@ -109,6 +116,23 @@ interface EditRow {
   cache_read_per_mtok: string;
   cache_write_per_mtok: string;
 }
+
+// ─── Theme presets ───
+
+interface PresetSwatch {
+  id: ThemePreset;
+  /** Hex used for the light-mode half of the preview dot. */
+  light: string;
+  /** Hex used for the dark-mode half of the preview dot. */
+  dark: string;
+  /** rgba() used for the preview dot's soft glow ring. */
+  glow: string;
+}
+
+const PRESET_SWATCHES: PresetSwatch[] = [
+  { id: "gold", light: "#FED23A", dark: "#FED23A", glow: "rgba(254, 210, 58, 0.35)" },
+  { id: "sage", light: "#42734F", dark: "#99BD9E", glow: "rgba(107, 145, 120, 0.35)" },
+];
 
 const emptyRow: EditRow = {
   model_pattern: "",
@@ -346,6 +370,13 @@ export function Settings() {
     try { saveAdvancedMetrics(checked); } catch {}
     setAdvancedMetricsState(checked);
     window.dispatchEvent(new Event("podium-settings-changed"));
+  };
+
+  const [preset, setPresetState] = useState<ThemePreset>(loadPreset);
+  const selectPreset = (next: ThemePreset) => {
+    if (next === preset) return;
+    savePreset(next);
+    setPresetState(next);
   };
 
   const [pricing, setPricing] = useState<ModelPricing[]>([]);
@@ -902,6 +933,57 @@ export function Settings() {
               {tTour("settingsEntry.button")}
             </button>
           </div>
+        </div>
+      </section>
+
+      {/* ─── APPEARANCE ─── */}
+      <section>
+        <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2 mb-1 border-l-2 border-amber-400/60 dark:border-accent/60 pl-2.5">
+          <Palette className="w-4 h-4 text-gray-700 dark:text-gray-500" />
+          {t("appearance.title")}
+        </h3>
+        <p className="text-sm text-gray-600 dark:text-gray-500 mb-4">{t("appearance.description")}</p>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {PRESET_SWATCHES.map((swatch) => {
+            const isSelected = preset === swatch.id;
+            return (
+              <button
+                key={swatch.id}
+                type="button"
+                onClick={() => selectPreset(swatch.id)}
+                aria-pressed={isSelected}
+                className={`card-hover p-4 flex items-center gap-3 text-left transition-colors ${
+                  isSelected
+                    ? "border-accent/60 ring-1 ring-accent/30"
+                    : "border-gray-100 dark:border-border"
+                }`}
+              >
+                <div
+                  className="w-10 h-10 rounded-full flex-shrink-0"
+                  style={{
+                    background: `linear-gradient(135deg, ${swatch.light} 50%, ${swatch.dark} 50%)`,
+                    boxShadow: `0 0 14px 2px ${swatch.glow}`,
+                  }}
+                  aria-hidden
+                />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-gray-900 dark:text-white">
+                    {t(`appearance.presets.${swatch.id}.name`)}
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                    {t(`appearance.presets.${swatch.id}.description`)}
+                  </p>
+                </div>
+                {isSelected && (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 dark:text-accent flex-shrink-0">
+                    <Check className="w-3.5 h-3.5" />
+                    {t("appearance.selected")}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
       </section>
 

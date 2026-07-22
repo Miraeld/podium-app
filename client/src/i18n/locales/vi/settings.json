@@ -10,6 +10,21 @@
     "enable": "Hiện Tabby",
     "enableDesc": "Hiển thị bạn đồng hành ở góc trên toàn bảng điều khiển (⌘B để mở)"
   },
+  "appearance": {
+    "title": "Giao diện",
+    "description": "Chọn màu nhấn và hiệu ứng phát sáng dùng trên toàn bảng điều khiển. Áp dụng ngay và được lưu trên thiết bị này.",
+    "presets": {
+      "gold": {
+        "name": "Podium Gold",
+        "description": "Màu vàng ấm nguyên bản trên nền xanh navy đậm."
+      },
+      "sage": {
+        "name": "Quiet Sage Glass",
+        "description": "Màu nhấn xanh sage trầm, dịu trên nền kính graphite."
+      }
+    },
+    "selected": "Đã chọn"
+  },
   "pricing": {
     "title": "Định giá mô hình",
     "description": "Đơn giá theo một triệu token (USD). Dùng % làm ký tự đại diện trong mẫu.",

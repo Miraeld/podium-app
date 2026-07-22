@@ -1,7 +1,12 @@
 /**
  * @file index.css
  * @description Aurora Glass design system — frosted glass cards, drifting gradient orbs,
- *   gold signal pulses on live agents. WP Media gold #FED23A on deep navy #0A0C14.
+ *   signal pulses on live agents. Theming is two orthogonal axes: light/dark (`.dark` on
+ *   `<html>`) and a preset (`data-preset` on `<html>`) that swaps the accent/glow "voice"
+ *   while structure (surfaces, text, borders) stays shared. Podium Gold (WP Media gold
+ *   #FED23A on deep navy #0A0C14) is the default preset and needs no attribute — it lives
+ *   in the bare `:root` / `.dark` blocks below. Additional presets add
+ *   `[data-preset="name"]` / `[data-preset="name"].dark` override blocks.
  * @author WP Media
  */
 
@@ -23,11 +28,21 @@
 
 /* ── Theme tokens ──────────────────────────────────────────
  * Space-separated RGB channels so Tailwind's opacity modifiers work.
+ *
+ * Two groups, both live in :root / .dark:
+ *   STRUCTURE — surfaces, text, borders, base card-shadows. Shared by every
+ *     preset; a preset may still override a few surfaces for its own body
+ *     tone (e.g. Sage's graphite), but never the accent/glow identity.
+ *   VOICE — --accent*, --orb-*, --glass-border-hover, --accent-glow*,
+ *     --sweep-*, --card-top-line, --logo-shadow, and the handful of
+ *     previously-hardcoded accent shadows (--header-glow, --nav-active-*,
+ *     --sidebar-edge-shadow, --selection-bg, --input-focus-*, --page-glow-
+ *     gradient). This is what a preset overrides wholesale.
  * ──────────────────────────────────────────────────────── */
 
 /* ── Light theme (default) ─────────────────────────────── */
 :root {
-  /* Page canvas */
+  /* ── Structure (shared base) ── */
   --surface-0: 242 243 248;
   --surface-1: 252 252 255;
   --surface-2: 255 255 255;
@@ -42,6 +57,10 @@
   --text-muted: 90 94 114;
   --text-dim: 138 142 162;
 
+  --card-shadow: 0 1px 4px rgba(0, 0, 0, 0.05), 0 4px 16px rgba(0, 0, 0, 0.04);
+  --card-shadow-hover: 0 8px 32px rgba(0, 0, 0, 0.10), 0 2px 8px rgba(0, 0, 0, 0.06);
+
+  /* ── Voice: Podium Gold (default preset) ── */
   --accent: 254 210 58;
   --accent-hover: 224 187 43;
   --accent-muted: rgba(254, 210, 58, 0.12);
@@ -52,15 +71,15 @@
   --glass-border: rgba(0, 0, 0, 0.065);
   --glass-border-hover: rgba(37, 99, 235, 0.40);
 
-  /* Aurora orbs — WP Media blue palette in light mode */
-  --orb-gold:  rgba(99, 102, 241, 0.29);
-  --orb-indigo: rgba(254, 210, 58, 0.32);
-  --orb-amber: rgba(251, 146, 60, 0.2);
-  /* Shadows */
-  --card-shadow: 0 1px 4px rgba(0, 0, 0, 0.05), 0 4px 16px rgba(0, 0, 0, 0.04);
-  --card-shadow-hover: 0 8px 32px rgba(0, 0, 0, 0.10), 0 2px 8px rgba(0, 0, 0, 0.06);
-  --gold-glow: 0 0 0 1px rgba(254, 210, 58, 0.35), 0 4px 20px rgba(254, 210, 58, 0.18);
-  --gold-glow-strong: 0 0 0 1.5px rgba(254, 210, 58, 0.50), 0 6px 28px rgba(254, 210, 58, 0.25);
+  /* Aurora orbs — WP Media blue palette in light mode. Softened (calm, not
+     "the sun hitting the screen") per user feedback. */
+  --orb-gold:  rgba(99, 102, 241, 0.18);
+  --orb-indigo: rgba(254, 210, 58, 0.20);
+  --orb-amber: rgba(251, 146, 60, 0.13);
+
+  /* Accent glow — softened alongside the orbs (was 0.35/0.18 and 0.50/0.25) */
+  --accent-glow: 0 0 0 1px rgba(254, 210, 58, 0.22), 0 4px 16px rgba(254, 210, 58, 0.11);
+  --accent-glow-strong: 0 0 0 1.5px rgba(254, 210, 58, 0.32), 0 6px 22px rgba(254, 210, 58, 0.16);
 
   /* Card top accent line — WP Media navy in light mode */
   --card-top-line: linear-gradient(90deg, transparent 5%, rgba(10, 12, 20, 0.18) 30%, rgba(10, 12, 20, 0.18) 70%, transparent 95%);
@@ -71,10 +90,24 @@
 
   /* Sidebar logo glow — strong blue in light mode */
   --logo-shadow: 0 0 20px 4px rgba(37, 99, 235, 0.55), 0 2px 8px rgba(0, 0, 0, 0.18);
+
+  /* Page header glow, active nav pill, sidebar edge, text selection, input
+     focus ring, ambient page-background wash — previously hardcoded gold,
+     now tokenized so a preset can carry them too. */
+  --header-glow: 0px 7px 28px -2px rgba(254, 210, 58, 0.16), 0px 0px 0 rgba(254, 210, 58, 0.10);
+  --nav-active-bg: rgba(254, 210, 58, 0.15);
+  --nav-active-border: rgba(254, 210, 58, 0.45);
+  --nav-active-glow: 0 0 14px -4px rgba(254, 210, 58, 0.20);
+  --sidebar-edge-shadow: 4px 0 24px rgba(10, 12, 20, 0.12), 1px 0 0 rgba(10, 12, 20, 0.06);
+  --selection-bg: rgba(254, 210, 58, 0.28);
+  --input-focus-border: rgba(254, 210, 58, 0.55);
+  --input-focus-shadow: 0 0 0 3px rgba(254, 210, 58, 0.12);
+  --page-glow-gradient: linear-gradient(155deg, rgba(37, 99, 235, 0.05) 0%, transparent 38%, rgba(99, 102, 241, 0.04) 100%);
 }
 
 /* ── Dark theme — deep navy, gold pops ─────────────────── */
 .dark {
+  /* ── Structure (shared base) ── */
   --surface-0: 10 12 20;
   --surface-1: 13 16 26;
   --surface-2: 17 20 32;
@@ -89,6 +122,10 @@
   --text-muted: 148 154 178;
   --text-dim: 90 98 124;
 
+  --card-shadow: 0 2px 8px rgba(0, 0, 0, 0.32), 0 1px 2px rgba(0, 0, 0, 0.20);
+  --card-shadow-hover: 0 8px 32px rgba(0, 0, 0, 0.50), 0 2px 8px rgba(0, 0, 0, 0.30);
+
+  /* ── Voice: Podium Gold (default preset) ── */
   --accent: 254 210 58;
   --accent-hover: 255 223 90;
   --accent-muted: rgba(254, 210, 58, 0.12);
@@ -99,16 +136,15 @@
   --glass-border: rgba(255, 255, 255, 0.055);
   --glass-border-hover: rgba(254, 210, 58, 0.40);
 
-  /* Aurora orbs — cinematic in dark mode */
-  --orb-gold: rgba(254, 210, 58, 0.32);
-  --orb-indigo: rgba(99, 102, 241, 0.29);
-  --orb-amber: rgba(251, 146, 60, 0.2);
+  /* Aurora orbs — cinematic in dark mode, softened per user feedback
+     (was 0.32/0.29/0.2) */
+  --orb-gold: rgba(254, 210, 58, 0.19);
+  --orb-indigo: rgba(99, 102, 241, 0.18);
+  --orb-amber: rgba(251, 146, 60, 0.13);
 
-  /* Shadows */
-  --card-shadow: 0 2px 8px rgba(0, 0, 0, 0.32), 0 1px 2px rgba(0, 0, 0, 0.20);
-  --card-shadow-hover: 0 8px 32px rgba(0, 0, 0, 0.50), 0 2px 8px rgba(0, 0, 0, 0.30);
-  --gold-glow: 0 0 0 1px rgba(254, 210, 58, 0.35), 0 4px 20px rgba(254, 210, 58, 0.20);
-  --gold-glow-strong: 0 0 0 1.5px rgba(254, 210, 58, 0.55), 0 8px 32px rgba(254, 210, 58, 0.28);
+  /* Accent glow — softened alongside the orbs (was 0.35/0.20 and 0.55/0.28) */
+  --accent-glow: 0 0 0 1px rgba(254, 210, 58, 0.22), 0 4px 16px rgba(254, 210, 58, 0.12);
+  --accent-glow-strong: 0 0 0 1.5px rgba(254, 210, 58, 0.35), 0 8px 24px rgba(254, 210, 58, 0.18);
 
   /* Card top accent line — gold in dark mode */
   --card-top-line: linear-gradient(90deg, transparent 5%, rgba(254, 210, 58, 0.55) 30%, rgba(254, 210, 58, 0.55) 70%, transparent 95%);
@@ -119,6 +155,115 @@
 
   /* Sidebar logo glow — strong gold in dark mode */
   --logo-shadow: 0 0 20px 4px rgba(201, 162, 39, 0.60), 0 2px 8px rgba(0, 0, 0, 0.40);
+
+  --header-glow: 0px 7px 28px -2px rgba(254, 210, 58, 0.16), 0px 0px 0 rgba(254, 210, 58, 0.10);
+  --nav-active-bg: rgba(254, 210, 58, 0.15);
+  --nav-active-border: rgba(254, 210, 58, 0.45);
+  --nav-active-glow: 0 0 16px -4px rgba(254, 210, 58, 0.30);
+  --sidebar-edge-shadow: 4px 0 28px -2px rgba(254, 210, 58, 0.16), 1px 0 0 rgba(254, 210, 58, 0.10);
+  --selection-bg: rgba(254, 210, 58, 0.28);
+  --input-focus-border: rgba(254, 210, 58, 0.55);
+  --input-focus-shadow: 0 0 0 3px rgba(254, 210, 58, 0.12);
+  --page-glow-gradient: linear-gradient(155deg, rgba(254, 210, 58, 0.05) 0%, transparent 40%, rgba(99, 102, 241, 0.04) 100%);
+}
+
+/* ── Preset: Quiet Sage Glass ───────────────────────────────
+ * Muted, grown-up, desaturated — sage as an ACCENT over graphite/glass, not
+ * a green app. Accent inverts weight: deeper in light, faded in dark. Low-
+ * opacity ambient glow only, no neon, no pure black/white.
+ * ──────────────────────────────────────────────────────── */
+[data-preset="sage"] {
+  /* Structure overrides — off-white sage-tinted surfaces */
+  --surface-0: 240 242 239;
+  --surface-1: 247 248 246;
+  --surface-2: 251 252 250;
+  --surface-3: 238 240 236;
+  --surface-4: 230 233 228;
+  --surface-5: 219 223 216;
+  --border: 213 219 213;
+  --border-light: 226 231 225;
+
+  /* Voice — accent: light #42734F */
+  --accent: 66 115 79;
+  --accent-hover: 92 135 105;
+  --accent-muted: rgba(66, 115, 79, 0.12);
+
+  --glass-card: rgba(251, 252, 250, 0.70);
+  --glass-sidebar: rgba(244, 246, 243, 0.84);
+  --glass-border: color-mix(in srgb, currentColor 10%, transparent);
+  --glass-border-hover: rgba(66, 115, 79, 0.35);
+
+  --orb-gold: rgba(92, 135, 105, 0.14);
+  --orb-indigo: rgba(66, 115, 79, 0.16);
+  --orb-amber: rgba(107, 145, 120, 0.10);
+
+  --accent-glow: 0 0 0 1px rgba(66, 115, 79, 0.18), 0 4px 14px rgba(66, 115, 79, 0.10);
+  --accent-glow-strong: 0 0 0 1.5px rgba(66, 115, 79, 0.28), 0 6px 20px rgba(66, 115, 79, 0.14);
+
+  --card-top-line: linear-gradient(90deg, transparent 5%, rgba(66, 115, 79, 0.22) 30%, rgba(66, 115, 79, 0.22) 70%, transparent 95%);
+
+  --sweep-color-mid: rgba(66, 115, 79, 0.28);
+  --sweep-color-bright: rgba(66, 115, 79, 0.50);
+
+  /* Fixed sage mark #6B9178 — used for the non-adaptive logo glow */
+  --logo-shadow: 0 0 16px 3px rgba(107, 145, 120, 0.40), 0 2px 8px rgba(0, 0, 0, 0.18);
+
+  --header-glow: 0px 6px 22px -2px rgba(66, 115, 79, 0.14), 0px 0px 0 rgba(66, 115, 79, 0.08);
+  --nav-active-bg: rgba(66, 115, 79, 0.12);
+  --nav-active-border: rgba(66, 115, 79, 0.35);
+  --nav-active-glow: 0 0 12px -4px rgba(66, 115, 79, 0.18);
+  --sidebar-edge-shadow: 4px 0 22px rgba(20, 26, 22, 0.10), 1px 0 0 rgba(20, 26, 22, 0.05);
+  --selection-bg: rgba(66, 115, 79, 0.22);
+  --input-focus-border: rgba(66, 115, 79, 0.45);
+  --input-focus-shadow: 0 0 0 3px rgba(66, 115, 79, 0.12);
+  --page-glow-gradient: linear-gradient(155deg, rgba(66, 115, 79, 0.05) 0%, transparent 38%, rgba(92, 135, 105, 0.04) 100%);
+}
+
+[data-preset="sage"].dark {
+  /* Structure overrides — graphite bodies, never pure black */
+  --surface-0: 20 23 21;
+  --surface-1: 24 27 25;
+  --surface-2: 29 33 30;
+  --surface-3: 36 41 37;
+  --surface-4: 45 51 46;
+  --surface-5: 56 63 57;
+  --border: 42 48 43;
+  --border-light: 54 61 55;
+
+  /* Voice — accent: dark #99BD9E (faded, inverted weight from light) */
+  --accent: 153 189 158;
+  --accent-hover: 170 201 175;
+  --accent-muted: rgba(153, 189, 158, 0.12);
+
+  --glass-card: rgba(29, 33, 30, 0.58);
+  --glass-sidebar: rgba(22, 26, 23, 0.82);
+  --glass-border: color-mix(in srgb, currentColor 10%, transparent);
+  --glass-border-hover: rgba(153, 189, 158, 0.35);
+
+  --orb-gold: rgba(153, 189, 158, 0.16);
+  --orb-indigo: rgba(128, 163, 135, 0.14);
+  --orb-amber: rgba(107, 145, 120, 0.10);
+
+  --accent-glow: 0 0 0 1px rgba(153, 189, 158, 0.20), 0 4px 16px rgba(153, 189, 158, 0.12);
+  --accent-glow-strong: 0 0 0 1.5px rgba(153, 189, 158, 0.30), 0 8px 22px rgba(153, 189, 158, 0.16);
+
+  --card-top-line: linear-gradient(90deg, transparent 5%, rgba(153, 189, 158, 0.40) 30%, rgba(153, 189, 158, 0.40) 70%, transparent 95%);
+
+  --sweep-color-mid: rgba(153, 189, 158, 0.30);
+  --sweep-color-bright: rgba(153, 189, 158, 0.55);
+
+  /* Fixed sage mark #6B9178 — same non-adaptive glow as light */
+  --logo-shadow: 0 0 16px 3px rgba(107, 145, 120, 0.45), 0 2px 8px rgba(0, 0, 0, 0.40);
+
+  --header-glow: 0px 6px 22px -2px rgba(153, 189, 158, 0.14), 0px 0px 0 rgba(153, 189, 158, 0.08);
+  --nav-active-bg: rgba(153, 189, 158, 0.14);
+  --nav-active-border: rgba(153, 189, 158, 0.40);
+  --nav-active-glow: 0 0 14px -4px rgba(153, 189, 158, 0.26);
+  --sidebar-edge-shadow: 4px 0 26px -2px rgba(153, 189, 158, 0.14), 1px 0 0 rgba(153, 189, 158, 0.08);
+  --selection-bg: rgba(153, 189, 158, 0.24);
+  --input-focus-border: rgba(153, 189, 158, 0.50);
+  --input-focus-shadow: 0 0 0 3px rgba(153, 189, 158, 0.12);
+  --page-glow-gradient: linear-gradient(155deg, rgba(153, 189, 158, 0.05) 0%, transparent 40%, rgba(128, 163, 135, 0.04) 100%);
 }
 
 /* ── Base ───────────────────────────────────────────────── */
@@ -126,26 +271,12 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", 'Inter', 'Segoe UI', sans-serif;
   color: rgb(var(--text-primary));
   background-color: rgb(var(--surface-0));
-  background-image: linear-gradient(
-    155deg,
-    rgba(37, 99, 235, 0.05) 0%,
-    transparent 38%,
-    rgba(99, 102, 241, 0.04) 100%
-  );
+  background-image: var(--page-glow-gradient);
   background-attachment: fixed;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   letter-spacing: -0.01em;
   line-height: 1.5;
-}
-
-.dark body {
-  background-image: linear-gradient(
-    155deg,
-    rgba(254, 210, 58, 0.05) 0%,
-    transparent 40%,
-    rgba(99, 102, 241, 0.04) 100%
-  );
 }
 
 @layer base {
@@ -162,7 +293,7 @@ body {
   *::-webkit-scrollbar-thumb:hover { background: rgb(var(--text-dim)); }
 
   ::selection {
-    background: rgba(254, 210, 58, 0.28);
+    background: var(--selection-bg);
     color: rgb(var(--text-primary));
   }
 
@@ -283,12 +414,7 @@ body {
     backdrop-filter: blur(28px) saturate(180%);
     -webkit-backdrop-filter: blur(28px) saturate(180%);
     border: 1px solid var(--glass-border);
-    /* Navy right-edge shadow in light mode — makes sidebar pop */
-    box-shadow: 4px 0 24px rgba(10, 12, 20, 0.12), 1px 0 0 rgba(10, 12, 20, 0.06);
-  }
-
-  .dark .sidebar-glass {
-    box-shadow: 4px 0 28px -2px rgba(254, 210, 58, 0.16), 1px 0 0 rgba(254, 210, 58, 0.10);
+    box-shadow: var(--sidebar-edge-shadow);
   }
 
   /* ── Logo badge — shadow/glow comes from the --logo-shadow token ── */
@@ -304,7 +430,7 @@ body {
   }
   .btn-primary:hover {
     background: rgb(var(--accent-hover));
-    box-shadow: var(--gold-glow);
+    box-shadow: var(--accent-glow);
     transform: translateY(-1px);
   }
   .btn-primary:active {
@@ -329,8 +455,8 @@ body {
     border: 1px solid var(--glass-border);
   }
   .input:focus {
-    border-color: rgba(254, 210, 58, 0.55);
-    box-shadow: 0 0 0 3px rgba(254, 210, 58, 0.12);
+    border-color: var(--input-focus-border);
+    box-shadow: var(--input-focus-shadow);
   }
 
   /* Page header — glass panel with native macOS spacing */
@@ -340,7 +466,7 @@ body {
     -webkit-backdrop-filter: blur(20px) saturate(160%);
     border: 1px solid var(--glass-border);
     border-radius: 0.875rem;
-    box-shadow: 0px 7px 28px -2px rgba(254, 210, 58, 0.16), 0px 0px 0 rgba(254, 210, 58, 0.10);
+    box-shadow: var(--header-glow);
     padding: 1.5rem 1.875rem;
   }
 
@@ -360,18 +486,18 @@ body {
   .dark .neu-nav:hover {
     background-color: rgba(255, 255, 255, 0.04);
   }
-  /* Light mode: navy text on gold tint — readable contrast */
+  /* Light mode: navy text on accent tint — readable contrast */
   .neu-nav.is-active {
-    background-color: rgba(254, 210, 58, 0.15);
-    border-color: rgba(254, 210, 58, 0.45);
+    background-color: var(--nav-active-bg);
+    border-color: var(--nav-active-border);
     color: rgb(10, 12, 20);
     font-weight: 600;
-    box-shadow: 0 0 14px -4px rgba(254, 210, 58, 0.20);
+    box-shadow: var(--nav-active-glow);
   }
-  /* Dark mode: gold text on gold tint — the cinematic look */
+  /* Dark mode: accent text on accent tint — the cinematic look */
   .dark .neu-nav.is-active {
     color: rgb(var(--accent));
-    box-shadow: 0 0 16px -4px rgba(254, 210, 58, 0.30);
+    box-shadow: var(--nav-active-glow);
   }
 
   /* Flat interactive button */
@@ -385,8 +511,8 @@ body {
       border-color 0.15s ease, transform 0.18s ease;
   }
   .neu-btn:hover {
-    border-color: rgba(254, 210, 58, 0.35);
-    box-shadow: var(--gold-glow);
+    border-color: var(--glass-border-hover);
+    box-shadow: var(--accent-glow);
     transform: translateY(-1px);
   }
   .neu-btn:active {

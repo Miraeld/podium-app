@@ -8,10 +8,21 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App";
 import { ErrorBoundary, installGlobalErrorTelemetry } from "./components/ErrorBoundary";
+import { loadPreset } from "./lib/displaySettings";
 import "./i18n";
 import "./index.css";
 
 installGlobalErrorTelemetry();
+
+// The inline anti-flicker script in index.html already applies `data-preset`
+// before React mounts (avoiding a preset flash); this re-applies it from the
+// same localStorage key in case that script didn't run (SSR/dev edge cases),
+// mirroring ThemeToggle's equivalent fallback for the `dark` class.
+{
+  const preset = loadPreset();
+  if (preset === "gold") document.documentElement.removeAttribute("data-preset");
+  else document.documentElement.setAttribute("data-preset", preset);
+}
 
 if ("serviceWorker" in navigator) {
   // Detect whether the page is already controlled by an SW *before* we

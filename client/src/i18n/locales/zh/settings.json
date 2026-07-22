@@ -10,6 +10,21 @@
     "enable": "显示 Tabby",
     "enableDesc": "在整个仪表板的角落显示伙伴（按 ⌘B 打开）"
   },
+  "appearance": {
+    "title": "外观",
+    "description": "选择仪表板中使用的强调色和发光效果。立即生效，并保存在此设备上。",
+    "presets": {
+      "gold": {
+        "name": "Podium 金色",
+        "description": "原始的暖金色强调色，搭配深藏青色背景。"
+      },
+      "sage": {
+        "name": "静谧鼠尾草玻璃",
+        "description": "低饱和度的鼠尾草绿强调色，搭配石墨玻璃质感。"
+      }
+    },
+    "selected": "已选择"
+  },
   "pricing": {
     "title": "模型定价",
     "description": "每百万 Token 的费率（美元）。在模式中使用 % 作为通配符。",
