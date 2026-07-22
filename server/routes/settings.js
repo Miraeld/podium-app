@@ -290,6 +290,53 @@ router.put("/tauri-notifications", (req, res) => {
   res.json(next);
 });
 
+// ── UI theme (light/dark), server-persisted ─────────────────────────────
+// The dashboard's light/dark choice lives in the browser's localStorage, but
+// the Tauri shell's custom updater window is a separate `tauri://` origin
+// that can't read it (and can't invoke app commands from the remote
+// dashboard origin either — cross-origin IPC is blocked). So the dashboard
+// writes its theme here, and Rust (no CORS, same-machine loopback fetch)
+// reads it back to paint the updater window. See TOKEN_EXEMPT_PREFIXES in
+// lib/security.js for why this path skips the token gate.
+function getUiPrefsPath() {
+  return path.join(getDataDir(), "ui-prefs.json");
+}
+
+function readUiTheme() {
+  try {
+    const raw = fs.readFileSync(getUiPrefsPath(), "utf8");
+    const parsed = JSON.parse(raw);
+    return parsed.theme === "dark" ? "dark" : "light";
+  } catch {
+    return "light";
+  }
+}
+
+function writeUiTheme(theme) {
+  const prefsPath = getUiPrefsPath();
+  fs.mkdirSync(path.dirname(prefsPath), { recursive: true });
+  fs.writeFileSync(prefsPath, JSON.stringify({ theme }, null, 2) + "\n");
+}
+
+// GET /api/settings/ui-theme — read the persisted light/dark choice.
+// Unauthenticated even when DASHBOARD_TOKEN is set (see lib/security.js).
+router.get("/ui-theme", (_req, res) => {
+  res.json({ theme: readUiTheme() });
+});
+
+// PUT /api/settings/ui-theme — persist the dashboard's current light/dark
+// choice. Body: { theme: "light" | "dark" }.
+router.put("/ui-theme", (req, res) => {
+  const { theme } = req.body || {};
+  if (theme !== "light" && theme !== "dark") {
+    return res.status(400).json({
+      error: { code: "INVALID_THEME", message: 'theme must be "light" or "dark"' },
+    });
+  }
+  writeUiTheme(theme);
+  res.json({ theme });
+});
+
 // POST /api/settings/cleanup — abandon stale sessions, purge old data
 router.post("/cleanup", (req, res) => {
   const { abandon_hours, purge_days } = req.body;

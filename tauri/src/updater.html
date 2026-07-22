@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Podium Update</title>
+<style>
+  /* Tokens mirror client/src/index.css. The app persists its light/dark
+     choice in localStorage (`podium-theme`) on a different origin we can't
+     read here, so the dashboard writes it to the sidecar server and Rust
+     reads it back over loopback HTTP; `updater_get_info` returns `theme`
+     freshly fetched on every call, and we poll it (see the script below) so
+     a toggle made while this window is open is picked up live. We set
+     <html data-theme>; light is the default until told otherwise (matches
+     the app's own default). Accent stays the brand gold in both. */
+  :root {
+    /* Light (default) — mirrors index.css :root */
+    --surface-bg: 242 243 248;      /* surface-0 */
+    --surface-card: 255 255 255;    /* surface-2 */
+    --text-primary: 14 16 26;
+    --text-muted: 90 94 114;
+    --border: 220 220 232;
+    --glass-card: rgba(255, 255, 255, 0.68);
+    --glass-border: rgba(0, 0, 0, 0.065);
+    --accent: 254 210 58;
+    --accent-hover: 224 187 43;
+    --accent-ink: 20 20 15;         /* text on the gold button */
+    --btn-secondary-border: rgba(0, 0, 0, 0.12);
+    --btn-secondary-hover: rgba(0, 0, 0, 0.04);
+    --track: rgba(0, 0, 0, 0.08);
+    --body-glow: radial-gradient(120% 80% at 15% -10%, rgba(37, 99, 235, 0.06) 0%, transparent 42%);
+    --scroll-thumb: rgba(0, 0, 0, 0.16);
+  }
+  :root[data-theme="dark"] {
+    /* Dark — mirrors index.css .dark */
+    --surface-bg: 10 12 20;         /* surface-0 */
+    --surface-card: 17 20 32;       /* surface-2 */
+    --text-primary: 238 240 250;
+    --text-muted: 148 154 178;
+    --border: 34 39 58;
+    --glass-card: rgba(17, 20, 34, 0.55);
+    --glass-border: rgba(255, 255, 255, 0.055);
+    --accent: 254 210 58;
+    --accent-hover: 255 223 90;
+    --accent-ink: 20 20 15;
+    --btn-secondary-border: rgba(255, 255, 255, 0.14);
+    --btn-secondary-hover: rgba(255, 255, 255, 0.05);
+    --track: rgba(255, 255, 255, 0.08);
+    --body-glow: radial-gradient(120% 80% at 15% -10%, rgba(254, 210, 58, 0.05) 0%, transparent 40%);
+    --scroll-thumb: rgba(255, 255, 255, 0.14);
+  }
+  :root { color-scheme: light; }
+  :root[data-theme="dark"] { color-scheme: dark; }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    display: flex; flex-direction: column; height: 100vh; overflow: hidden;
+    background: var(--body-glow), rgb(var(--surface-bg));
+    color: rgb(var(--text-primary));
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Inter", "Segoe UI", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  header {
+    padding: 22px 26px 16px; flex-shrink: 0;
+    border-bottom: 1px solid var(--glass-border);
+  }
+  .wordmark {
+    display: flex; align-items: center; gap: 9px; font-size: 12px;
+    font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+    color: rgb(var(--accent)); margin-bottom: 12px;
+  }
+  .wordmark .dot {
+    width: 8px; height: 8px; border-radius: 50%; background: rgb(var(--accent));
+    box-shadow: 0 0 0 3px rgba(var(--accent), 0.18);
+  }
+  h1 { margin: 0; font-size: 20px; font-weight: 650; letter-spacing: -0.01em; }
+  h1 .version { color: rgb(var(--accent)); }
+  .subtitle { margin: 5px 0 0; font-size: 13px; color: rgb(var(--text-muted)); }
+
+  main { flex: 1; overflow-y: auto; padding: 18px 26px; }
+  #card {
+    background: var(--glass-card);
+    border: 1px solid var(--glass-border);
+    border-radius: 12px;
+    padding: 16px 18px;
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  }
+  #content { font-size: 13.5px; line-height: 1.62; color: rgb(var(--text-primary)); }
+  #content h1, #content h2, #content h3 {
+    margin: 1.1em 0 0.4em; font-size: 1.02em; font-weight: 650;
+  }
+  #content h1:first-child, #content h2:first-child, #content h3:first-child { margin-top: 0; }
+  #content p { margin: 0.55em 0; color: rgb(var(--text-muted)); }
+  #content ul, #content ol { margin: 0.5em 0; padding-left: 1.25em; }
+  #content li { margin: 0.28em 0; color: rgb(var(--text-muted)); }
+  #content code {
+    background: rgba(var(--accent), 0.12); color: rgb(var(--accent));
+    padding: 1px 5px; border-radius: 4px; font-size: 0.88em;
+    font-family: "JetBrains Mono", "Fira Code", ui-monospace, monospace;
+  }
+  #content pre {
+    background: rgba(var(--text-primary), 0.05); padding: 10px 12px;
+    border-radius: 8px; overflow-x: auto;
+  }
+  #content a { color: rgb(var(--accent)); text-decoration: none; }
+  #content a:hover { text-decoration: underline; }
+  #content strong { color: rgb(var(--text-primary)); font-weight: 650; }
+  #content blockquote {
+    border-left: 2px solid rgba(var(--accent), 0.4); margin: 0.6em 0;
+    padding-left: 12px; color: rgb(var(--text-muted));
+  }
+
+  #progress-region { display: none; padding: 6px 26px 0; }
+  #progress-region.visible { display: block; }
+  .progress-label {
+    display: flex; justify-content: space-between; font-size: 12px;
+    color: rgb(var(--text-muted)); margin-bottom: 8px;
+  }
+  .progress-track {
+    height: 6px; border-radius: 3px; background: var(--track);
+    overflow: hidden; position: relative;
+  }
+  .progress-fill {
+    height: 100%; width: 0%; border-radius: 3px;
+    background: linear-gradient(90deg, rgba(var(--accent), 0.75), rgb(var(--accent)));
+    transition: width 0.25s ease;
+  }
+  .progress-fill.indeterminate {
+    width: 40% !important; animation: indeterminate 1.3s ease-in-out infinite;
+  }
+  @keyframes indeterminate {
+    0% { transform: translateX(-120%); }
+    100% { transform: translateX(320%); }
+  }
+  #error-msg { display: none; margin-top: 10px; font-size: 12.5px; color: #E4736F; }
+  #error-msg.visible { display: block; }
+
+  footer {
+    flex-shrink: 0; display: flex; justify-content: flex-end; gap: 10px;
+    padding: 16px 26px 22px; border-top: 1px solid var(--glass-border);
+  }
+  button {
+    font-family: inherit; font-size: 13.5px; font-weight: 600;
+    padding: 9px 18px; border-radius: 9px; border: none; cursor: pointer;
+    transition: transform 0.12s ease, opacity 0.12s ease, background 0.12s ease;
+  }
+  button:active { transform: scale(0.97); }
+  #btn-later {
+    background: transparent; color: rgb(var(--text-muted));
+    border: 1px solid var(--btn-secondary-border);
+  }
+  #btn-later:hover { background: var(--btn-secondary-hover); }
+  #btn-install {
+    background: rgb(var(--accent)); color: rgb(var(--accent-ink));
+    box-shadow: 0 4px 16px rgba(var(--accent), 0.22);
+  }
+  #btn-install:hover { background: rgb(var(--accent-hover)); }
+  #btn-install:disabled, #btn-later:disabled { opacity: 0.5; cursor: default; box-shadow: none; }
+
+  main::-webkit-scrollbar { width: 8px; }
+  main::-webkit-scrollbar-thumb { background: var(--scroll-thumb); border-radius: 4px; }
+</style>
+</head>
+<body>
+  <header>
+    <div class="wordmark"><span class="dot"></span>Podium</div>
+    <h1><span class="version" id="version-line">A new version</span> is available</h1>
+    <p class="subtitle">Here's what's new.</p>
+  </header>
+  <main>
+    <div id="card"><div id="content">Loading changelog…</div></div>
+  </main>
+  <div id="progress-region">
+    <div class="progress-label">
+      <span id="progress-status">Downloading…</span>
+      <span id="progress-percent"></span>
+    </div>
+    <div class="progress-track">
+      <div class="progress-fill" id="progress-fill"></div>
+    </div>
+    <div id="error-msg"></div>
+  </div>
+  <footer>
+    <button id="btn-later">Later</button>
+    <button id="btn-install">Install Now</button>
+  </footer>
+
+<script>
+(function () {
+  var invoke = window.__TAURI__.core.invoke;
+  var listen = window.__TAURI__.event.listen;
+
+  var versionLine = document.getElementById('version-line');
+  var content = document.getElementById('content');
+  var progressRegion = document.getElementById('progress-region');
+  var progressFill = document.getElementById('progress-fill');
+  var progressPercent = document.getElementById('progress-percent');
+  var progressStatus = document.getElementById('progress-status');
+  var errorMsg = document.getElementById('error-msg');
+  var btnLater = document.getElementById('btn-later');
+  var btnInstall = document.getElementById('btn-install');
+
+  var currentTheme = null;
+  var themePollTimer = null;
+  var closing = false;
+
+  function applyTheme(theme) {
+    var normalized = theme === 'dark' ? 'dark' : 'light';
+    if (normalized === currentTheme) return;
+    currentTheme = normalized;
+    document.documentElement.setAttribute('data-theme', normalized);
+  }
+
+  function loadInfo() {
+    invoke('updater_get_info').then(function (info) {
+      versionLine.textContent = info.version ? (info.version + ' ') : '';
+      content.innerHTML = info.notes_html || '<p>A new version of Podium is available.</p>';
+      if (info.theme) applyTheme(info.theme);
+    }).catch(function (err) {
+      content.textContent = 'Could not load update details.';
+      console.error('updater_get_info failed', err);
+    });
+  }
+
+  // Light poll so a theme toggle made in the dashboard while this window is
+  // open gets picked up (Rust no longer pushes an `updater://theme` event —
+  // it has no way to know the dashboard's theme changed either, since that
+  // now lives server-side). `updater_get_info` is cheap (single loopback
+  // fetch with a short timeout), so a ~1.5s cadence costs nothing
+  // noticeable; stopped once the window starts closing.
+  function pollTheme() {
+    if (closing) return;
+    invoke('updater_get_info').then(function (info) {
+      if (info.theme) applyTheme(info.theme);
+    }).catch(function () {});
+  }
+  themePollTimer = window.setInterval(pollTheme, 1500);
+  window.addEventListener('beforeunload', function () {
+    closing = true;
+    if (themePollTimer) window.clearInterval(themePollTimer);
+  });
+
+  function setProgress(downloaded, total) {
+    if (total) {
+      var pct = Math.max(0, Math.min(100, Math.round((downloaded / total) * 100)));
+      progressFill.classList.remove('indeterminate');
+      progressFill.style.width = pct + '%';
+      progressPercent.textContent = pct + '%';
+      progressStatus.textContent = 'Downloading…';
+    } else {
+      progressFill.classList.add('indeterminate');
+      progressPercent.textContent = '';
+      progressStatus.textContent = 'Downloading…';
+    }
+  }
+
+  listen('updater://progress', function (event) {
+    var payload = event.payload || {};
+    setProgress(payload.downloaded, payload.total);
+  });
+
+  listen('updater://error', function (event) {
+    errorMsg.textContent = (event.payload && event.payload.message) || 'Update failed. Please try again later.';
+    errorMsg.classList.add('visible');
+    progressStatus.textContent = 'Failed';
+  });
+
+  btnInstall.addEventListener('click', function () {
+    btnInstall.disabled = true;
+    btnLater.disabled = true;
+    progressRegion.classList.add('visible');
+    setProgress(0, null);
+    invoke('updater_install').catch(function (err) {
+      errorMsg.textContent = 'Failed to start install: ' + err;
+      errorMsg.classList.add('visible');
+    });
+  });
+
+  btnLater.addEventListener('click', function () {
+    invoke('updater_dismiss').catch(function () {});
+  });
+
+  loadInfo();
+})();
+</script>
+</body>
+</html>

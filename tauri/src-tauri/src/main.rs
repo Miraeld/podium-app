@@ -21,20 +21,18 @@
 mod notify_settings;
 mod ws_watcher;
 
-use std::sync::atomic::{AtomicBool, AtomicU16, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU16, AtomicU64, AtomicUsize, Ordering};
 use std::sync::Mutex;
 use std::time::Duration;
 
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::TrayIconBuilder;
 use tauri::webview::{NewWindowFeatures, NewWindowResponse};
-use tauri::{Manager, RunEvent, Url, WebviewUrl, WebviewWindowBuilder, WindowEvent};
-use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
-use tauri_plugin_notification::NotificationExt;
+use tauri::{Emitter, Manager, RunEvent, Url, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 use tauri_plugin_opener::OpenerExt;
 use tauri_plugin_shell::process::CommandChild;
 use tauri_plugin_shell::ShellExt;
-use tauri_plugin_updater::UpdaterExt;
+use tauri_plugin_updater::{Update, UpdaterExt};
 
 const DEFAULT_PORT: u16 = 4820;
 const HEALTH_TIMEOUT: Duration = Duration::from_secs(15);
@@ -66,6 +64,219 @@ struct ActivePort(AtomicU16);
 pub struct TrayState {
     pub active_agents: AtomicUsize,
     pub status_item: Mutex<Option<MenuItem<tauri::Wry>>>,
+}
+
+/// An update the user hasn't decided on yet — stashed here between "the
+/// background check found one" and "the updater window asks for it" /
+/// "the user clicked Install Now". `update` is `None` in
+/// `PODIUM_UPDATER_PREVIEW=1` mode, where there's no real
+/// `tauri_plugin_updater::Update` to install (see `updater_install`).
+struct PendingUpdate {
+    version: String,
+    notes_html: String,
+    update: Option<Update>,
+}
+
+/// Shared home for the update the background check (or preview mode) has
+/// stashed, read by the `updater_get_info`/`updater_install` commands.
+struct PendingUpdateState(Mutex<Option<PendingUpdate>>);
+
+/// Renders release-notes markdown (the updater manifest's `notes` field) to
+/// HTML for display in the custom updater window. Uses pulldown-cmark's
+/// default (CommonMark-ish) options — no raw-HTML passthrough beyond what
+/// the parser itself escapes, since these notes are our own trusted release
+/// text, not arbitrary user input.
+fn render_markdown_to_html(md: &str) -> String {
+    use pulldown_cmark::{html, Options, Parser};
+    let options = Options::ENABLE_STRIKETHROUGH | Options::ENABLE_TABLES;
+    let parser = Parser::new_ext(md, options);
+    let mut html_out = String::new();
+    html::push_html(&mut html_out, parser);
+    html_out
+}
+
+/// Builds the custom "updater" window that replaces the old native dialog —
+/// same external-link guards as `create_main_window` (`is_internal_url` /
+/// `open_externally`), just pointed at the bundled `updater.html` asset
+/// instead of `index.html`.
+fn create_updater_window(app: &tauri::AppHandle) -> tauri::Result<tauri::WebviewWindow> {
+    if let Some(existing) = app.get_webview_window("updater") {
+        let _ = existing.show();
+        let _ = existing.set_focus();
+        return Ok(existing);
+    }
+    let nav_handle = app.clone();
+    let new_window_handle = app.clone();
+    WebviewWindowBuilder::new(app, "updater", WebviewUrl::App("updater.html".into()))
+        .title("Podium Update")
+        .inner_size(520.0, 640.0)
+        .min_inner_size(460.0, 520.0)
+        .resizable(true)
+        .center()
+        // A just-published update prompt must land in front, not behind the
+        // dashboard window — otherwise the user never sees it.
+        .always_on_top(true)
+        .focused(true)
+        .on_navigation(move |url| {
+            if is_internal_url(url) {
+                true
+            } else {
+                open_externally(&nav_handle, url);
+                false
+            }
+        })
+        .on_new_window(move |url, _features: NewWindowFeatures| {
+            if is_internal_url(&url) {
+                NewWindowResponse::Allow
+            } else {
+                open_externally(&new_window_handle, &url);
+                NewWindowResponse::Deny
+            }
+        })
+        .build()
+}
+
+/// The dashboard's light/dark choice lives in its own (remote loopback)
+/// origin's localStorage, which the separate `tauri://` updater window can't
+/// read, and Tauri commands can't be invoked cross-origin from that remote
+/// page either (confirmed dead end — see git history for the abandoned
+/// `report_ui_theme` approach). Instead the dashboard PUTs its theme to the
+/// sidecar server (`ThemeToggle.tsx`), and this fetches it back over
+/// loopback HTTP — no CORS involved since this is a plain Rust HTTP call,
+/// not a browser fetch. Any failure (server not up yet, timeout, bad JSON)
+/// falls back to `"light"`, matching the app's own default.
+fn fetch_ui_theme(port: u16) -> String {
+    let url = format!("http://127.0.0.1:{port}/api/settings/ui-theme");
+    let Ok(resp) = ureq::get(&url).timeout(Duration::from_millis(500)).call() else {
+        return "light".to_string();
+    };
+    if resp.status() != 200 {
+        return "light".to_string();
+    }
+    let Ok(body) = resp.into_json::<serde_json::Value>() else {
+        return "light".to_string();
+    };
+    match body.get("theme").and_then(|v| v.as_str()) {
+        Some("dark") => "dark".to_string(),
+        _ => "light".to_string(),
+    }
+}
+
+/// `invoke('updater_get_info')` — returns `{version, notes_html, theme}` for
+/// whatever update is currently stashed (real or preview). Empty/`None`
+/// stash returns a benign placeholder rather than erroring, since the
+/// window could in principle be reopened after a dismiss race. The theme is
+/// re-fetched from the server on every call (not cached) so a toggle made
+/// while the updater window is open is picked up by its poll (updater.html).
+#[tauri::command]
+fn updater_get_info(
+    state: tauri::State<PendingUpdateState>,
+    app: tauri::AppHandle,
+) -> serde_json::Value {
+    // PREVIEW override (see PODIUM_UPDATER_PREVIEW_THEME docs at its
+    // declaration): only honored alongside PODIUM_UPDATER_PREVIEW=1, so it
+    // can never affect a production build.
+    let theme = if std::env::var("PODIUM_UPDATER_PREVIEW").as_deref() == Ok("1") {
+        match std::env::var("PODIUM_UPDATER_PREVIEW_THEME").as_deref() {
+            Ok("dark") => "dark".to_string(),
+            Ok("light") => "light".to_string(),
+            _ => fetch_ui_theme(active_port(&app)),
+        }
+    } else {
+        fetch_ui_theme(active_port(&app))
+    };
+    let guard = state.0.lock().unwrap();
+    match guard.as_ref() {
+        Some(pending) => serde_json::json!({
+            "version": pending.version,
+            "notes_html": pending.notes_html,
+            "theme": theme,
+        }),
+        None => serde_json::json!({
+            "version": "",
+            "notes_html": "<p>No update details available.</p>",
+            "theme": theme,
+        }),
+    }
+}
+
+/// `invoke('updater_install')` — takes the stashed `Update` out of state and
+/// runs the real download+install, emitting cumulative `updater://progress`
+/// events as chunks arrive, then restarting the app on success. In preview
+/// mode (`pending.update` is `None`) there's nothing real to install, so it
+/// instead emits a few synthetic progress ticks and logs what it would have
+/// done — see the `PODIUM_UPDATER_PREVIEW` gate in `setup`.
+#[tauri::command]
+fn updater_install(app: tauri::AppHandle) {
+    let state = app.state::<PendingUpdateState>();
+    let pending = state.0.lock().unwrap().take();
+    let Some(pending) = pending else {
+        eprintln!("updater_install: no pending update in state");
+        return;
+    };
+
+    match pending.update {
+        Some(update) => {
+            tauri::async_runtime::spawn(async move {
+                let downloaded = std::sync::Arc::new(AtomicU64::new(0));
+                let emit_handle = app.clone();
+                let downloaded_for_progress = downloaded.clone();
+                let result = update
+                    .download_and_install(
+                        move |chunk_len, total| {
+                            let sum = downloaded_for_progress
+                                .fetch_add(chunk_len as u64, Ordering::SeqCst)
+                                + chunk_len as u64;
+                            let _ = emit_handle.emit(
+                                "updater://progress",
+                                serde_json::json!({ "downloaded": sum, "total": total }),
+                            );
+                        },
+                        || {},
+                    )
+                    .await;
+                match result {
+                    Ok(()) => {
+                        app.restart();
+                    }
+                    Err(err) => {
+                        eprintln!("updater: download_and_install failed: {err}");
+                        let _ = app.emit(
+                            "updater://error",
+                            serde_json::json!({ "message": err.to_string() }),
+                        );
+                    }
+                }
+            });
+        }
+        None => {
+            // Preview mode: no real Update object to install — fake a
+            // download (on a plain OS thread, not the async runtime, so a
+            // blocking sleep here can't stall anything else) so the
+            // window's progress bar can be exercised end to end.
+            std::thread::spawn(move || {
+                for pct in [0u64, 25, 50, 75, 100] {
+                    let _ = app.emit(
+                        "updater://progress",
+                        serde_json::json!({ "downloaded": pct, "total": 100u64 }),
+                    );
+                    std::thread::sleep(Duration::from_millis(300));
+                }
+                println!("preview: would restart now");
+            });
+        }
+    }
+}
+
+/// `invoke('updater_dismiss')` — "Later": close the window, nothing else.
+/// The pending update (if any) is left in state so a fresh check next
+/// launch (or, in a future enhancement, a "check again" tray item) can
+/// still find it; the background check itself only runs once per launch.
+#[tauri::command]
+fn updater_dismiss(app: tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("updater") {
+        let _ = window.close();
+    }
 }
 
 pub fn port() -> u16 {
@@ -251,7 +462,6 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_notification::init())
-        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(SidecarState {
@@ -263,6 +473,12 @@ fn main() {
             status_item: Mutex::new(None),
         })
         .manage(ActivePort(AtomicU16::new(DEFAULT_PORT)))
+        .manage(PendingUpdateState(Mutex::new(None)))
+        .invoke_handler(tauri::generate_handler![
+            updater_get_info,
+            updater_install,
+            updater_dismiss
+        ])
         .setup(|app| {
             // T2.3: fire-and-forget update check. Spawned first and fully
             // async so it can never delay or block the synchronous sidecar
@@ -272,85 +488,81 @@ fn main() {
             // and swallowed, mirroring the "never blocks the caller"
             // philosophy the rest of this file already follows (e.g.
             // `open_externally`, `apply_vibrancy`).
-            let updater_handle = app.handle().clone();
-            tauri::async_runtime::spawn(async move {
-                let update = match updater_handle.updater() {
-                    Ok(updater) => updater.check().await,
-                    Err(err) => {
-                        eprintln!("updater: failed to construct updater instance: {err}");
-                        return;
-                    }
-                };
-                match update {
-                    Ok(Some(update)) => {
-                        // Show the changelog (update.body, from the updater
-                        // manifest's `notes` field) in a native confirmation
-                        // dialog rather than silently installing — the user
-                        // decides whether to update now or be asked again
-                        // next launch.
-                        let title = format!("Podium {} is available", update.version);
-                        const MAX_NOTES_LEN: usize = 1500;
-                        let notes = match update.body.as_deref().map(str::trim) {
-                            Some(notes) if !notes.is_empty() => {
-                                if notes.len() > MAX_NOTES_LEN {
-                                    let mut truncated =
-                                        notes.chars().take(MAX_NOTES_LEN).collect::<String>();
-                                    truncated.push_str("…");
-                                    truncated
-                                } else {
-                                    notes.to_string()
-                                }
-                            }
-                            _ => "A new version of Podium is available.".to_string(),
-                        };
-                        let body = format!("{notes}\n\nInstall it now?");
-
-                        // Dialogs must not be built/shown from inside an
-                        // async task's own thread in a way that blocks the
-                        // async runtime — `blocking_show` parks the current
-                        // OS thread, which is fine here because this closure
-                        // runs on a dedicated tokio blocking-friendly worker
-                        // via `spawn`, not on the main UI thread.
-                        let confirmed = updater_handle
-                            .dialog()
-                            .message(body)
-                            .title(title)
-                            .buttons(MessageDialogButtons::OkCancelCustom(
-                                "Install Now".to_string(),
-                                "Later".to_string(),
-                            ))
-                            .blocking_show();
-
-                        if !confirmed {
-                            // "Later" — do nothing, we'll offer again next launch.
-                            return;
-                        }
-
-                        if let Err(err) = updater_handle
-                            .notification()
-                            .builder()
-                            .title("Podium")
-                            .body("Downloading update…")
-                            .show()
-                        {
-                            eprintln!("updater: failed to show notification: {err}");
-                        }
-                        if let Err(err) =
-                            update.download_and_install(|_, _| {}, || {}).await
-                        {
-                            eprintln!("updater: download_and_install failed: {err}");
-                            return;
-                        }
-                        updater_handle.restart();
-                    }
-                    Ok(None) => {
-                        // Already up to date — nothing to do.
-                    }
-                    Err(err) => {
-                        eprintln!("updater: check failed (non-fatal): {err}");
-                    }
+            // PREVIEW MODE: PODIUM_UPDATER_PREVIEW=1 skips the real update
+            // check entirely (there's rarely a newer release to find in
+            // dev) and stashes a synthetic update + opens the window
+            // immediately, so the custom window/changelog/progress-bar can
+            // be exercised locally without a real GitHub release. Never
+            // installs anything for real — see `updater_install`'s `None`
+            // branch. PODIUM_UPDATER_PREVIEW_THEME=light|dark additionally
+            // forces `updater_get_info`'s theme (instead of fetching it from
+            // the server) so the window's dark rendering can be verified
+            // without the full server+dashboard stack running — only
+            // honored alongside PODIUM_UPDATER_PREVIEW=1 (see
+            // `updater_get_info`).
+            if std::env::var("PODIUM_UPDATER_PREVIEW").as_deref() == Ok("1") {
+                let sample_notes = "## Podium 9.9.9\n\n\
+                    This is a **preview** of the custom updater window, not a real release.\n\n\
+                    - Rendered changelog instead of a plain native dialog\n\
+                    - Live download progress bar\n\
+                    - Still dark/gold, still uncluttered\n\n\
+                    See the [release notes](https://example.com) for more.";
+                let notes_html = render_markdown_to_html(sample_notes);
+                *app.state::<PendingUpdateState>().0.lock().unwrap() = Some(PendingUpdate {
+                    version: "9.9.9".to_string(),
+                    notes_html,
+                    update: None,
+                });
+                let preview_handle = app.handle().clone();
+                if let Err(err) = create_updater_window(&preview_handle) {
+                    eprintln!("updater: failed to create preview updater window: {err}");
                 }
-            });
+            } else {
+                let updater_handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    let update = match updater_handle.updater() {
+                        Ok(updater) => updater.check().await,
+                        Err(err) => {
+                            eprintln!("updater: failed to construct updater instance: {err}");
+                            return;
+                        }
+                    };
+                    match update {
+                        Ok(Some(update)) => {
+                            // Render the changelog (update.body, from the
+                            // updater manifest's `notes` field) to HTML and
+                            // show it in our custom updater window instead
+                            // of a plain native dialog — the user decides
+                            // whether to update now or be asked again next
+                            // launch.
+                            let version = update.version.clone();
+                            let notes_html = render_markdown_to_html(
+                                update
+                                    .body
+                                    .as_deref()
+                                    .unwrap_or("A new version of Podium is available."),
+                            );
+                            *updater_handle.state::<PendingUpdateState>().0.lock().unwrap() =
+                                Some(PendingUpdate {
+                                    version,
+                                    notes_html,
+                                    update: Some(update),
+                                });
+                            if let Err(err) = create_updater_window(&updater_handle) {
+                                eprintln!(
+                                    "updater: failed to create updater window: {err}"
+                                );
+                            }
+                        }
+                        Ok(None) => {
+                            // Already up to date — nothing to do.
+                        }
+                        Err(err) => {
+                            eprintln!("updater: check failed (non-fatal): {err}");
+                        }
+                    }
+                });
+            }
 
             let target_port = port();
             app.state::<ActivePort>().0.store(target_port, Ordering::SeqCst);

@@ -11,10 +11,12 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = ["macos-private-api", "tray-icon", "image-png"] }
 tauri-plugin-shell = "2"
 tauri-plugin-notification = "2"
-tauri-plugin-dialog = "2"
 # T2.3: native auto-updater — checks tauri.conf.json's plugins.updater
 # endpoint (latest.json) and installs signed updater artifacts.
 tauri-plugin-updater = "2"
+# Renders the updater window's changelog (release-notes markdown -> HTML)
+# for the custom on-brand update window (main.rs render_markdown_to_html).
+pulldown-cmark = "0.12"
 # Opens external links (A2: sidebar GitHub link, any target="_blank" anchor)
 # in the OS browser — tauri-plugin-shell's `Shell::open` is deprecated in
 # favor of this.

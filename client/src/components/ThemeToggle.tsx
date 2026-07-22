@@ -22,6 +22,19 @@ function readInitialDark(): boolean {
   }
 }
 
+// Mirrors the theme to the server so the Tauri shell's custom updater window
+// (a separate `tauri://` origin that can't read this page's localStorage or
+// invoke app commands cross-origin) can match it — see
+// server/routes/settings.js's GET/PUT /api/settings/ui-theme. Best-effort:
+// a failed write must never break the toggle itself.
+function reportThemeToServer(isDark: boolean) {
+  fetch("/api/settings/ui-theme", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ theme: isDark ? "dark" : "light" }),
+  }).catch(() => {});
+}
+
 interface ThemeToggleProps {
   /** When true, render icon-only (sidebar collapsed). */
   collapsed: boolean;
@@ -38,6 +51,7 @@ export function ThemeToggle({ collapsed }: ThemeToggleProps) {
     const root = document.documentElement;
     if (isDark) root.classList.add("dark");
     else root.classList.remove("dark");
+    reportThemeToServer(isDark);
   }, [isDark]);
 
   const toggle = useCallback(() => {

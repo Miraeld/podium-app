@@ -159,7 +159,14 @@ function extractToken(req) {
 //   /health, /openapi.json, /docs — harmless metadata / docs.
 //   /hooks  — local Claude Code hook ingestion (the hook handler posts to
 //             loopback and carries no token); loopback bind already protects it.
-const TOKEN_EXEMPT_PREFIXES = ["/health", "/openapi.json", "/docs", "/hooks"];
+//   /settings/ui-theme — the Tauri shell's Rust side reads this (GET) to
+//             paint the custom updater window, and Tauri commands can't
+//             carry the dashboard's bearer token. The value is a cosmetic
+//             "light"|"dark" string with no sensitive content, and the
+//             server already binds loopback-only by default (P1), so an
+//             unauthenticated local read/write here is an acceptable
+//             tradeoff — same reasoning as the /hooks exemption above.
+const TOKEN_EXEMPT_PREFIXES = ["/health", "/openapi.json", "/docs", "/hooks", "/settings/ui-theme"];
 
 /**
  * Express middleware (mount at "/api"): when DASHBOARD_TOKEN is set, require a
