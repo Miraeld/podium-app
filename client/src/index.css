@@ -1,7 +1,12 @@
 /**
  * @file index.css
  * @description Aurora Glass design system — frosted glass cards, drifting gradient orbs,
- *   gold signal pulses on live agents. WP Media gold #FED23A on deep navy #0A0C14.
+ *   signal pulses on live agents. Theming is two orthogonal axes: light/dark (`.dark` on
+ *   `<html>`) and a preset (`data-preset` on `<html>`) that swaps the accent/glow "voice"
+ *   while structure (surfaces, text, borders) stays shared. Podium Gold (WP Media gold
+ *   #FED23A on deep navy #0A0C14) is the default preset and needs no attribute — it lives
+ *   in the bare `:root` / `.dark` blocks below. Additional presets add
+ *   `[data-preset="name"]` / `[data-preset="name"].dark` override blocks.
  * @author WP Media
  */
 
@@ -23,11 +28,21 @@
 
 /* ── Theme tokens ──────────────────────────────────────────
  * Space-separated RGB channels so Tailwind's opacity modifiers work.
+ *
+ * Two groups, both live in :root / .dark:
+ *   STRUCTURE — surfaces, text, borders, base card-shadows. Shared by every
+ *     preset; a preset may still override a few surfaces for its own body
+ *     tone (e.g. Sage's graphite), but never the accent/glow identity.
+ *   VOICE — --accent*, --orb-*, --glass-border-hover, --accent-glow*,
+ *     --sweep-*, --card-top-line, --logo-shadow, and the handful of
+ *     previously-hardcoded accent shadows (--header-glow, --nav-active-*,
+ *     --sidebar-edge-shadow, --selection-bg, --input-focus-*, --page-glow-
+ *     gradient). This is what a preset overrides wholesale.
  * ──────────────────────────────────────────────────────── */
 
 /* ── Light theme (default) ─────────────────────────────── */
 :root {
-  /* Page canvas */
+  /* ── Structure (shared base) ── */
   --surface-0: 242 243 248;
   --surface-1: 252 252 255;
   --surface-2: 255 255 255;
@@ -42,6 +57,10 @@
   --text-muted: 90 94 114;
   --text-dim: 138 142 162;
 
+  --card-shadow: 0 1px 4px rgba(0, 0, 0, 0.05), 0 4px 16px rgba(0, 0, 0, 0.04);
+  --card-shadow-hover: 0 8px 32px rgba(0, 0, 0, 0.10), 0 2px 8px rgba(0, 0, 0, 0.06);
+
+  /* ── Voice: Podium Gold (default preset) ── */
   --accent: 254 210 58;
   --accent-hover: 224 187 43;
   --accent-muted: rgba(254, 210, 58, 0.12);
@@ -52,15 +71,15 @@
   --glass-border: rgba(0, 0, 0, 0.065);
   --glass-border-hover: rgba(37, 99, 235, 0.40);
 
-  /* Aurora orbs — WP Media blue palette in light mode */
-  --orb-gold:  rgba(99, 102, 241, 0.29);
-  --orb-indigo: rgba(254, 210, 58, 0.32);
-  --orb-amber: rgba(251, 146, 60, 0.2);
-  /* Shadows */
-  --card-shadow: 0 1px 4px rgba(0, 0, 0, 0.05), 0 4px 16px rgba(0, 0, 0, 0.04);
-  --card-shadow-hover: 0 8px 32px rgba(0, 0, 0, 0.10), 0 2px 8px rgba(0, 0, 0, 0.06);
-  --gold-glow: 0 0 0 1px rgba(254, 210, 58, 0.35), 0 4px 20px rgba(254, 210, 58, 0.18);
-  --gold-glow-strong: 0 0 0 1.5px rgba(254, 210, 58, 0.50), 0 6px 28px rgba(254, 210, 58, 0.25);
+  /* Aurora orbs — WP Media blue palette in light mode. Softened (calm, not
+     "the sun hitting the screen") per user feedback. */
+  --orb-gold:  rgba(99, 102, 241, 0.18);
+  --orb-indigo: rgba(254, 210, 58, 0.20);
+  --orb-amber: rgba(251, 146, 60, 0.13);
+
+  /* Accent glow — softened alongside the orbs (was 0.35/0.18 and 0.50/0.25) */
+  --accent-glow: 0 0 0 1px rgba(254, 210, 58, 0.22), 0 4px 16px rgba(254, 210, 58, 0.11);
+  --accent-glow-strong: 0 0 0 1.5px rgba(254, 210, 58, 0.32), 0 6px 22px rgba(254, 210, 58, 0.16);
 
   /* Card top accent line — WP Media navy in light mode */
   --card-top-line: linear-gradient(90deg, transparent 5%, rgba(10, 12, 20, 0.18) 30%, rgba(10, 12, 20, 0.18) 70%, transparent 95%);
@@ -71,10 +90,24 @@
 
   /* Sidebar logo glow — strong blue in light mode */
   --logo-shadow: 0 0 20px 4px rgba(37, 99, 235, 0.55), 0 2px 8px rgba(0, 0, 0, 0.18);
+
+  /* Page header glow, active nav pill, sidebar edge, text selection, input
+     focus ring, ambient page-background wash — previously hardcoded gold,
+     now tokenized so a preset can carry them too. */
+  --header-glow: 0px 7px 28px -2px rgba(254, 210, 58, 0.16), 0px 0px 0 rgba(254, 210, 58, 0.10);
+  --nav-active-bg: rgba(254, 210, 58, 0.15);
+  --nav-active-border: rgba(254, 210, 58, 0.45);
+  --nav-active-glow: 0 0 14px -4px rgba(254, 210, 58, 0.20);
+  --sidebar-edge-shadow: 4px 0 24px rgba(10, 12, 20, 0.12), 1px 0 0 rgba(10, 12, 20, 0.06);
+  --selection-bg: rgba(254, 210, 58, 0.28);
+  --input-focus-border: rgba(254, 210, 58, 0.55);
+  --input-focus-shadow: 0 0 0 3px rgba(254, 210, 58, 0.12);
+  --page-glow-gradient: linear-gradient(155deg, rgba(37, 99, 235, 0.05) 0%, transparent 38%, rgba(99, 102, 241, 0.04) 100%);
 }
 
 /* ── Dark theme — deep navy, gold pops ─────────────────── */
 .dark {
+  /* ── Structure (shared base) ── */
   --surface-0: 10 12 20;
   --surface-1: 13 16 26;
   --surface-2: 17 20 32;
@@ -89,6 +122,10 @@
   --text-muted: 148 154 178;
   --text-dim: 90 98 124;
 
+  --card-shadow: 0 2px 8px rgba(0, 0, 0, 0.32), 0 1px 2px rgba(0, 0, 0, 0.20);
+  --card-shadow-hover: 0 8px 32px rgba(0, 0, 0, 0.50), 0 2px 8px rgba(0, 0, 0, 0.30);
+
+  /* ── Voice: Podium Gold (default preset) ── */
   --accent: 254 210 58;
   --accent-hover: 255 223 90;
   --accent-muted: rgba(254, 210, 58, 0.12);
@@ -99,16 +136,15 @@
   --glass-border: rgba(255, 255, 255, 0.055);
   --glass-border-hover: rgba(254, 210, 58, 0.40);
 
-  /* Aurora orbs — cinematic in dark mode */
-  --orb-gold: rgba(254, 210, 58, 0.32);
-  --orb-indigo: rgba(99, 102, 241, 0.29);
-  --orb-amber: rgba(251, 146, 60, 0.2);
+  /* Aurora orbs — cinematic in dark mode, softened per user feedback
+     (was 0.32/0.29/0.2) */
+  --orb-gold: rgba(254, 210, 58, 0.19);
+  --orb-indigo: rgba(99, 102, 241, 0.18);
+  --orb-amber: rgba(251, 146, 60, 0.13);
 
-  /* Shadows */
-  --card-shadow: 0 2px 8px rgba(0, 0, 0, 0.32), 0 1px 2px rgba(0, 0, 0, 0.20);
-  --card-shadow-hover: 0 8px 32px rgba(0, 0, 0, 0.50), 0 2px 8px rgba(0, 0, 0, 0.30);
-  --gold-glow: 0 0 0 1px rgba(254, 210, 58, 0.35), 0 4px 20px rgba(254, 210, 58, 0.20);
-  --gold-glow-strong: 0 0 0 1.5px rgba(254, 210, 58, 0.55), 0 8px 32px rgba(254, 210, 58, 0.28);
+  /* Accent glow — softened alongside the orbs (was 0.35/0.20 and 0.55/0.28) */
+  --accent-glow: 0 0 0 1px rgba(254, 210, 58, 0.22), 0 4px 16px rgba(254, 210, 58, 0.12);
+  --accent-glow-strong: 0 0 0 1.5px rgba(254, 210, 58, 0.35), 0 8px 24px rgba(254, 210, 58, 0.18);
 
   /* Card top accent line — gold in dark mode */
   --card-top-line: linear-gradient(90deg, transparent 5%, rgba(254, 210, 58, 0.55) 30%, rgba(254, 210, 58, 0.55) 70%, transparent 95%);
@@ -119,6 +155,605 @@
 
   /* Sidebar logo glow — strong gold in dark mode */
   --logo-shadow: 0 0 20px 4px rgba(201, 162, 39, 0.60), 0 2px 8px rgba(0, 0, 0, 0.40);
+
+  --header-glow: 0px 7px 28px -2px rgba(254, 210, 58, 0.16), 0px 0px 0 rgba(254, 210, 58, 0.10);
+  --nav-active-bg: rgba(254, 210, 58, 0.15);
+  --nav-active-border: rgba(254, 210, 58, 0.45);
+  --nav-active-glow: 0 0 16px -4px rgba(254, 210, 58, 0.30);
+  --sidebar-edge-shadow: 4px 0 28px -2px rgba(254, 210, 58, 0.16), 1px 0 0 rgba(254, 210, 58, 0.10);
+  --selection-bg: rgba(254, 210, 58, 0.28);
+  --input-focus-border: rgba(254, 210, 58, 0.55);
+  --input-focus-shadow: 0 0 0 3px rgba(254, 210, 58, 0.12);
+  --page-glow-gradient: linear-gradient(155deg, rgba(254, 210, 58, 0.05) 0%, transparent 40%, rgba(99, 102, 241, 0.04) 100%);
+}
+
+/* ── Preset: Quiet Sage Glass ───────────────────────────────
+ * Muted, grown-up, desaturated — sage as an ACCENT over graphite/glass, not
+ * a green app. Accent inverts weight: deeper in light, faded in dark. Low-
+ * opacity ambient glow only, no neon, no pure black/white.
+ * ──────────────────────────────────────────────────────── */
+[data-preset="sage"] {
+  /* Structure overrides — off-white sage-tinted surfaces */
+  --surface-0: 240 242 239;
+  --surface-1: 247 248 246;
+  --surface-2: 251 252 250;
+  --surface-3: 238 240 236;
+  --surface-4: 230 233 228;
+  --surface-5: 219 223 216;
+  --border: 213 219 213;
+  --border-light: 226 231 225;
+
+  /* Voice — accent: light #42734F */
+  --accent: 66 115 79;
+  --accent-hover: 92 135 105;
+  --accent-muted: rgba(66, 115, 79, 0.12);
+
+  --glass-card: rgba(251, 252, 250, 0.70);
+  --glass-sidebar: rgba(244, 246, 243, 0.84);
+  --glass-border: color-mix(in srgb, currentColor 10%, transparent);
+  --glass-border-hover: rgba(66, 115, 79, 0.35);
+
+  --orb-gold: rgba(92, 135, 105, 0.14);
+  --orb-indigo: rgba(66, 115, 79, 0.16);
+  --orb-amber: rgba(107, 145, 120, 0.10);
+
+  --accent-glow: 0 0 0 1px rgba(66, 115, 79, 0.18), 0 4px 14px rgba(66, 115, 79, 0.10);
+  --accent-glow-strong: 0 0 0 1.5px rgba(66, 115, 79, 0.28), 0 6px 20px rgba(66, 115, 79, 0.14);
+
+  --card-top-line: linear-gradient(90deg, transparent 5%, rgba(66, 115, 79, 0.22) 30%, rgba(66, 115, 79, 0.22) 70%, transparent 95%);
+
+  --sweep-color-mid: rgba(66, 115, 79, 0.28);
+  --sweep-color-bright: rgba(66, 115, 79, 0.50);
+
+  /* Fixed sage mark #6B9178 — used for the non-adaptive logo glow */
+  --logo-shadow: 0 0 16px 3px rgba(107, 145, 120, 0.40), 0 2px 8px rgba(0, 0, 0, 0.18);
+
+  --header-glow: 0px 6px 22px -2px rgba(66, 115, 79, 0.14), 0px 0px 0 rgba(66, 115, 79, 0.08);
+  --nav-active-bg: rgba(66, 115, 79, 0.12);
+  --nav-active-border: rgba(66, 115, 79, 0.35);
+  --nav-active-glow: 0 0 12px -4px rgba(66, 115, 79, 0.18);
+  --sidebar-edge-shadow: 4px 0 22px rgba(20, 26, 22, 0.10), 1px 0 0 rgba(20, 26, 22, 0.05);
+  --selection-bg: rgba(66, 115, 79, 0.22);
+  --input-focus-border: rgba(66, 115, 79, 0.45);
+  --input-focus-shadow: 0 0 0 3px rgba(66, 115, 79, 0.12);
+  --page-glow-gradient: linear-gradient(155deg, rgba(66, 115, 79, 0.05) 0%, transparent 38%, rgba(92, 135, 105, 0.04) 100%);
+}
+
+[data-preset="sage"].dark {
+  /* Structure overrides — graphite bodies, never pure black */
+  --surface-0: 20 23 21;
+  --surface-1: 24 27 25;
+  --surface-2: 29 33 30;
+  --surface-3: 36 41 37;
+  --surface-4: 45 51 46;
+  --surface-5: 56 63 57;
+  --border: 42 48 43;
+  --border-light: 54 61 55;
+
+  /* Voice — accent: dark #99BD9E (faded, inverted weight from light) */
+  --accent: 153 189 158;
+  --accent-hover: 170 201 175;
+  --accent-muted: rgba(153, 189, 158, 0.12);
+
+  --glass-card: rgba(29, 33, 30, 0.58);
+  --glass-sidebar: rgba(22, 26, 23, 0.82);
+  --glass-border: color-mix(in srgb, currentColor 10%, transparent);
+  --glass-border-hover: rgba(153, 189, 158, 0.35);
+
+  --orb-gold: rgba(153, 189, 158, 0.16);
+  --orb-indigo: rgba(128, 163, 135, 0.14);
+  --orb-amber: rgba(107, 145, 120, 0.10);
+
+  --accent-glow: 0 0 0 1px rgba(153, 189, 158, 0.20), 0 4px 16px rgba(153, 189, 158, 0.12);
+  --accent-glow-strong: 0 0 0 1.5px rgba(153, 189, 158, 0.30), 0 8px 22px rgba(153, 189, 158, 0.16);
+
+  --card-top-line: linear-gradient(90deg, transparent 5%, rgba(153, 189, 158, 0.40) 30%, rgba(153, 189, 158, 0.40) 70%, transparent 95%);
+
+  --sweep-color-mid: rgba(153, 189, 158, 0.30);
+  --sweep-color-bright: rgba(153, 189, 158, 0.55);
+
+  /* Fixed sage mark #6B9178 — same non-adaptive glow as light */
+  --logo-shadow: 0 0 16px 3px rgba(107, 145, 120, 0.45), 0 2px 8px rgba(0, 0, 0, 0.40);
+
+  --header-glow: 0px 6px 22px -2px rgba(153, 189, 158, 0.14), 0px 0px 0 rgba(153, 189, 158, 0.08);
+  --nav-active-bg: rgba(153, 189, 158, 0.14);
+  --nav-active-border: rgba(153, 189, 158, 0.40);
+  --nav-active-glow: 0 0 14px -4px rgba(153, 189, 158, 0.26);
+  --sidebar-edge-shadow: 4px 0 26px -2px rgba(153, 189, 158, 0.14), 1px 0 0 rgba(153, 189, 158, 0.08);
+  --selection-bg: rgba(153, 189, 158, 0.24);
+  --input-focus-border: rgba(153, 189, 158, 0.50);
+  --input-focus-shadow: 0 0 0 3px rgba(153, 189, 158, 0.12);
+  --page-glow-gradient: linear-gradient(155deg, rgba(153, 189, 158, 0.05) 0%, transparent 40%, rgba(128, 163, 135, 0.04) 100%);
+}
+
+/* ── Preset: Dusk Lavender ───────────────────────────────
+ * Twilight violet accent over the shared graphite glass. Same Quiet-Glass recipe as sage — accent inverts weight
+ * (deeper in light, faded in dark), low-opacity ambient glow, no neon.
+ * ──────────────────────────────────────────────────────── */
+[data-preset="lavender"] {
+  /* Structure overrides — off-white lavender-tinted surfaces */
+  --surface-0: 242 240 247;
+  --surface-1: 249 247 253;
+  --surface-2: 253 251 255;
+  --surface-3: 240 238 245;
+  --surface-4: 232 230 237;
+  --surface-5: 221 220 227;
+  --border: 216 215 224;
+  --border-light: 228 227 235;
+
+  /* Voice — accent: light #635C8C */
+  --accent: 99 92 140;
+  --accent-hover: 81 75 115;
+  --accent-muted: rgba(99, 92, 140, 0.12);
+
+  --glass-card: rgba(253, 251, 255, 0.7);
+  --glass-sidebar: rgba(249, 247, 253, 0.84);
+  --glass-border: color-mix(in srgb, currentColor 10%, transparent);
+  --glass-border-hover: rgba(99, 92, 140, 0.35);
+
+  --orb-gold: rgba(130, 122, 168, 0.14);
+  --orb-indigo: rgba(99, 92, 140, 0.16);
+  --orb-amber: rgba(138, 129, 177, 0.1);
+
+  --accent-glow: 0 0 0 1px rgba(99, 92, 140, 0.18), 0 4px 14px rgba(99, 92, 140, 0.1);
+  --accent-glow-strong: 0 0 0 1.5px rgba(99, 92, 140, 0.28), 0 6px 20px rgba(99, 92, 140, 0.14);
+
+  --card-top-line: linear-gradient(90deg, transparent 5%, rgba(99, 92, 140, 0.22) 30%, rgba(99, 92, 140, 0.22) 70%, transparent 95%);
+
+  --sweep-color-mid: rgba(99, 92, 140, 0.28);
+  --sweep-color-bright: rgba(99, 92, 140, 0.5);
+
+  /* Fixed lavender mark #8A81B1 — used for the non-adaptive logo glow */
+  --logo-shadow: 0 0 16px 3px rgba(138, 129, 177, 0.4), 0 2px 8px rgba(0, 0, 0, 0.18);
+
+  --header-glow: 0px 6px 22px -2px rgba(99, 92, 140, 0.14), 0px 0px 0 rgba(99, 92, 140, 0.08);
+  --nav-active-bg: rgba(99, 92, 140, 0.12);
+  --nav-active-border: rgba(99, 92, 140, 0.35);
+  --nav-active-glow: 0 0 12px -4px rgba(99, 92, 140, 0.18);
+  --sidebar-edge-shadow: 4px 0 22px rgba(28, 26, 39, 0.1), 1px 0 0 rgba(28, 26, 39, 0.05);
+  --selection-bg: rgba(99, 92, 140, 0.22);
+  --input-focus-border: rgba(99, 92, 140, 0.45);
+  --input-focus-shadow: 0 0 0 3px rgba(99, 92, 140, 0.12);
+  --page-glow-gradient: linear-gradient(155deg, rgba(99, 92, 140, 0.05) 0%, transparent 38%, rgba(130, 122, 168, 0.04) 100%);
+}
+
+[data-preset="lavender"].dark {
+  /* Structure overrides — graphite bodies, never pure black */
+  --surface-0: 21 21 27;
+  --surface-1: 25 25 31;
+  --surface-2: 30 30 37;
+  --surface-3: 37 38 45;
+  --surface-4: 46 47 55;
+  --surface-5: 57 59 67;
+  --border: 43 44 52;
+  --border-light: 55 57 65;
+
+  /* Voice — accent: dark #B0A6D6 (faded, inverted weight from light) */
+  --accent: 176 166 214;
+  --accent-hover: 192 182 230;
+  --accent-muted: rgba(176, 166, 214, 0.12);
+
+  --glass-card: rgba(30, 30, 37, 0.58);
+  --glass-sidebar: rgba(21, 21, 27, 0.82);
+  --glass-border: color-mix(in srgb, currentColor 10%, transparent);
+  --glass-border-hover: rgba(176, 166, 214, 0.35);
+
+  --orb-gold: rgba(176, 166, 214, 0.16);
+  --orb-indigo: rgba(150, 140, 190, 0.14);
+  --orb-amber: rgba(138, 129, 177, 0.1);
+
+  --accent-glow: 0 0 0 1px rgba(176, 166, 214, 0.2), 0 4px 16px rgba(176, 166, 214, 0.12);
+  --accent-glow-strong: 0 0 0 1.5px rgba(176, 166, 214, 0.3), 0 8px 22px rgba(176, 166, 214, 0.16);
+
+  --card-top-line: linear-gradient(90deg, transparent 5%, rgba(176, 166, 214, 0.4) 30%, rgba(176, 166, 214, 0.4) 70%, transparent 95%);
+
+  --sweep-color-mid: rgba(176, 166, 214, 0.3);
+  --sweep-color-bright: rgba(176, 166, 214, 0.55);
+
+  /* Fixed lavender mark #8A81B1 — same non-adaptive glow as light */
+  --logo-shadow: 0 0 16px 3px rgba(138, 129, 177, 0.45), 0 2px 8px rgba(0, 0, 0, 0.40);
+
+  --header-glow: 0px 6px 22px -2px rgba(176, 166, 214, 0.14), 0px 0px 0 rgba(176, 166, 214, 0.08);
+  --nav-active-bg: rgba(176, 166, 214, 0.14);
+  --nav-active-border: rgba(176, 166, 214, 0.4);
+  --nav-active-glow: 0 0 14px -4px rgba(176, 166, 214, 0.26);
+  --sidebar-edge-shadow: 4px 0 26px -2px rgba(176, 166, 214, 0.14), 1px 0 0 rgba(176, 166, 214, 0.08);
+  --selection-bg: rgba(176, 166, 214, 0.24);
+  --input-focus-border: rgba(176, 166, 214, 0.5);
+  --input-focus-shadow: 0 0 0 3px rgba(176, 166, 214, 0.12);
+  --page-glow-gradient: linear-gradient(155deg, rgba(176, 166, 214, 0.05) 0%, transparent 40%, rgba(150, 140, 190, 0.04) 100%);
+}
+
+/* ── Preset: Harbor Slate ───────────────────────────────
+ * Cool blue-graphite accent over the shared graphite glass. Same Quiet-Glass recipe as sage — accent inverts weight
+ * (deeper in light, faded in dark), low-opacity ambient glow, no neon.
+ * ──────────────────────────────────────────────────────── */
+[data-preset="slate"] {
+  /* Structure overrides — off-white slate-tinted surfaces */
+  --surface-0: 238 241 246;
+  --surface-1: 245 248 252;
+  --surface-2: 249 252 255;
+  --surface-3: 236 239 244;
+  --surface-4: 228 231 236;
+  --surface-5: 217 221 226;
+  --border: 212 216 223;
+  --border-light: 224 228 234;
+
+  /* Voice — accent: light #3D6488 */
+  --accent: 61 100 136;
+  --accent-hover: 50 82 112;
+  --accent-muted: rgba(61, 100, 136, 0.12);
+
+  --glass-card: rgba(249, 252, 255, 0.7);
+  --glass-sidebar: rgba(245, 248, 252, 0.84);
+  --glass-border: color-mix(in srgb, currentColor 10%, transparent);
+  --glass-border-hover: rgba(61, 100, 136, 0.35);
+
+  --orb-gold: rgba(92, 128, 160, 0.14);
+  --orb-indigo: rgba(61, 100, 136, 0.16);
+  --orb-amber: rgba(102, 140, 174, 0.1);
+
+  --accent-glow: 0 0 0 1px rgba(61, 100, 136, 0.18), 0 4px 14px rgba(61, 100, 136, 0.1);
+  --accent-glow-strong: 0 0 0 1.5px rgba(61, 100, 136, 0.28), 0 6px 20px rgba(61, 100, 136, 0.14);
+
+  --card-top-line: linear-gradient(90deg, transparent 5%, rgba(61, 100, 136, 0.22) 30%, rgba(61, 100, 136, 0.22) 70%, transparent 95%);
+
+  --sweep-color-mid: rgba(61, 100, 136, 0.28);
+  --sweep-color-bright: rgba(61, 100, 136, 0.5);
+
+  /* Fixed slate mark #668CAE — used for the non-adaptive logo glow */
+  --logo-shadow: 0 0 16px 3px rgba(102, 140, 174, 0.4), 0 2px 8px rgba(0, 0, 0, 0.18);
+
+  --header-glow: 0px 6px 22px -2px rgba(61, 100, 136, 0.14), 0px 0px 0 rgba(61, 100, 136, 0.08);
+  --nav-active-bg: rgba(61, 100, 136, 0.12);
+  --nav-active-border: rgba(61, 100, 136, 0.35);
+  --nav-active-glow: 0 0 12px -4px rgba(61, 100, 136, 0.18);
+  --sidebar-edge-shadow: 4px 0 22px rgba(17, 28, 38, 0.1), 1px 0 0 rgba(17, 28, 38, 0.05);
+  --selection-bg: rgba(61, 100, 136, 0.22);
+  --input-focus-border: rgba(61, 100, 136, 0.45);
+  --input-focus-shadow: 0 0 0 3px rgba(61, 100, 136, 0.12);
+  --page-glow-gradient: linear-gradient(155deg, rgba(61, 100, 136, 0.05) 0%, transparent 38%, rgba(92, 128, 160, 0.04) 100%);
+}
+
+[data-preset="slate"].dark {
+  /* Structure overrides — graphite bodies, never pure black */
+  --surface-0: 19 22 27;
+  --surface-1: 23 26 31;
+  --surface-2: 28 31 37;
+  --surface-3: 35 39 45;
+  --surface-4: 44 48 55;
+  --surface-5: 55 60 67;
+  --border: 41 45 52;
+  --border-light: 53 58 65;
+
+  /* Voice — accent: dark #8FB4D4 (faded, inverted weight from light) */
+  --accent: 143 180 212;
+  --accent-hover: 159 196 228;
+  --accent-muted: rgba(143, 180, 212, 0.12);
+
+  --glass-card: rgba(28, 31, 37, 0.58);
+  --glass-sidebar: rgba(19, 22, 27, 0.82);
+  --glass-border: color-mix(in srgb, currentColor 10%, transparent);
+  --glass-border-hover: rgba(143, 180, 212, 0.35);
+
+  --orb-gold: rgba(143, 180, 212, 0.16);
+  --orb-indigo: rgba(118, 156, 190, 0.14);
+  --orb-amber: rgba(102, 140, 174, 0.1);
+
+  --accent-glow: 0 0 0 1px rgba(143, 180, 212, 0.2), 0 4px 16px rgba(143, 180, 212, 0.12);
+  --accent-glow-strong: 0 0 0 1.5px rgba(143, 180, 212, 0.3), 0 8px 22px rgba(143, 180, 212, 0.16);
+
+  --card-top-line: linear-gradient(90deg, transparent 5%, rgba(143, 180, 212, 0.4) 30%, rgba(143, 180, 212, 0.4) 70%, transparent 95%);
+
+  --sweep-color-mid: rgba(143, 180, 212, 0.3);
+  --sweep-color-bright: rgba(143, 180, 212, 0.55);
+
+  /* Fixed slate mark #668CAE — same non-adaptive glow as light */
+  --logo-shadow: 0 0 16px 3px rgba(102, 140, 174, 0.45), 0 2px 8px rgba(0, 0, 0, 0.40);
+
+  --header-glow: 0px 6px 22px -2px rgba(143, 180, 212, 0.14), 0px 0px 0 rgba(143, 180, 212, 0.08);
+  --nav-active-bg: rgba(143, 180, 212, 0.14);
+  --nav-active-border: rgba(143, 180, 212, 0.4);
+  --nav-active-glow: 0 0 14px -4px rgba(143, 180, 212, 0.26);
+  --sidebar-edge-shadow: 4px 0 26px -2px rgba(143, 180, 212, 0.14), 1px 0 0 rgba(143, 180, 212, 0.08);
+  --selection-bg: rgba(143, 180, 212, 0.24);
+  --input-focus-border: rgba(143, 180, 212, 0.5);
+  --input-focus-shadow: 0 0 0 3px rgba(143, 180, 212, 0.12);
+  --page-glow-gradient: linear-gradient(155deg, rgba(143, 180, 212, 0.05) 0%, transparent 40%, rgba(118, 156, 190, 0.04) 100%);
+}
+
+/* ── Preset: Muted Tide ───────────────────────────────
+ * Soft spa-teal accent over the shared graphite glass. Same Quiet-Glass recipe as sage — accent inverts weight
+ * (deeper in light, faded in dark), low-opacity ambient glow, no neon.
+ * ──────────────────────────────────────────────────────── */
+[data-preset="tide"] {
+  /* Structure overrides — off-white tide-tinted surfaces */
+  --surface-0: 237 243 244;
+  --surface-1: 244 250 250;
+  --surface-2: 248 254 254;
+  --surface-3: 235 241 242;
+  --surface-4: 227 233 234;
+  --surface-5: 216 223 224;
+  --border: 211 218 221;
+  --border-light: 223 230 232;
+
+  /* Voice — accent: light #2E7268 */
+  --accent: 46 114 104;
+  --accent-hover: 38 93 85;
+  --accent-muted: rgba(46, 114, 104, 0.12);
+
+  --glass-card: rgba(248, 254, 254, 0.7);
+  --glass-sidebar: rgba(244, 250, 250, 0.84);
+  --glass-border: color-mix(in srgb, currentColor 10%, transparent);
+  --glass-border-hover: rgba(46, 114, 104, 0.35);
+
+  --orb-gold: rgba(86, 150, 140, 0.14);
+  --orb-indigo: rgba(46, 114, 104, 0.16);
+  --orb-amber: rgba(90, 152, 141, 0.1);
+
+  --accent-glow: 0 0 0 1px rgba(46, 114, 104, 0.18), 0 4px 14px rgba(46, 114, 104, 0.1);
+  --accent-glow-strong: 0 0 0 1.5px rgba(46, 114, 104, 0.28), 0 6px 20px rgba(46, 114, 104, 0.14);
+
+  --card-top-line: linear-gradient(90deg, transparent 5%, rgba(46, 114, 104, 0.22) 30%, rgba(46, 114, 104, 0.22) 70%, transparent 95%);
+
+  --sweep-color-mid: rgba(46, 114, 104, 0.28);
+  --sweep-color-bright: rgba(46, 114, 104, 0.5);
+
+  /* Fixed tide mark #5A988D — used for the non-adaptive logo glow */
+  --logo-shadow: 0 0 16px 3px rgba(90, 152, 141, 0.4), 0 2px 8px rgba(0, 0, 0, 0.18);
+
+  --header-glow: 0px 6px 22px -2px rgba(46, 114, 104, 0.14), 0px 0px 0 rgba(46, 114, 104, 0.08);
+  --nav-active-bg: rgba(46, 114, 104, 0.12);
+  --nav-active-border: rgba(46, 114, 104, 0.35);
+  --nav-active-glow: 0 0 12px -4px rgba(46, 114, 104, 0.18);
+  --sidebar-edge-shadow: 4px 0 22px rgba(13, 32, 29, 0.1), 1px 0 0 rgba(13, 32, 29, 0.05);
+  --selection-bg: rgba(46, 114, 104, 0.22);
+  --input-focus-border: rgba(46, 114, 104, 0.45);
+  --input-focus-shadow: 0 0 0 3px rgba(46, 114, 104, 0.12);
+  --page-glow-gradient: linear-gradient(155deg, rgba(46, 114, 104, 0.05) 0%, transparent 38%, rgba(86, 150, 140, 0.04) 100%);
+}
+
+[data-preset="tide"].dark {
+  /* Structure overrides — graphite bodies, never pure black */
+  --surface-0: 19 24 25;
+  --surface-1: 23 28 29;
+  --surface-2: 28 33 35;
+  --surface-3: 35 41 43;
+  --surface-4: 44 50 53;
+  --surface-5: 55 62 65;
+  --border: 41 47 50;
+  --border-light: 53 60 63;
+
+  /* Voice — accent: dark #85BEB2 (faded, inverted weight from light) */
+  --accent: 133 190 178;
+  --accent-hover: 149 206 194;
+  --accent-muted: rgba(133, 190, 178, 0.12);
+
+  --glass-card: rgba(28, 33, 35, 0.58);
+  --glass-sidebar: rgba(19, 24, 25, 0.82);
+  --glass-border: color-mix(in srgb, currentColor 10%, transparent);
+  --glass-border-hover: rgba(133, 190, 178, 0.35);
+
+  --orb-gold: rgba(133, 190, 178, 0.16);
+  --orb-indigo: rgba(110, 168, 156, 0.14);
+  --orb-amber: rgba(90, 152, 141, 0.1);
+
+  --accent-glow: 0 0 0 1px rgba(133, 190, 178, 0.2), 0 4px 16px rgba(133, 190, 178, 0.12);
+  --accent-glow-strong: 0 0 0 1.5px rgba(133, 190, 178, 0.3), 0 8px 22px rgba(133, 190, 178, 0.16);
+
+  --card-top-line: linear-gradient(90deg, transparent 5%, rgba(133, 190, 178, 0.4) 30%, rgba(133, 190, 178, 0.4) 70%, transparent 95%);
+
+  --sweep-color-mid: rgba(133, 190, 178, 0.3);
+  --sweep-color-bright: rgba(133, 190, 178, 0.55);
+
+  /* Fixed tide mark #5A988D — same non-adaptive glow as light */
+  --logo-shadow: 0 0 16px 3px rgba(90, 152, 141, 0.45), 0 2px 8px rgba(0, 0, 0, 0.40);
+
+  --header-glow: 0px 6px 22px -2px rgba(133, 190, 178, 0.14), 0px 0px 0 rgba(133, 190, 178, 0.08);
+  --nav-active-bg: rgba(133, 190, 178, 0.14);
+  --nav-active-border: rgba(133, 190, 178, 0.4);
+  --nav-active-glow: 0 0 14px -4px rgba(133, 190, 178, 0.26);
+  --sidebar-edge-shadow: 4px 0 26px -2px rgba(133, 190, 178, 0.14), 1px 0 0 rgba(133, 190, 178, 0.08);
+  --selection-bg: rgba(133, 190, 178, 0.24);
+  --input-focus-border: rgba(133, 190, 178, 0.5);
+  --input-focus-shadow: 0 0 0 3px rgba(133, 190, 178, 0.12);
+  --page-glow-gradient: linear-gradient(155deg, rgba(133, 190, 178, 0.05) 0%, transparent 40%, rgba(110, 168, 156, 0.04) 100%);
+}
+
+/* ── Preset: Warm Clay ───────────────────────────────
+ * Earthy terracotta accent over the shared graphite glass. Same Quiet-Glass recipe as sage — accent inverts weight
+ * (deeper in light, faded in dark), low-opacity ambient glow, no neon.
+ * ──────────────────────────────────────────────────────── */
+[data-preset="clay"] {
+  /* Structure overrides — off-white clay-tinted surfaces */
+  --surface-0: 244 241 240;
+  --surface-1: 251 248 246;
+  --surface-2: 255 252 250;
+  --surface-3: 242 239 238;
+  --surface-4: 234 231 230;
+  --surface-5: 223 221 220;
+  --border: 218 216 217;
+  --border-light: 230 228 228;
+
+  /* Voice — accent: light #A15D48 */
+  --accent: 161 93 72;
+  --accent-hover: 132 76 59;
+  --accent-muted: rgba(161, 93, 72, 0.12);
+
+  --glass-card: rgba(255, 252, 250, 0.7);
+  --glass-sidebar: rgba(251, 248, 246, 0.84);
+  --glass-border: color-mix(in srgb, currentColor 10%, transparent);
+  --glass-border-hover: rgba(161, 93, 72, 0.35);
+
+  --orb-gold: rgba(186, 128, 108, 0.14);
+  --orb-indigo: rgba(161, 93, 72, 0.16);
+  --orb-amber: rgba(186, 125, 104, 0.1);
+
+  --accent-glow: 0 0 0 1px rgba(161, 93, 72, 0.18), 0 4px 14px rgba(161, 93, 72, 0.1);
+  --accent-glow-strong: 0 0 0 1.5px rgba(161, 93, 72, 0.28), 0 6px 20px rgba(161, 93, 72, 0.14);
+
+  --card-top-line: linear-gradient(90deg, transparent 5%, rgba(161, 93, 72, 0.22) 30%, rgba(161, 93, 72, 0.22) 70%, transparent 95%);
+
+  --sweep-color-mid: rgba(161, 93, 72, 0.28);
+  --sweep-color-bright: rgba(161, 93, 72, 0.5);
+
+  /* Fixed clay mark #BA7D68 — used for the non-adaptive logo glow */
+  --logo-shadow: 0 0 16px 3px rgba(186, 125, 104, 0.4), 0 2px 8px rgba(0, 0, 0, 0.18);
+
+  --header-glow: 0px 6px 22px -2px rgba(161, 93, 72, 0.14), 0px 0px 0 rgba(161, 93, 72, 0.08);
+  --nav-active-bg: rgba(161, 93, 72, 0.12);
+  --nav-active-border: rgba(161, 93, 72, 0.35);
+  --nav-active-glow: 0 0 12px -4px rgba(161, 93, 72, 0.18);
+  --sidebar-edge-shadow: 4px 0 22px rgba(45, 26, 20, 0.1), 1px 0 0 rgba(45, 26, 20, 0.05);
+  --selection-bg: rgba(161, 93, 72, 0.22);
+  --input-focus-border: rgba(161, 93, 72, 0.45);
+  --input-focus-shadow: 0 0 0 3px rgba(161, 93, 72, 0.12);
+  --page-glow-gradient: linear-gradient(155deg, rgba(161, 93, 72, 0.05) 0%, transparent 38%, rgba(186, 128, 108, 0.04) 100%);
+}
+
+[data-preset="clay"].dark {
+  /* Structure overrides — graphite bodies, never pure black */
+  --surface-0: 24 22 21;
+  --surface-1: 28 26 25;
+  --surface-2: 33 31 31;
+  --surface-3: 40 39 39;
+  --surface-4: 49 48 49;
+  --surface-5: 60 60 61;
+  --border: 46 45 46;
+  --border-light: 58 58 59;
+
+  /* Voice — accent: dark #D29D88 (faded, inverted weight from light) */
+  --accent: 210 157 136;
+  --accent-hover: 226 173 152;
+  --accent-muted: rgba(210, 157, 136, 0.12);
+
+  --glass-card: rgba(33, 31, 31, 0.58);
+  --glass-sidebar: rgba(24, 22, 21, 0.82);
+  --glass-border: color-mix(in srgb, currentColor 10%, transparent);
+  --glass-border-hover: rgba(210, 157, 136, 0.35);
+
+  --orb-gold: rgba(210, 157, 136, 0.16);
+  --orb-indigo: rgba(192, 138, 120, 0.14);
+  --orb-amber: rgba(186, 125, 104, 0.1);
+
+  --accent-glow: 0 0 0 1px rgba(210, 157, 136, 0.2), 0 4px 16px rgba(210, 157, 136, 0.12);
+  --accent-glow-strong: 0 0 0 1.5px rgba(210, 157, 136, 0.3), 0 8px 22px rgba(210, 157, 136, 0.16);
+
+  --card-top-line: linear-gradient(90deg, transparent 5%, rgba(210, 157, 136, 0.4) 30%, rgba(210, 157, 136, 0.4) 70%, transparent 95%);
+
+  --sweep-color-mid: rgba(210, 157, 136, 0.3);
+  --sweep-color-bright: rgba(210, 157, 136, 0.55);
+
+  /* Fixed clay mark #BA7D68 — same non-adaptive glow as light */
+  --logo-shadow: 0 0 16px 3px rgba(186, 125, 104, 0.45), 0 2px 8px rgba(0, 0, 0, 0.40);
+
+  --header-glow: 0px 6px 22px -2px rgba(210, 157, 136, 0.14), 0px 0px 0 rgba(210, 157, 136, 0.08);
+  --nav-active-bg: rgba(210, 157, 136, 0.14);
+  --nav-active-border: rgba(210, 157, 136, 0.4);
+  --nav-active-glow: 0 0 14px -4px rgba(210, 157, 136, 0.26);
+  --sidebar-edge-shadow: 4px 0 26px -2px rgba(210, 157, 136, 0.14), 1px 0 0 rgba(210, 157, 136, 0.08);
+  --selection-bg: rgba(210, 157, 136, 0.24);
+  --input-focus-border: rgba(210, 157, 136, 0.5);
+  --input-focus-shadow: 0 0 0 3px rgba(210, 157, 136, 0.12);
+  --page-glow-gradient: linear-gradient(155deg, rgba(210, 157, 136, 0.05) 0%, transparent 40%, rgba(192, 138, 120, 0.04) 100%);
+}
+
+/* ── Preset: Dusty Rose ───────────────────────────────
+ * Soft mauve accent over the shared graphite glass. Same Quiet-Glass recipe as sage — accent inverts weight
+ * (deeper in light, faded in dark), low-opacity ambient glow, no neon.
+ * ──────────────────────────────────────────────────────── */
+[data-preset="rose"] {
+  /* Structure overrides — off-white rose-tinted surfaces */
+  --surface-0: 244 240 245;
+  --surface-1: 251 247 251;
+  --surface-2: 255 251 255;
+  --surface-3: 242 238 243;
+  --surface-4: 234 230 235;
+  --surface-5: 223 220 225;
+  --border: 218 215 222;
+  --border-light: 230 227 233;
+
+  /* Voice — accent: light #9C5A6C */
+  --accent: 156 90 108;
+  --accent-hover: 128 74 89;
+  --accent-muted: rgba(156, 90, 108, 0.12);
+
+  --glass-card: rgba(255, 251, 255, 0.7);
+  --glass-sidebar: rgba(251, 247, 251, 0.84);
+  --glass-border: color-mix(in srgb, currentColor 10%, transparent);
+  --glass-border-hover: rgba(156, 90, 108, 0.35);
+
+  --orb-gold: rgba(184, 132, 148, 0.14);
+  --orb-indigo: rgba(156, 90, 108, 0.16);
+  --orb-amber: rgba(182, 125, 140, 0.1);
+
+  --accent-glow: 0 0 0 1px rgba(156, 90, 108, 0.18), 0 4px 14px rgba(156, 90, 108, 0.1);
+  --accent-glow-strong: 0 0 0 1.5px rgba(156, 90, 108, 0.28), 0 6px 20px rgba(156, 90, 108, 0.14);
+
+  --card-top-line: linear-gradient(90deg, transparent 5%, rgba(156, 90, 108, 0.22) 30%, rgba(156, 90, 108, 0.22) 70%, transparent 95%);
+
+  --sweep-color-mid: rgba(156, 90, 108, 0.28);
+  --sweep-color-bright: rgba(156, 90, 108, 0.5);
+
+  /* Fixed rose mark #B67D8C — used for the non-adaptive logo glow */
+  --logo-shadow: 0 0 16px 3px rgba(182, 125, 140, 0.4), 0 2px 8px rgba(0, 0, 0, 0.18);
+
+  --header-glow: 0px 6px 22px -2px rgba(156, 90, 108, 0.14), 0px 0px 0 rgba(156, 90, 108, 0.08);
+  --nav-active-bg: rgba(156, 90, 108, 0.12);
+  --nav-active-border: rgba(156, 90, 108, 0.35);
+  --nav-active-glow: 0 0 12px -4px rgba(156, 90, 108, 0.18);
+  --sidebar-edge-shadow: 4px 0 22px rgba(44, 25, 30, 0.1), 1px 0 0 rgba(44, 25, 30, 0.05);
+  --selection-bg: rgba(156, 90, 108, 0.22);
+  --input-focus-border: rgba(156, 90, 108, 0.45);
+  --input-focus-shadow: 0 0 0 3px rgba(156, 90, 108, 0.12);
+  --page-glow-gradient: linear-gradient(155deg, rgba(156, 90, 108, 0.05) 0%, transparent 38%, rgba(184, 132, 148, 0.04) 100%);
+}
+
+[data-preset="rose"].dark {
+  /* Structure overrides — graphite bodies, never pure black */
+  --surface-0: 24 21 26;
+  --surface-1: 28 25 30;
+  --surface-2: 33 30 36;
+  --surface-3: 40 38 44;
+  --surface-4: 49 47 54;
+  --surface-5: 60 59 66;
+  --border: 46 44 51;
+  --border-light: 58 57 64;
+
+  /* Voice — accent: dark #D0A0AC (faded, inverted weight from light) */
+  --accent: 208 160 172;
+  --accent-hover: 224 176 188;
+  --accent-muted: rgba(208, 160, 172, 0.12);
+
+  --glass-card: rgba(33, 30, 36, 0.58);
+  --glass-sidebar: rgba(24, 21, 26, 0.82);
+  --glass-border: color-mix(in srgb, currentColor 10%, transparent);
+  --glass-border-hover: rgba(208, 160, 172, 0.35);
+
+  --orb-gold: rgba(208, 160, 172, 0.16);
+  --orb-indigo: rgba(194, 148, 162, 0.14);
+  --orb-amber: rgba(182, 125, 140, 0.1);
+
+  --accent-glow: 0 0 0 1px rgba(208, 160, 172, 0.2), 0 4px 16px rgba(208, 160, 172, 0.12);
+  --accent-glow-strong: 0 0 0 1.5px rgba(208, 160, 172, 0.3), 0 8px 22px rgba(208, 160, 172, 0.16);
+
+  --card-top-line: linear-gradient(90deg, transparent 5%, rgba(208, 160, 172, 0.4) 30%, rgba(208, 160, 172, 0.4) 70%, transparent 95%);
+
+  --sweep-color-mid: rgba(208, 160, 172, 0.3);
+  --sweep-color-bright: rgba(208, 160, 172, 0.55);
+
+  /* Fixed rose mark #B67D8C — same non-adaptive glow as light */
+  --logo-shadow: 0 0 16px 3px rgba(182, 125, 140, 0.45), 0 2px 8px rgba(0, 0, 0, 0.40);
+
+  --header-glow: 0px 6px 22px -2px rgba(208, 160, 172, 0.14), 0px 0px 0 rgba(208, 160, 172, 0.08);
+  --nav-active-bg: rgba(208, 160, 172, 0.14);
+  --nav-active-border: rgba(208, 160, 172, 0.4);
+  --nav-active-glow: 0 0 14px -4px rgba(208, 160, 172, 0.26);
+  --sidebar-edge-shadow: 4px 0 26px -2px rgba(208, 160, 172, 0.14), 1px 0 0 rgba(208, 160, 172, 0.08);
+  --selection-bg: rgba(208, 160, 172, 0.24);
+  --input-focus-border: rgba(208, 160, 172, 0.5);
+  --input-focus-shadow: 0 0 0 3px rgba(208, 160, 172, 0.12);
+  --page-glow-gradient: linear-gradient(155deg, rgba(208, 160, 172, 0.05) 0%, transparent 40%, rgba(194, 148, 162, 0.04) 100%);
 }
 
 /* ── Base ───────────────────────────────────────────────── */
@@ -126,26 +761,12 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", 'Inter', 'Segoe UI', sans-serif;
   color: rgb(var(--text-primary));
   background-color: rgb(var(--surface-0));
-  background-image: linear-gradient(
-    155deg,
-    rgba(37, 99, 235, 0.05) 0%,
-    transparent 38%,
-    rgba(99, 102, 241, 0.04) 100%
-  );
+  background-image: var(--page-glow-gradient);
   background-attachment: fixed;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   letter-spacing: -0.01em;
   line-height: 1.5;
-}
-
-.dark body {
-  background-image: linear-gradient(
-    155deg,
-    rgba(254, 210, 58, 0.05) 0%,
-    transparent 40%,
-    rgba(99, 102, 241, 0.04) 100%
-  );
 }
 
 @layer base {
@@ -162,7 +783,7 @@ body {
   *::-webkit-scrollbar-thumb:hover { background: rgb(var(--text-dim)); }
 
   ::selection {
-    background: rgba(254, 210, 58, 0.28);
+    background: var(--selection-bg);
     color: rgb(var(--text-primary));
   }
 
@@ -283,12 +904,7 @@ body {
     backdrop-filter: blur(28px) saturate(180%);
     -webkit-backdrop-filter: blur(28px) saturate(180%);
     border: 1px solid var(--glass-border);
-    /* Navy right-edge shadow in light mode — makes sidebar pop */
-    box-shadow: 4px 0 24px rgba(10, 12, 20, 0.12), 1px 0 0 rgba(10, 12, 20, 0.06);
-  }
-
-  .dark .sidebar-glass {
-    box-shadow: 4px 0 28px -2px rgba(254, 210, 58, 0.16), 1px 0 0 rgba(254, 210, 58, 0.10);
+    box-shadow: var(--sidebar-edge-shadow);
   }
 
   /* ── Logo badge — shadow/glow comes from the --logo-shadow token ── */
@@ -304,7 +920,7 @@ body {
   }
   .btn-primary:hover {
     background: rgb(var(--accent-hover));
-    box-shadow: var(--gold-glow);
+    box-shadow: var(--accent-glow);
     transform: translateY(-1px);
   }
   .btn-primary:active {
@@ -329,8 +945,8 @@ body {
     border: 1px solid var(--glass-border);
   }
   .input:focus {
-    border-color: rgba(254, 210, 58, 0.55);
-    box-shadow: 0 0 0 3px rgba(254, 210, 58, 0.12);
+    border-color: var(--input-focus-border);
+    box-shadow: var(--input-focus-shadow);
   }
 
   /* Page header — glass panel with native macOS spacing */
@@ -340,7 +956,7 @@ body {
     -webkit-backdrop-filter: blur(20px) saturate(160%);
     border: 1px solid var(--glass-border);
     border-radius: 0.875rem;
-    box-shadow: 0px 7px 28px -2px rgba(254, 210, 58, 0.16), 0px 0px 0 rgba(254, 210, 58, 0.10);
+    box-shadow: var(--header-glow);
     padding: 1.5rem 1.875rem;
   }
 
@@ -360,18 +976,18 @@ body {
   .dark .neu-nav:hover {
     background-color: rgba(255, 255, 255, 0.04);
   }
-  /* Light mode: navy text on gold tint — readable contrast */
+  /* Light mode: navy text on accent tint — readable contrast */
   .neu-nav.is-active {
-    background-color: rgba(254, 210, 58, 0.15);
-    border-color: rgba(254, 210, 58, 0.45);
+    background-color: var(--nav-active-bg);
+    border-color: var(--nav-active-border);
     color: rgb(10, 12, 20);
     font-weight: 600;
-    box-shadow: 0 0 14px -4px rgba(254, 210, 58, 0.20);
+    box-shadow: var(--nav-active-glow);
   }
-  /* Dark mode: gold text on gold tint — the cinematic look */
+  /* Dark mode: accent text on accent tint — the cinematic look */
   .dark .neu-nav.is-active {
     color: rgb(var(--accent));
-    box-shadow: 0 0 16px -4px rgba(254, 210, 58, 0.30);
+    box-shadow: var(--nav-active-glow);
   }
 
   /* Flat interactive button */
@@ -385,8 +1001,8 @@ body {
       border-color 0.15s ease, transform 0.18s ease;
   }
   .neu-btn:hover {
-    border-color: rgba(254, 210, 58, 0.35);
-    box-shadow: var(--gold-glow);
+    border-color: var(--glass-border-hover);
+    box-shadow: var(--accent-glow);
     transform: translateY(-1px);
   }
   .neu-btn:active {

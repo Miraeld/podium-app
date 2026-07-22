@@ -10,6 +10,41 @@
     "enable": "Show Tabby",
     "enableDesc": "Display the corner companion across the dashboard (⌘B to open)"
   },
+  "appearance": {
+    "title": "Appearance",
+    "description": "Pick the accent and glow used across the dashboard. Applies immediately and persists on this device.",
+    "presets": {
+      "gold": {
+        "name": "Podium Gold",
+        "description": "The original warm gold accent on deep navy."
+      },
+      "sage": {
+        "name": "Quiet Sage Glass",
+        "description": "A calm, desaturated sage accent over graphite glass."
+      },
+      "lavender": {
+        "name": "Dusk Lavender",
+        "description": "A twilight violet accent over graphite glass."
+      },
+      "slate": {
+        "name": "Harbor Slate",
+        "description": "A cool blue-graphite accent over calm glass."
+      },
+      "tide": {
+        "name": "Muted Tide",
+        "description": "A soft spa-teal accent over graphite glass."
+      },
+      "clay": {
+        "name": "Warm Clay",
+        "description": "An earthy terracotta accent over graphite glass."
+      },
+      "rose": {
+        "name": "Dusty Rose",
+        "description": "A soft mauve accent over graphite glass."
+      }
+    },
+    "selected": "Selected"
+  },
   "pricing": {
     "title": "Model Pricing",
     "description": "Rates per million tokens (USD). Use % as wildcard in patterns.",

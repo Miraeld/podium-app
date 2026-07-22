@@ -73,7 +73,12 @@
       rel="stylesheet"
     />
     <script>
-      (function(){try{var t=localStorage.getItem('podium-theme');if(t==='dark')document.documentElement.classList.add('dark')}catch(e){}})();
+      (function(){try{
+        var t=localStorage.getItem('podium-theme');
+        if(t==='dark')document.documentElement.classList.add('dark');
+        var p=localStorage.getItem('podium-preset');
+        if(p&&p!=='gold')document.documentElement.setAttribute('data-preset',p);
+      }catch(e){}})();
     </script>
   </head>
   <body class="bg-surface-0 antialiased">

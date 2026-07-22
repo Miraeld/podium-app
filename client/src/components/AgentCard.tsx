@@ -106,7 +106,7 @@ export function AgentCard({ agent, session, label, onClick, isLeaf }: AgentCardP
                   ? "bg-accent/30 dark:bg-accent/20 text-amber-700 dark:text-accent"
                   : "bg-accent/20 dark:bg-accent/12 text-amber-700 dark:text-accent"
                 : "bg-indigo-50 dark:bg-indigo-500/15 text-indigo-700 dark:text-indigo-400"
-            } ${isActive && isMain ? "shadow-[0_0_14px_-2px_rgba(254,210,58,0.60)]" : ""}`}
+            } ${isActive && isMain ? "shadow-[0_0_14px_-2px_rgb(var(--accent)/0.6)]" : ""}`}
           >
             {isMain ? <Bot className="w-3.5 h-3.5" /> : <GitBranch className="w-3.5 h-3.5" />}
           </div>
@@ -146,7 +146,7 @@ export function AgentCard({ agent, session, label, onClick, isLeaf }: AgentCardP
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent opacity-60" />
               <span
                 className="relative inline-flex rounded-full h-2 w-2 bg-accent"
-                style={{ boxShadow: "0 0 6px 1px rgba(254,210,58,0.70)" }}
+                style={{ boxShadow: "0 0 6px 1px rgb(var(--accent) / 0.7)" }}
               />
             </span>
             {t("live", "Live")}

@@ -10,6 +10,41 @@
     "enable": "显示 Tabby",
     "enableDesc": "在整个仪表板的角落显示伙伴（按 ⌘B 打开）"
   },
+  "appearance": {
+    "title": "外观",
+    "description": "选择仪表板中使用的强调色和发光效果。立即生效，并保存在此设备上。",
+    "presets": {
+      "gold": {
+        "name": "Podium 金色",
+        "description": "原始的暖金色强调色，搭配深藏青色背景。"
+      },
+      "sage": {
+        "name": "静谧鼠尾草玻璃",
+        "description": "低饱和度的鼠尾草绿强调色，搭配石墨玻璃质感。"
+      },
+      "lavender": {
+        "name": "暮色薰衣草",
+        "description": "暮光紫罗兰强调色，搭配石墨玻璃质感。"
+      },
+      "slate": {
+        "name": "港湾石板",
+        "description": "冷调蓝灰强调色，搭配沉静玻璃质感。"
+      },
+      "tide": {
+        "name": "静谧潮汐",
+        "description": "柔和的水疗青绿强调色，搭配石墨玻璃质感。"
+      },
+      "clay": {
+        "name": "暖陶",
+        "description": "质朴的赤陶强调色，搭配石墨玻璃质感。"
+      },
+      "rose": {
+        "name": "灰玫瑰",
+        "description": "柔和的藕荷色强调色，搭配石墨玻璃质感。"
+      }
+    },
+    "selected": "已选择"
+  },
   "pricing": {
     "title": "模型定价",
     "description": "每百万 Token 的费率（美元）。在模式中使用 % 作为通配符。",
