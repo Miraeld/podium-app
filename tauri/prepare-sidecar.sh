@@ -82,7 +82,17 @@ trap 'rm -rf "$BUILD_TMP"' EXIT
 
 (
   cd "$REPO_ROOT/server"
-  NODE_ENV=production BUN_NO_CODESIGN_MACHO_BINARY=1 "$BUN_BIN" build --compile --external better-sqlite3 \
+  # PODIUM_APP_VERSION=... (T2.3 sidecar version-string fix): bun's bundler
+  # inlines `process.env.PODIUM_APP_VERSION` reads at compile time, exactly
+  # like NODE_ENV above — server/lib/update-check.js reads
+  # `process.env.PODIUM_APP_VERSION || "dev"`, so whatever value is present
+  # in THIS build step's environment gets baked into the compiled binary
+  # forever, regardless of what's set at run time. Passing the (possibly
+  # empty) shell var through explicitly means a real release build (which
+  # exports PODIUM_APP_VERSION before calling this script) bakes in the real
+  # version, while local/dev builds where it's unset still fall back to
+  # "dev" as before.
+  NODE_ENV=production BUN_NO_CODESIGN_MACHO_BINARY=1 PODIUM_APP_VERSION="${PODIUM_APP_VERSION:-}" "$BUN_BIN" build --compile --external better-sqlite3 \
     index.js --outfile "$BUILD_TMP/podium-server"
 )
 

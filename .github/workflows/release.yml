@@ -58,6 +58,11 @@ jobs:
           npm ci
           npm run build
       - name: Build + stage podium-server sidecar (+ client/dist)
+        env:
+          # T2.3 sidecar version-string fix: bakes the real release version
+          # into the compiled server binary (see prepare-sidecar.sh) instead
+          # of it reporting "dev".
+          PODIUM_APP_VERSION: ${{ steps.version.outputs.version }}
         run: tauri/prepare-sidecar.sh
       # icons/ is git-ignored (build artifact); cargo tauri build panics
       # without it (verified locally — "failed to open icon .../32x32.png").
@@ -65,20 +70,24 @@ jobs:
         run: |
           cd tauri
           cargo tauri icon src-tauri/icon-source.png
+      # T2.3: signing env vars activate tauri.conf.json's
+      # createUpdaterArtifacts, so this also emits the .app.tar.gz + .sig
+      # updater artifacts alongside the .app/.dmg.
       - name: Build Tauri app (.app + .dmg)
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           cd tauri
           cargo tauri build --bundles app,dmg
-      # TODO(T2.3): once the Tauri updater signing key exists as a repo
-      # secret, add `TAURI_SIGNING_PRIVATE_KEY` / `_PASSWORD` env here so
-      # `cargo tauri build` also emits the .app.tar.gz + .sig update
-      # artifacts, and generate/upload a `latest.json` updater manifest
-      # alongside the .dmg below. Not implemented now — no key exists yet.
       - name: Upload macOS artifact
         uses: actions/upload-artifact@v4
         with:
           name: macos-dmg
-          path: tauri/src-tauri/target/release/bundle/dmg/*.dmg
+          path: |
+            tauri/src-tauri/target/release/bundle/dmg/*.dmg
+            tauri/src-tauri/target/release/bundle/macos/*.app.tar.gz
+            tauri/src-tauri/target/release/bundle/macos/*.app.tar.gz.sig
           if-no-files-found: error
 
   linux:
@@ -135,6 +144,9 @@ jobs:
           npm ci
           npm run build
       - name: Build + stage podium-server sidecar (+ client/dist)
+        env:
+          # T2.3 sidecar version-string fix — see the macOS job's identical step.
+          PODIUM_APP_VERSION: ${{ steps.version.outputs.version }}
         run: tauri/prepare-sidecar.sh
       # icons/ is git-ignored (build artifact); a fresh CI checkout never has
       # it, so always regenerate (see the macOS job's identical step).
@@ -145,7 +157,13 @@ jobs:
       # .deb first: Tauri's deb bundler doesn't involve linuxdeploy, so a
       # linuxdeploy/AppImage failure can never block the .deb (or the whole
       # release). The cargo build is shared — the AppImage step below reuses it.
+      # T2.3: signing env vars so the .deb build also signs whatever updater
+      # artifacts Tauri emits for this bundle target (Linux updater support
+      # is best-effort/AppImage-only in practice, but harmless to pass here).
       - name: Build Tauri app (.deb)
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           cd tauri
           cargo tauri build --bundles deb
@@ -163,21 +181,22 @@ jobs:
         continue-on-error: true
         env:
           NO_STRIP: "true"
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           cd tauri
           cargo tauri build --bundles appimage --verbose
-      # TODO(T2.3): same updater-signing slot as the macOS job above —
-      # add the Tauri signing key env vars here once it exists, so this
-      # job also emits .AppImage.tar.gz + .sig for the updater manifest.
       - name: Upload Linux artifacts
         uses: actions/upload-artifact@v4
         with:
           name: linux-bundles
           # deb is mandatory (if-no-files-found: error still bites when it's
-          # missing); the AppImage glob simply matches nothing when that
-          # best-effort step failed.
+          # missing); the AppImage globs (including the T2.3 updater
+          # artifacts) simply match nothing when that best-effort step failed.
           path: |
             tauri/src-tauri/target/release/bundle/appimage/*.AppImage
+            tauri/src-tauri/target/release/bundle/appimage/*.AppImage.tar.gz
+            tauri/src-tauri/target/release/bundle/appimage/*.AppImage.tar.gz.sig
             tauri/src-tauri/target/release/bundle/deb/*.deb
           if-no-files-found: error
 
@@ -198,11 +217,57 @@ jobs:
         with:
           name: linux-bundles
           path: artifacts
-      # TODO(T2.3): once the updater exists, also generate + attach a
-      # `latest.json` updater manifest here (version, per-platform
-      # download URLs pointing at this release's assets, and the EdDSA
-      # signatures produced by the signing steps above) so the in-app
-      # updater has something to poll.
+      # T2.3: build the updater manifest BEFORE creating the release, so
+      # latest.json can be included in the same `gh release create` upload
+      # as the .app.tar.gz (and, best-effort, .AppImage.tar.gz) it points
+      # at. The URL filenames below MUST exactly match what gets uploaded —
+      # GitHub preserves whatever filename is passed to `gh release create`,
+      # so they're derived from the very same `find` results used for the
+      # asset list.
+      - name: Generate latest.json updater manifest
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          PUB_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+          MAC_TAR="$(find artifacts -type f -name '*.app.tar.gz' | head -n1)"
+          MAC_SIG="$(find artifacts -type f -name '*.app.tar.gz.sig' | head -n1)"
+          test -n "$MAC_TAR" || { echo "::error::no .app.tar.gz updater artifact found under artifacts/"; exit 1; }
+          test -n "$MAC_SIG" || { echo "::error::no .app.tar.gz.sig updater artifact found under artifacts/"; exit 1; }
+          MAC_SIGNATURE="$(cat "$MAC_SIG")"
+          MAC_FILENAME="$(basename "$MAC_TAR")"
+          MAC_URL="https://github.com/Miraeld/podium-app/releases/download/${GITHUB_REF_NAME}/${MAC_FILENAME}"
+
+          jq -n \
+            --arg version "$VERSION" \
+            --arg notes "Podium ${VERSION}" \
+            --arg pub_date "$PUB_DATE" \
+            --arg mac_sig "$MAC_SIGNATURE" \
+            --arg mac_url "$MAC_URL" \
+            '{version: $version, notes: $notes, pub_date: $pub_date, platforms: {"darwin-aarch64": {signature: $mac_sig, url: $mac_url}}}' \
+            > latest.json.tmp
+
+          # Linux AppImage updater artifacts are best-effort (see the linux
+          # job's continue-on-error step) — only add the linux-x86_64 entry
+          # if they actually made it into this release's artifacts.
+          LINUX_TAR="$(find artifacts -type f -name '*.AppImage.tar.gz' | head -n1)"
+          LINUX_SIG="$(find artifacts -type f -name '*.AppImage.tar.gz.sig' | head -n1)"
+          if [ -n "$LINUX_TAR" ] && [ -n "$LINUX_SIG" ]; then
+            LINUX_SIGNATURE="$(cat "$LINUX_SIG")"
+            LINUX_FILENAME="$(basename "$LINUX_TAR")"
+            LINUX_URL="https://github.com/Miraeld/podium-app/releases/download/${GITHUB_REF_NAME}/${LINUX_FILENAME}"
+            jq \
+              --arg sig "$LINUX_SIGNATURE" \
+              --arg url "$LINUX_URL" \
+              '.platforms["linux-x86_64"] = {signature: $sig, url: $url}' \
+              latest.json.tmp > latest.json.tmp2
+            mv latest.json.tmp2 latest.json.tmp
+          else
+            echo "No linux AppImage updater artifact found — omitting linux-x86_64 from latest.json (best-effort)."
+          fi
+
+          mv latest.json.tmp latest.json
+          echo "Generated latest.json:"; cat latest.json
       - name: Create GitHub release (draft)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -210,8 +275,10 @@ jobs:
           # download-artifact preserves each artifact's internal layout, and the
           # Linux job uploads two paths (appimage/ + deb/) so its files land under
           # artifacts/appimage/ and artifacts/deb/, not flat. Collect recursively
-          # so the nesting doesn't matter.
-          mapfile -t assets < <(find artifacts -type f \( -name '*.dmg' -o -name '*.AppImage' -o -name '*.deb' \))
+          # so the nesting doesn't matter. Includes the T2.3 updater artifacts
+          # (.app.tar.gz[.sig], .AppImage.tar.gz[.sig]) alongside the installers.
+          mapfile -t assets < <(find artifacts -type f \( -name '*.dmg' -o -name '*.AppImage' -o -name '*.deb' -o -name '*.app.tar.gz' -o -name '*.app.tar.gz.sig' -o -name '*.AppImage.tar.gz' -o -name '*.AppImage.tar.gz.sig' \))
+          assets+=("latest.json")
           echo "Attaching ${#assets[@]} assets:"; printf '  %s\n' "${assets[@]}"
           test "${#assets[@]}" -gt 0 || { echo "::error::no release assets found under artifacts/"; exit 1; }
           gh release create "${{ github.ref_name }}" "${assets[@]}" \

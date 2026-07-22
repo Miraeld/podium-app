@@ -29,9 +29,11 @@ use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::TrayIconBuilder;
 use tauri::webview::{NewWindowFeatures, NewWindowResponse};
 use tauri::{Manager, RunEvent, Url, WebviewUrl, WebviewWindowBuilder, WindowEvent};
+use tauri_plugin_notification::NotificationExt;
 use tauri_plugin_opener::OpenerExt;
 use tauri_plugin_shell::process::CommandChild;
 use tauri_plugin_shell::ShellExt;
+use tauri_plugin_updater::UpdaterExt;
 
 const DEFAULT_PORT: u16 = 4820;
 const HEALTH_TIMEOUT: Duration = Duration::from_secs(15);
@@ -249,6 +251,7 @@ fn main() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(SidecarState {
             child: Mutex::new(None),
             spawned_by_us: AtomicBool::new(false),
@@ -259,6 +262,52 @@ fn main() {
         })
         .manage(ActivePort(AtomicU16::new(DEFAULT_PORT)))
         .setup(|app| {
+            // T2.3: fire-and-forget update check. Spawned first and fully
+            // async so it can never delay or block the synchronous sidecar
+            // health-poll below — a network hiccup or a missing/unreachable
+            // latest.json must never keep the app from launching. Never
+            // `.expect()`/`.unwrap()` here: any failure is logged to stderr
+            // and swallowed, mirroring the "never blocks the caller"
+            // philosophy the rest of this file already follows (e.g.
+            // `open_externally`, `apply_vibrancy`).
+            let updater_handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                let update = match updater_handle.updater() {
+                    Ok(updater) => updater.check().await,
+                    Err(err) => {
+                        eprintln!("updater: failed to construct updater instance: {err}");
+                        return;
+                    }
+                };
+                match update {
+                    Ok(Some(update)) => {
+                        let body = format!("Updating to {}…", update.version);
+                        if let Err(err) = updater_handle
+                            .notification()
+                            .builder()
+                            .title("Podium")
+                            .body(&body)
+                            .show()
+                        {
+                            eprintln!("updater: failed to show notification: {err}");
+                        }
+                        if let Err(err) =
+                            update.download_and_install(|_, _| {}, || {}).await
+                        {
+                            eprintln!("updater: download_and_install failed: {err}");
+                            return;
+                        }
+                        updater_handle.restart();
+                    }
+                    Ok(None) => {
+                        // Already up to date — nothing to do.
+                    }
+                    Err(err) => {
+                        eprintln!("updater: check failed (non-fatal): {err}");
+                    }
+                }
+            });
+
             let target_port = port();
             app.state::<ActivePort>().0.store(target_port, Ordering::SeqCst);
             let handle = app.handle().clone();
