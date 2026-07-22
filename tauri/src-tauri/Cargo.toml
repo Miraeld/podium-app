@@ -11,6 +11,7 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = ["macos-private-api", "tray-icon", "image-png"] }
 tauri-plugin-shell = "2"
 tauri-plugin-notification = "2"
+tauri-plugin-dialog = "2"
 # T2.3: native auto-updater — checks tauri.conf.json's plugins.updater
 # endpoint (latest.json) and installs signed updater artifacts.
 tauri-plugin-updater = "2"

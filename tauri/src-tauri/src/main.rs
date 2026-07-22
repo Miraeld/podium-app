@@ -29,6 +29,7 @@ use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::TrayIconBuilder;
 use tauri::webview::{NewWindowFeatures, NewWindowResponse};
 use tauri::{Manager, RunEvent, Url, WebviewUrl, WebviewWindowBuilder, WindowEvent};
+use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
 use tauri_plugin_notification::NotificationExt;
 use tauri_plugin_opener::OpenerExt;
 use tauri_plugin_shell::process::CommandChild;
@@ -250,6 +251,7 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(SidecarState {
@@ -281,12 +283,54 @@ fn main() {
                 };
                 match update {
                     Ok(Some(update)) => {
-                        let body = format!("Updating to {}…", update.version);
+                        // Show the changelog (update.body, from the updater
+                        // manifest's `notes` field) in a native confirmation
+                        // dialog rather than silently installing — the user
+                        // decides whether to update now or be asked again
+                        // next launch.
+                        let title = format!("Podium {} is available", update.version);
+                        const MAX_NOTES_LEN: usize = 1500;
+                        let notes = match update.body.as_deref().map(str::trim) {
+                            Some(notes) if !notes.is_empty() => {
+                                if notes.len() > MAX_NOTES_LEN {
+                                    let mut truncated =
+                                        notes.chars().take(MAX_NOTES_LEN).collect::<String>();
+                                    truncated.push_str("…");
+                                    truncated
+                                } else {
+                                    notes.to_string()
+                                }
+                            }
+                            _ => "A new version of Podium is available.".to_string(),
+                        };
+                        let body = format!("{notes}\n\nInstall it now?");
+
+                        // Dialogs must not be built/shown from inside an
+                        // async task's own thread in a way that blocks the
+                        // async runtime — `blocking_show` parks the current
+                        // OS thread, which is fine here because this closure
+                        // runs on a dedicated tokio blocking-friendly worker
+                        // via `spawn`, not on the main UI thread.
+                        let confirmed = updater_handle
+                            .dialog()
+                            .message(body)
+                            .title(title)
+                            .buttons(MessageDialogButtons::OkCancelCustom(
+                                "Install Now".to_string(),
+                                "Later".to_string(),
+                            ))
+                            .blocking_show();
+
+                        if !confirmed {
+                            // "Later" — do nothing, we'll offer again next launch.
+                            return;
+                        }
+
                         if let Err(err) = updater_handle
                             .notification()
                             .builder()
                             .title("Podium")
-                            .body(&body)
+                            .body("Downloading update…")
                             .show()
                         {
                             eprintln!("updater: failed to show notification: {err}");

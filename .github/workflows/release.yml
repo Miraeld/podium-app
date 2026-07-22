@@ -217,6 +217,26 @@ jobs:
         with:
           name: linux-bundles
           path: artifacts
+      # Single source of truth for the changelog: GitHub's own auto-generated
+      # notes (merged PRs/commits since the previous tag), generated once
+      # here and reused both for latest.json's `notes` field (what the
+      # native updater dialog shows, T2.4) and the GitHub release body below
+      # — rather than generating it twice via two different mechanisms and
+      # letting them drift apart. Written to a file (not a GITHUB_OUTPUT
+      # var) because release notes can contain characters/length that don't
+      # survive the output-variable round trip cleanly.
+      - name: Generate release notes
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -uo pipefail
+          if gh api "repos/${{ github.repository }}/releases/generate-notes" \
+              -f tag_name="${{ github.ref_name }}" --jq '.body' > release-notes.txt; then
+            echo "Generated release notes ($(wc -c < release-notes.txt) bytes)."
+          else
+            echo "::warning::gh api generate-notes failed; falling back to a generic notes string."
+            echo "Podium ${GITHUB_REF_NAME#v}" > release-notes.txt
+          fi
       # T2.3: build the updater manifest BEFORE creating the release, so
       # latest.json can be included in the same `gh release create` upload
       # as the .app.tar.gz (and, best-effort, .AppImage.tar.gz) it points
@@ -229,6 +249,7 @@ jobs:
           set -euo pipefail
           VERSION="${GITHUB_REF_NAME#v}"
           PUB_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          NOTES="$(cat release-notes.txt)"
 
           MAC_TAR="$(find artifacts -type f -name '*.app.tar.gz' | head -n1)"
           MAC_SIG="$(find artifacts -type f -name '*.app.tar.gz.sig' | head -n1)"
@@ -240,7 +261,7 @@ jobs:
 
           jq -n \
             --arg version "$VERSION" \
-            --arg notes "Podium ${VERSION}" \
+            --arg notes "$NOTES" \
             --arg pub_date "$PUB_DATE" \
             --arg mac_sig "$MAC_SIGNATURE" \
             --arg mac_url "$MAC_URL" \
@@ -284,4 +305,4 @@ jobs:
           gh release create "${{ github.ref_name }}" "${assets[@]}" \
             --draft \
             --title "${{ github.ref_name }}" \
-            --generate-notes
+            --notes-file release-notes.txt
