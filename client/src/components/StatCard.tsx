@@ -36,7 +36,7 @@ export function StatCard({
         <span className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 truncate">
           {label}
         </span>
-        <div className="w-9 h-9 rounded-lg bg-accent/15 dark:bg-accent/10 flex items-center justify-center flex-shrink-0 transition-all duration-300 group-hover:bg-accent/25 group-hover:shadow-[0_0_18px_-2px_rgba(254,210,58,0.55)]">
+        <div className="w-9 h-9 rounded-lg bg-accent/15 dark:bg-accent/10 flex items-center justify-center flex-shrink-0 transition-all duration-300 group-hover:bg-accent/25 group-hover:shadow-[0_0_18px_-2px_rgb(var(--accent)/0.55)]">
           <Icon className={`w-4 h-4 ${accentColor}`} />
         </div>
       </div>

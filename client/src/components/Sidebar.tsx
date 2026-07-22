@@ -332,7 +332,7 @@ export function Sidebar({ wsConnected, collapsed, onToggle }: SidebarProps) {
           {!collapsed && (
             <div className="min-w-0 pl-2">
               <h1 className="text-sm font-bold text-fg-base truncate tracking-tight">Podium</h1>
-              <p className="text-[11px] font-semibold tracking-widest uppercase" style={{ color: "rgba(254,210,58,0.75)" }}>Gael R</p>
+              <p className="text-[11px] font-semibold tracking-widest uppercase" style={{ color: "rgb(var(--accent) / 0.75)" }}>Gael R</p>
             </div>
           )}
         </div>

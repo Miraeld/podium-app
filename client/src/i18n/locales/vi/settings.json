@@ -21,6 +21,26 @@
       "sage": {
         "name": "Quiet Sage Glass",
         "description": "Màu nhấn xanh sage trầm, dịu trên nền kính graphite."
+      },
+      "lavender": {
+        "name": "Dusk Lavender",
+        "description": "Màu tím hoàng hôn trên nền kính graphite."
+      },
+      "slate": {
+        "name": "Harbor Slate",
+        "description": "Màu xanh xám mát trên nền kính dịu."
+      },
+      "tide": {
+        "name": "Muted Tide",
+        "description": "Màu xanh teal spa nhẹ trên nền kính graphite."
+      },
+      "clay": {
+        "name": "Warm Clay",
+        "description": "Màu đất nung mộc mạc trên nền kính graphite."
+      },
+      "rose": {
+        "name": "Dusty Rose",
+        "description": "Màu hồng mauve dịu trên nền kính graphite."
       }
     },
     "selected": "Đã chọn"

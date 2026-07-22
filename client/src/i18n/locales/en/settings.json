@@ -21,6 +21,26 @@
       "sage": {
         "name": "Quiet Sage Glass",
         "description": "A calm, desaturated sage accent over graphite glass."
+      },
+      "lavender": {
+        "name": "Dusk Lavender",
+        "description": "A twilight violet accent over graphite glass."
+      },
+      "slate": {
+        "name": "Harbor Slate",
+        "description": "A cool blue-graphite accent over calm glass."
+      },
+      "tide": {
+        "name": "Muted Tide",
+        "description": "A soft spa-teal accent over graphite glass."
+      },
+      "clay": {
+        "name": "Warm Clay",
+        "description": "An earthy terracotta accent over graphite glass."
+      },
+      "rose": {
+        "name": "Dusty Rose",
+        "description": "A soft mauve accent over graphite glass."
       }
     },
     "selected": "Selected"

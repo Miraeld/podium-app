@@ -6,9 +6,24 @@
 const ADVANCED_METRICS_KEY = "podium-advanced-metrics";
 const PRESET_KEY = "podium-preset";
 
-export type ThemePreset = "gold" | "sage";
+export type ThemePreset =
+  | "gold"
+  | "sage"
+  | "lavender"
+  | "slate"
+  | "tide"
+  | "clay"
+  | "rose";
 
-const VALID_PRESETS: ThemePreset[] = ["gold", "sage"];
+const VALID_PRESETS: ThemePreset[] = [
+  "gold",
+  "sage",
+  "lavender",
+  "slate",
+  "tide",
+  "clay",
+  "rose",
+];
 
 export function loadAdvancedMetrics(): boolean {
   try {

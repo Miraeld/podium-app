@@ -132,6 +132,11 @@ interface PresetSwatch {
 const PRESET_SWATCHES: PresetSwatch[] = [
   { id: "gold", light: "#FED23A", dark: "#FED23A", glow: "rgba(254, 210, 58, 0.35)" },
   { id: "sage", light: "#42734F", dark: "#99BD9E", glow: "rgba(107, 145, 120, 0.35)" },
+  { id: "lavender", light: "#635C8C", dark: "#B0A6D6", glow: "rgba(138, 129, 177, 0.35)" },
+  { id: "slate", light: "#3D6488", dark: "#8FB4D4", glow: "rgba(102, 140, 174, 0.35)" },
+  { id: "tide", light: "#2E7268", dark: "#85BEB2", glow: "rgba(90, 152, 141, 0.35)" },
+  { id: "clay", light: "#A15D48", dark: "#D29D88", glow: "rgba(186, 125, 104, 0.35)" },
+  { id: "rose", light: "#9C5A6C", dark: "#D0A0AC", glow: "rgba(182, 125, 140, 0.35)" },
 ];
 
 const emptyRow: EditRow = {
