@@ -1172,6 +1172,12 @@ interface MdItemListProps {
 
 function MdItemList({ items, plugins, search, onOpen, onEdit, onDelete, kind }: MdItemListProps) {
   const { t } = useTranslation("ccConfig");
+  // Must be called unconditionally, before any early return below — hooks
+  // cannot be conditional, and this component is reused across tabs
+  // (skills/agents/commands/outputStyles) at the same position, so a hook
+  // called only on some renders desyncs React's hook order and crashes on
+  // tab switch (React error #310, "change in the order of Hooks").
+  const [userCollapsed, setUserCollapsed] = useState(false);
 
   const filtered = useMemo(() => {
     if (!items) return null;
@@ -1207,8 +1213,6 @@ function MdItemList({ items, plugins, search, onOpen, onEdit, onDelete, kind }: 
   const otherItems = filtered.filter((it) => it.scope !== "user" && it.scope !== "project");
 
   if (filtered.length === 0 && pluginRows.length === 0) return <Empty />;
-
-  const [userCollapsed, setUserCollapsed] = useState(false);
 
   const SectionHeader = ({ label, collapsible, collapsed, onToggle }: { label: string; collapsible?: boolean; collapsed?: boolean; onToggle?: () => void }) => (
     <button
