@@ -55,8 +55,8 @@ export function isEmptyFilters(f: EventFiltersValue): boolean {
 // preset that doesn't restrict the query (same as no selection).
 export const STATUS_TO_EVENT_TYPES: Record<string, string[]> = {
   working: ["PreToolUse"],
-  waiting: ["PostToolUse", "Stop"],
-  completed: ["Stop", "SubagentStop", "Compaction"],
+  waiting: ["Stop"],
+  completed: ["PostToolUse", "SubagentStop", "Compaction"],
   error: ["error", "APIError"],
 };
 
