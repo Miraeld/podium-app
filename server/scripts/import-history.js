@@ -718,33 +718,46 @@ function truncateForEvent(value) {
  * matches a JSONL transcript. Used to merge JSONL-extracted tool events into
  * the live subagent row instead of creating a duplicate row.
  *
- * Match heuristic: same session, same agentType, started within START_TOLERANCE_MS
- * of the JSONL's first timestamp, not already a JSONL-keyed row.
+ * Match heuristic: same session, started within SUBAGENT_LIVE_MATCH_TOLERANCE_MS
+ * of the JSONL's first timestamp, not already a JSONL-keyed row, not already
+ * claimed by an earlier match in this same scan pass (`excludeIds`).
+ *
+ * `subagent_type` is used to narrow the match ONLY when the JSONL actually
+ * carries an `agentType` (from a companion `.meta.json`, written only for
+ * Podium-native "Run" workflow sessions — see server/lib/workflow-ingest.js).
+ * Real Claude Code CLI subagent transcripts never write that companion file,
+ * so `subData.agentType` is null for the overwhelming majority of sessions.
+ * Previously this function returned `null` outright whenever `agentType` was
+ * missing, which meant it could NEVER match a live row for ordinary sessions
+ * — every subagent ended up with both its live (PreToolUse-created) row AND
+ * a second `-jsonl-` row once its SubagentStop scan ran, doubling the agent
+ * count (and nesting depth, since the extra row rides along as another
+ * flat child of main) for every session with subagents (issue #2/#5).
  */
 const SUBAGENT_LIVE_MATCH_TOLERANCE_MS = 30_000;
-function findLiveSubagentForJsonl(dbModule, sessionId, subData) {
-  if (!subData.agentType || !subData.startedAt) return null;
-  return dbModule.db
+function findLiveSubagentForJsonl(dbModule, sessionId, subData, excludeIds) {
+  if (!subData.startedAt) return null;
+  const exclude = excludeIds instanceof Set ? excludeIds : new Set();
+  const typeClause = subData.agentType ? "AND subagent_type = ?" : "";
+  const params = [sessionId];
+  if (subData.agentType) params.push(subData.agentType);
+  params.push(`${sessionId}-jsonl-%`, subData.startedAt, SUBAGENT_LIVE_MATCH_TOLERANCE_MS / 1000, subData.startedAt);
+
+  const rows = dbModule.db
     .prepare(
       `SELECT id FROM agents
        WHERE session_id = ?
          AND type = 'subagent'
-         AND subagent_type = ?
+         ${typeClause}
          AND id NOT LIKE ?
          AND ABS(CAST(strftime('%s', started_at) AS INTEGER) -
                  CAST(strftime('%s', ?) AS INTEGER)) <= ?
        ORDER BY ABS(CAST(strftime('%s', started_at) AS INTEGER) -
-                    CAST(strftime('%s', ?) AS INTEGER)) ASC
-       LIMIT 1`
+                    CAST(strftime('%s', ?) AS INTEGER)) ASC`
     )
-    .get(
-      sessionId,
-      subData.agentType,
-      `${sessionId}-jsonl-%`,
-      subData.startedAt,
-      SUBAGENT_LIVE_MATCH_TOLERANCE_MS / 1000,
-      subData.startedAt
-    );
+    .all(...params);
+
+  return rows.find((r) => !exclude.has(r.id)) || null;
 }
 
 /**
@@ -860,15 +873,28 @@ function subagentTokenRows(tokensByModel) {
  * is created. Otherwise, a JSONL-keyed row is created (for backfill of historical
  * sessions that never went through hooks).
  *
+ * `claimedLiveIds`, when passed, is a Set of live agent ids already matched to
+ * another JSONL file earlier in the same scan pass — excluded from matching so
+ * two subagent transcripts that started close together never both claim the
+ * same live row (see findLiveSubagentForJsonl). The matched id (if any) is
+ * added to the set before returning.
+ *
+ * `resolvedIds`, when passed, is a Map the resolved `subData.agentId ->
+ * targetAgentId` pairing is recorded into, so a later reconcileSubagentParents
+ * call can reuse the SAME resolution instead of re-querying (which, with
+ * claimedLiveIds already mutated, could otherwise resolve differently).
+ *
  * Returns the count of newly created records (agent + events).
  */
-function importSubagentFromJsonl(dbModule, sessionId, mainAgentId, subData) {
+function importSubagentFromJsonl(dbModule, sessionId, mainAgentId, subData, claimedLiveIds, resolvedIds) {
   if (!subData) return 0;
   const { db, stmts } = dbModule;
 
   const jsonlSubId = `${sessionId}-jsonl-${subData.agentId}`;
-  const liveSub = findLiveSubagentForJsonl(dbModule, sessionId, subData);
+  const liveSub = findLiveSubagentForJsonl(dbModule, sessionId, subData, claimedLiveIds);
+  if (liveSub && claimedLiveIds instanceof Set) claimedLiveIds.add(liveSub.id);
   const targetAgentId = liveSub ? liveSub.id : jsonlSubId;
+  if (resolvedIds instanceof Map) resolvedIds.set(subData.agentId, targetAgentId);
   const existingJsonl = stmts.getAgent.get(jsonlSubId);
 
   const subName = subData.agentType ? subData.agentType : `Subagent ${subData.agentId.slice(0, 8)}`;
@@ -1074,8 +1100,16 @@ function importSubagentFromJsonl(dbModule, sessionId, mainAgentId, subData) {
  * PreToolUse "Agent" hook) if one matches, else the JSONL-keyed id. Mirrors the
  * targetAgentId logic in importSubagentFromJsonl so parent/child linkage points
  * at the same rows the importer wrote.
+ *
+ * When `resolvedIds` (built by the importSubagentFromJsonl pass that just ran)
+ * already has this subagent's resolution recorded, reuse it verbatim instead
+ * of re-querying — re-querying without the same claimedLiveIds state could
+ * resolve to a different live row than the one actually written to.
  */
-function resolveSubagentDbId(dbModule, sessionId, subData) {
+function resolveSubagentDbId(dbModule, sessionId, subData, resolvedIds) {
+  if (resolvedIds instanceof Map && resolvedIds.has(subData.agentId)) {
+    return resolvedIds.get(subData.agentId);
+  }
   const live = findLiveSubagentForJsonl(dbModule, sessionId, subData);
   return live ? live.id : `${sessionId}-jsonl-${subData.agentId}`;
 }
@@ -1093,8 +1127,11 @@ function resolveSubagentDbId(dbModule, sessionId, subData) {
  *
  * Idempotent and additive: only rewrites parent_agent_id on existing rows,
  * never inserts or deletes. Returns the number of rows repointed.
+ *
+ * `resolvedIds` should be the Map populated by the importSubagentFromJsonl
+ * pass over the SAME `parsedSubagents` list (see resolveSubagentDbId).
  */
-function reconcileSubagentParents(dbModule, sessionId, mainAgentId, parsedSubagents) {
+function reconcileSubagentParents(dbModule, sessionId, mainAgentId, parsedSubagents, resolvedIds) {
   if (!Array.isArray(parsedSubagents) || parsedSubagents.length < 2) return 0;
   const { stmts } = dbModule;
 
@@ -1121,8 +1158,8 @@ function reconcileSubagentParents(dbModule, sessionId, mainAgentId, parsedSubage
     const parentData = byAgentId.get(parentTid);
     if (!parentData) continue;
 
-    const childDbId = resolveSubagentDbId(dbModule, sessionId, s);
-    const parentDbId = resolveSubagentDbId(dbModule, sessionId, parentData);
+    const childDbId = resolveSubagentDbId(dbModule, sessionId, s, resolvedIds);
+    const parentDbId = resolveSubagentDbId(dbModule, sessionId, parentData, resolvedIds);
     if (!childDbId || !parentDbId || childDbId === parentDbId) continue;
 
     const childRow = stmts.getAgent.get(childDbId);
@@ -1287,10 +1324,27 @@ function importSession(dbModule, session) {
     );
     if (apiErrCount > 0) backfilled = true;
 
-    // Backfill subagent JSONL imports
+    // Backfill subagent JSONL imports. Sort earliest-first (see the matching
+    // scanAndImportSubagents pass) so live-row matching claims the
+    // chronologically closest live subagent, and thread the same
+    // claimed/resolved state through to reconcileSubagentParents.
     if (session.parsedSubagents && session.parsedSubagents.length > 0) {
-      for (const subData of session.parsedSubagents) {
-        if (importSubagentFromJsonl(dbModule, session.sessionId, mainAgentId, subData) > 0)
+      const sortedSubs = [...session.parsedSubagents].sort((a, b) =>
+        (a.startedAt || "").localeCompare(b.startedAt || "")
+      );
+      const claimedLiveIds = new Set();
+      const resolvedIds = new Map();
+      for (const subData of sortedSubs) {
+        if (
+          importSubagentFromJsonl(
+            dbModule,
+            session.sessionId,
+            mainAgentId,
+            subData,
+            claimedLiveIds,
+            resolvedIds
+          ) > 0
+        )
           backfilled = true;
       }
       // Repoint nested subagents under their true spawner (inserts land flat).
@@ -1299,7 +1353,8 @@ function importSession(dbModule, session) {
           dbModule,
           session.sessionId,
           mainAgentId,
-          session.parsedSubagents
+          sortedSubs,
+          resolvedIds
         ) > 0
       )
         backfilled = true;
@@ -1666,13 +1721,27 @@ function importSession(dbModule, session) {
     }
   }
 
-  // Import subagent JSONL files
+  // Import subagent JSONL files. Sort earliest-first and thread a shared
+  // claimed/resolved state through both calls — see the matching comment on
+  // the backfill path above and on scanAndImportSubagents.
   if (session.parsedSubagents && session.parsedSubagents.length > 0) {
-    for (const subData of session.parsedSubagents) {
-      importSubagentFromJsonl(dbModule, session.sessionId, mainAgentId, subData);
+    const sortedSubs = [...session.parsedSubagents].sort((a, b) =>
+      (a.startedAt || "").localeCompare(b.startedAt || "")
+    );
+    const claimedLiveIds = new Set();
+    const resolvedIds = new Map();
+    for (const subData of sortedSubs) {
+      importSubagentFromJsonl(
+        dbModule,
+        session.sessionId,
+        mainAgentId,
+        subData,
+        claimedLiveIds,
+        resolvedIds
+      );
     }
     // Repoint nested subagents under their true spawner (inserts land flat).
-    reconcileSubagentParents(dbModule, session.sessionId, mainAgentId, session.parsedSubagents);
+    reconcileSubagentParents(dbModule, session.sessionId, mainAgentId, sortedSubs, resolvedIds);
   }
 
   writeSessionTokens(dbModule, session.sessionId, combineSessionTokens(session));
@@ -2517,7 +2586,30 @@ async function scanAndImportSubagents(dbModule, sessionId, transcriptPath, opts 
       const subData = await parseSubagentFile(path.join(subDir, sf));
       if (!subData) continue;
       parsedSubagents.push(subData);
-      created += importSubagentFromJsonl(dbModule, sessionId, mainAgentId, subData);
+    } catch {
+      // non-fatal — partial JSONL files are common during a live run
+    }
+  }
+
+  // Match earliest-started subagents first so a live row's timing-tolerance
+  // match is claimed by the JSONL that's actually chronologically closest,
+  // rather than by whichever file readdir() happened to list first — matters
+  // now that live-row matching no longer requires an agentType (see
+  // findLiveSubagentForJsonl) and several subagents can start within the same
+  // tolerance window when spawned in parallel.
+  parsedSubagents.sort((a, b) => (a.startedAt || "").localeCompare(b.startedAt || ""));
+  const claimedLiveIds = new Set();
+  const resolvedIds = new Map();
+  for (const subData of parsedSubagents) {
+    try {
+      created += importSubagentFromJsonl(
+        dbModule,
+        sessionId,
+        mainAgentId,
+        subData,
+        claimedLiveIds,
+        resolvedIds
+      );
     } catch {
       // non-fatal — partial JSONL files are common during a live run
     }
@@ -2528,7 +2620,13 @@ async function scanAndImportSubagents(dbModule, sessionId, transcriptPath, opts 
   // transcript names each child it spawned, so we can rebuild the real tree.
   let reparented = 0;
   try {
-    reparented = reconcileSubagentParents(dbModule, sessionId, mainAgentId, parsedSubagents);
+    reparented = reconcileSubagentParents(
+      dbModule,
+      sessionId,
+      mainAgentId,
+      parsedSubagents,
+      resolvedIds
+    );
   } catch {
     // non-fatal — hierarchy correction is best-effort during a live run
   }
