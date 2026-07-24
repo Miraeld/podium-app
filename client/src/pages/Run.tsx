@@ -555,7 +555,7 @@ export function Run() {
     null
   );
   const [cwdSuggestions, setCwdSuggestions] = useState<CwdSuggestion[]>([]);
-  const [slashCommands, setSlashCommands] = useState<SlashCommand[]>(BUILTIN_SLASH_COMMANDS);
+  const [slashCommands, setSlashCommands] = useState<SlashCommand[]>([]);
 
   // Pre-flight: probe binary + active runs + cwd suggestions on mount
   useEffect(() => {
@@ -584,8 +584,13 @@ export function Run() {
         }
       })
       .catch(() => undefined);
-    // Discover user / project / plugin slash commands. The CLI's built-ins
-    // are appended client-side.
+    // Discover user / project / plugin slash commands for the "/" popup.
+    // The CLI's own built-ins (/help, /config, /model, ...) are deliberately
+    // NOT offered here: this run path pipes the prompt over stream-json
+    // stdin rather than an interactive terminal, so built-ins never execute
+    // — they'd just be echoed back to the model as plain text. Only
+    // user/project/plugin commands are template-expanded client-side (see
+    // maybeExpandSlashCommand) and therefore actually work in this context.
     Promise.all([api.ccConfig.commands(), api.ccConfig.plugins()])
       .then(([cmdsResp, pluginsResp]) => {
         const userProject = cmdsResp.items.map<SlashCommand>((c) => ({
@@ -604,7 +609,7 @@ export function Run() {
           // user/project covers most cases. For richer enumeration we'd
           // need a dedicated /plugins/:key/commands endpoint.
         }
-        setSlashCommands([...userProject, ...pluginCmds, ...BUILTIN_SLASH_COMMANDS]);
+        setSlashCommands([...userProject, ...pluginCmds]);
       })
       .catch(() => undefined);
   }, []);
@@ -1519,7 +1524,8 @@ function TokenMeter({ stats }: { stats: TokenStats }) {
   );
 }
 
-// ── Slash commands (built-in list + user/project/plugin from API) ─────
+// ── Slash commands (user/project/plugin from API — CLI built-ins are
+// deliberately excluded, see the discovery effect above) ───────────────
 
 interface SlashCommand {
   name: string;
@@ -1527,32 +1533,6 @@ interface SlashCommand {
   source: "builtin" | "user" | "project" | "plugin";
   filePath?: string;
 }
-
-// Built-in commands the CLI handles itself. We surface them in autocomplete
-// with a "CLI only" tag so users know they won't actually execute when
-// sent over stream-json stdin.
-const BUILTIN_SLASH_COMMANDS: SlashCommand[] = [
-  { name: "help", description: "List available commands", source: "builtin" },
-  { name: "clear", description: "Clear the conversation", source: "builtin" },
-  { name: "config", description: "Open the interactive config menu", source: "builtin" },
-  { name: "model", description: "Change model mid-session", source: "builtin" },
-  { name: "compact", description: "Compact the conversation context", source: "builtin" },
-  { name: "memory", description: "Edit CLAUDE.md", source: "builtin" },
-  { name: "hooks", description: "Manage hooks", source: "builtin" },
-  { name: "cost", description: "Show session cost", source: "builtin" },
-  { name: "agents", description: "List subagents", source: "builtin" },
-  { name: "review", description: "Review current changes", source: "builtin" },
-  { name: "release-notes", description: "Show CC release notes", source: "builtin" },
-  { name: "permissions", description: "Edit permission rules", source: "builtin" },
-  { name: "status", description: "Show session status", source: "builtin" },
-  { name: "init", description: "Initialise CLAUDE.md from codebase", source: "builtin" },
-  { name: "login", description: "Sign in to Claude", source: "builtin" },
-  { name: "logout", description: "Sign out", source: "builtin" },
-  { name: "exit", description: "Exit the session", source: "builtin" },
-  { name: "mcp", description: "Manage MCP servers", source: "builtin" },
-  { name: "plugin", description: "Manage plugins", source: "builtin" },
-  { name: "output-style", description: "Change output style", source: "builtin" },
-];
 
 function commandSourceLabel(s: SlashCommand["source"]): string {
   return s === "builtin"
