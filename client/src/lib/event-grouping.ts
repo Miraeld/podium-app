@@ -99,9 +99,9 @@ export function statusFromEventType(type: string): "working" | "waiting" | "comp
   switch (type) {
     case "PreToolUse":
       return "working";
-    case "PostToolUse":
     case "Stop":
       return "waiting";
+    case "PostToolUse":
     case "SubagentStop":
     case "Compaction":
       return "completed";
